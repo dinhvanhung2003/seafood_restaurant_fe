@@ -15,7 +15,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
-          <Toaster />
+          <Toaster
+          position="bottom-right"
+          richColors
+          closeButton
+          expand
+           duration={1000} 
+          style={{ zIndex: 999999 }}                 //  đảm bảo luôn trên cùng
+          toastOptions={{
+            classNames: {
+              toast: "text-white",                   //  chữ trắng toàn cục
+              title: "text-white",
+              description: "text-white/90",
+              actionButton: "text-white",
+              cancelButton: "text-white",
+            },
+          }}
+        />
       </body>
     </html>
   );

@@ -3,7 +3,7 @@ import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "./token";
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL, // ví dụ http://localhost:3001
+  baseURL: process.env.NEXT_PUBLIC_API_URL, // ví dụ http://localhost:8000
   withCredentials: false, // dùng cookie ở client để tự gắn Authorization, không gửi cookie cross-site
 });
 
