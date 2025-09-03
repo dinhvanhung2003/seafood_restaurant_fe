@@ -1,24 +1,33 @@
-// Giữ enum role khớp BE
 export type Role = "MANAGER" | "CASHIER" | "WAITER" | "KITCHEN";
+export const ROLES: Role[] = ["MANAGER", "CASHIER", "WAITER", "KITCHEN"];
 
-// Chỉ giữ đúng fields BE + id/code local
-export type Employee = {
-  id: string;        // local
-  code: string;      // local (NV000001...)
+/** Item trả về từ GET /users */
+export type UserItem = {
+  id: string;
   email: string;
-  phoneNumber: string;
-  username: string;
-  password: string;
+  phoneNumber: string | null;
+  username: string | null;
+  password?: string;           // có nhưng không hiển thị
   role: Role;
-  profile: {
-    fullName: string;
-    dob?: string;     // "YYYY-MM-DD"
-    address?: string;
-  };
+  profile?: { fullName?: string | null } | null;
 };
 
-export const ROLES: Role[] = ["MANAGER", "CASHIER", "WAITER", "KITCHEN"];
-// Filter mẫu (có thể giữ/loại). Không ảnh hưởng BE.
-export const BRANCHES = ["Chi nhánh trung tâm", "Chi nhánh 1", "Chi nhánh 2"];
-export const DEPARTMENTS = ["Phục vụ", "Thu ngân", "Bếp", "Quản lý"];
-export const TITLES = ["Nhân viên", "Ca trưởng", "Quản lý ca", "Giám sát"];
+/** Payload tạo user vẫn như trước */
+export type CreateUserPayload = {
+  email: string;
+  phoneNumber?: string | null;
+  username?: string | null;
+  password: string;
+  role: Role;
+  profile: { fullName: string; dob?: string | null; address?: string | null };
+};
+
+/** Row hiển thị bảng (phẳng) */
+export type EmployeeRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  username: string;
+  phoneNumber: string;
+  role: Role;
+};

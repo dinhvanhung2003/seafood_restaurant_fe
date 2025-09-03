@@ -25,7 +25,7 @@ const NAV = [
   { label: "Phòng/Bàn", href: "/admin/table", icon: Table },
   { label: "Giao dịch", href: "/admin/giao-dich", icon: CreditCard },
   { label: "Đối tác", href: "/admin/doi-tac", icon: Users },
-  { label: "Nhân viên", href: "/admin/nhan-vien", icon: UserCircle },
+  { label: "Nhân viên", href: "/admin/employee", icon: UserCircle },
   { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
   { label: "Sổ quỹ", href: "/admin/so-quy", icon: Wallet },
   { label: "Báo cáo", href: "/admin/bao-cao", icon: BarChart3 },
