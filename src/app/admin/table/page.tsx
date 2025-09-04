@@ -26,8 +26,6 @@ const toModalStatus = (s: TableStatusApi): "active" | "inactive" =>
 
 export default function TablesPage() {
 
-
-
  const toast = useAppToast();
 
   const [selectedAreaId, setSelectedAreaId] = useState<string>("");

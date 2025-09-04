@@ -6,16 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, HelpCircle } from "lucide-react";
-import { api } from "@/lib/axios";
-import { setTokens } from "@/lib/token";
 import { useRouter, useSearchParams } from "next/navigation";
-import { jwtDecode } from "jwt-decode";
-import Image from 'next/image';
-//  Sonner toast
+import Image from "next/image";
 import { toast } from "sonner";
+import { signIn } from "next-auth/react";
 
 export enum UserRole {
   MANAGER = "MANAGER",
@@ -23,15 +19,12 @@ export enum UserRole {
   WAITER = "WAITER",
   KITCHEN = "KITCHEN",
 }
-type JWTPayload = { role?: string; exp?: number; sub?: string | number };
-
 const routeByRole: Record<string, string> = {
   [UserRole.MANAGER]: "/admin",
   [UserRole.CASHIER]: "/cashier",
   [UserRole.WAITER]: "/waiter",
   [UserRole.KITCHEN]: "/kitchen",
 };
-
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
 export default function LoginPage() {
@@ -41,7 +34,10 @@ export default function LoginPage() {
   const [fieldErr, setFieldErr] = useState<{ email?: string; password?: string }>({});
   const router = useRouter();
   const searchParams = useSearchParams();
-
+const getBack = () =>
+    searchParams?.get("callbackUrl") ??
+    searchParams?.get("redirect") ??
+    undefined;
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (loading) return;
@@ -50,7 +46,6 @@ export default function LoginPage() {
     const email = String(form.get("email") || "").trim();
     const password = String(form.get("password") || "");
 
-    // validate client
     const errors: typeof fieldErr = {};
     if (!email) errors.email = "Vui lòng nhập email";
     else if (!isEmail(email)) errors.email = "Email không hợp lệ";
@@ -59,49 +54,46 @@ export default function LoginPage() {
 
     if (errors.email || errors.password) {
       setFieldErr(errors);
-      toast.error("Thông tin chưa hợp lệ", {
-        description: errors.email ?? errors.password,
-        className: "text-white bg-red-500",
-      });
+      toast.error("Thông tin chưa hợp lệ", { description: errors.email ?? errors.password });
       return;
     }
     setFieldErr({});
     setLoading(true);
 
     try {
-      const res = await api.post("/auth/login", { email, password });
-      const access = res.data?.data?.accessToken;
-      const refresh = res.data?.data?.refreshToken;
-      if (!access) throw new Error("Không nhận được accessToken");
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false, // tự điều hướng sau
+      });
 
-      setTokens(access, refresh);
+      if (!res) throw new Error("Không nhận được phản hồi");
+      if (res.error) {
+        toast.error("Đăng nhập thất bại", { description: res.error });
+        return;
+      }
 
-      let role: string | undefined;
-      try {
-        const decoded = jwtDecode<JWTPayload>(access);
-        role = decoded?.role;
-      } catch {}
+      // Lấy session để đọc role
+      const sessRes = await fetch("/api/auth/session", { cache: "no-store" });
+      const session = await sessRes.json().catch(() => ({}));
+      const role: string | undefined = session?.user?.role;
 
-      const params = searchParams ?? new URLSearchParams();
-const back = params.get("redirect");
+     
 
-      const target = back || (role ? routeByRole[role] || "/" : "/");
+      
 
-      toast.success(res.data?.message || "Đăng nhập thành công", {
+      toast.success("Đăng nhập thành công", {
         description: role ? `Xin chào ${email} — vai trò: ${role}` : `Xin chào ${email}`,
-        className: "text-white bg-green-500",
       });
 
       if (remember) localStorage.setItem("remember", "1");
       else localStorage.removeItem("remember");
 
-      router.push(target);
+      
+    const target = getBack() ?? (role ? routeByRole[role] ?? "/" : "/");
+    router.push(target);
     } catch (err: any) {
-      const serverMsg = err?.response?.data?.message || err?.message || "Đăng nhập thất bại";
-      toast.error("Đăng nhập thất bại", {
-        description: serverMsg,
-        className: "text-white bg-red-500",
-      });
+      toast.error("Đăng nhập thất bại", { description: err?.message || "Có lỗi xảy ra" });
     } finally {
       setLoading(false);
     }
@@ -109,17 +101,11 @@ const back = params.get("redirect");
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
-      {/* Background bàn hải sản */}
-     <div className="absolute inset-0 -z-10">
-  <Image
-    src="/bg.webp"     // file đặt trong /public/bg.png
-    alt="Seafood background"
-    fill             // tương đương width:100%, height:100%, position:absolute
-    priority         // load sớm
-    className="object-cover"
-  />
-  <div className="absolute inset-0 bg-black/55" /> {/* overlay tối */}
-</div>
+      {/* Background */}
+      <div className="absolute inset-0 -z-10">
+        <Image src="/bg.webp" alt="Seafood background" fill priority className="object-cover" />
+        <div className="absolute inset-0 bg-black/55" />
+      </div>
 
       {/* Card đăng nhập */}
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
@@ -127,45 +113,30 @@ const back = params.get("redirect");
           <Card className="rounded-2xl border-none shadow-2xl backdrop-blur-sm">
             <CardContent className="p-7 sm:p-8">
               <div className="mb-6 flex items-center justify-center">
-                <LogoKiotViet className="h-9 w-auto" />
+                <Logo className="h-9 w-auto" />
               </div>
 
               <form className="space-y-5" onSubmit={handleLogin} noValidate>
                 <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm text-white">Email</Label>
-    <Input
-      id="email"
-      name="email"
-      type="email"
-      placeholder="admin@restaurant.com"
-      className={`h-11 text-base text-white placeholder-gray-300 ${
-        fieldErr.email ? "border-red-500 focus-visible:ring-red-500" : ""
-      }`}
-      autoComplete="email"
-      aria-invalid={!!fieldErr.email}
-      required
-    />
-    {fieldErr.email && <p className="text-xs text-red-400">{fieldErr.email}</p>}
+                  <Label htmlFor="email" className="text-sm text-white">Email</Label>
+                  <Input
+                    id="email" name="email" type="email" placeholder="admin@restaurant.com"
+                    className={`h-11 text-base text-white placeholder-gray-300 ${fieldErr.email ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                    autoComplete="email" aria-invalid={!!fieldErr.email} required
+                  />
+                  {fieldErr.email && <p className="text-xs text-red-400">{fieldErr.email}</p>}
                 </div>
 
                 <div className="space-y-2">
-                 <Label htmlFor="password" className="text-sm text-white">Mật khẩu</Label>
-    <div className="relative">
-      <Input
-        id="password"
-        name="password"
-        type={showPassword ? "text" : "password"}
-        placeholder="Mật khẩu"
-        className={`h-11 pr-10 text-base text-white placeholder-gray-300 ${
-          fieldErr.password ? "border-red-500 focus-visible:ring-red-500" : ""
-        }`}
-        autoComplete="current-password"
-        aria-invalid={!!fieldErr.password}
-        required
-      />
+                  <Label htmlFor="password" className="text-sm text-white">Mật khẩu</Label>
+                  <div className="relative">
+                    <Input
+                      id="password" name="password" type={showPassword ? "text" : "password"} placeholder="Mật khẩu"
+                      className={`h-11 pr-10 text-base text-white placeholder-gray-300 ${fieldErr.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      autoComplete="current-password" aria-invalid={!!fieldErr.password} required
+                    />
                     <button
-                      type="button"
-                      onClick={() => setShowPassword((s) => !s)}
+                      type="button" onClick={() => setShowPassword((s) => !s)}
                       className="absolute inset-y-0 right-2 grid w-9 place-items-center rounded-md hover:bg-muted/50"
                       aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
@@ -177,10 +148,11 @@ const back = params.get("redirect");
 
                 <div className="flex items-center justify-between text-sm">
                   <label className="flex items-center gap-2 select-none">
-                    <Checkbox
+                    <input
+                      type="checkbox"
                       checked={remember}
-                      onCheckedChange={(v) => setRemember(Boolean(v))}
-                      className="rounded-[4px]"
+                      onChange={(e) => setRemember(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
                     />
                     <span className="text-muted-foreground">Duy trì đăng nhập</span>
                   </label>
@@ -191,12 +163,7 @@ const back = params.get("redirect");
                   <Button type="submit" disabled={loading} className="h-12 rounded-xl text-base font-semibold">
                     {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-12 rounded-xl text-base font-semibold"
-                    onClick={() => (window.location.href = "/auth/register")}
-                  >
+                  <Button type="button" variant="outline" className="h-12 rounded-xl text-base font-semibold" onClick={() => (window.location.href = "/auth/register")}>
                     Đăng ký
                   </Button>
                 </div>
@@ -206,7 +173,12 @@ const back = params.get("redirect");
               <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <HelpCircle className="h-4 w-4" />
-                  <span>Hỗ trợ: <a className="font-medium text-foreground hover:underline" href="tel:0369566285">0369566285</a></span>
+                  <span>
+                    Hỗ trợ:{" "}
+                    <a className="font-medium text-foreground hover:underline" href="tel:0369566285">
+                      0369566285
+                    </a>
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="i-flag-vn inline-block h-3.5 w-5 overflow-hidden rounded-sm">
@@ -229,7 +201,7 @@ const back = params.get("redirect");
   );
 }
 
-function LogoKiotViet({ className = "" }: { className?: string }) {
+function Logo({ className = "" }: { className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <svg viewBox="0 0 64 64" className="h-8 w-8">

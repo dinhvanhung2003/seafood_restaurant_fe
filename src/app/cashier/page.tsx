@@ -564,7 +564,7 @@ export default function POSPage() {
   onClick={() => {
     const tables = JSON.parse(localStorage.getItem("pos.tables") ?? "[]");
 
-    const resetTables = tables.map((t: any) => ({
+    const resetTables = tables.map((t:any) => ({
       ...t,
       status: "empty",
       startedAt: null,
