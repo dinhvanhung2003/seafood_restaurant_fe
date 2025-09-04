@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import Providers from "./providers";
+import AxiosAuthHeader from "./AxiosAuthHeader";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
@@ -14,8 +16,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
-          <Toaster />
+        <Providers>
+           <AxiosAuthHeader />
+          {children}
+        </Providers>
+          <Toaster
+          position="bottom-right"
+          richColors
+          closeButton
+          expand
+           duration={5000} 
+          style={{ zIndex: 999999 }}                 //  đảm bảo luôn trên cùng
+          toastOptions={{
+            classNames: {
+              toast: "text-white",                   //  chữ trắng toàn cục
+              title: "text-white",
+              description: "text-white/90",
+              actionButton: "text-white",
+              cancelButton: "text-white",
+            },
+          }}
+        />
       </body>
     </html>
   );
