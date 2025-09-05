@@ -18,7 +18,17 @@ type NavItem = { label: string; href: string; icon: any; children?: NavChild[] }
 
 const NAV: NavItem[] = [
   { label: "Tổng quan", href: "/admin", icon: LayoutDashboard },
-  { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package },
+  { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package,
+
+ children: [
+      { label: "Mặt hàng", href: "/admin/inventories/list" },
+      { label: "Thực đơn", href: "/admin/kho-hang/nhap-kho" },
+      { label: "Danh mục", href: "/admin/product/category" },
+      { label: "Combo", href: "/admin/kho-hang/kiem-ke" },
+    ],
+  
+
+   },
   { label: "Phòng/Bàn", href: "/admin/table", icon: TableIcon },
   { label: "Giao dịch", href: "/admin/giao-dich", icon: CreditCard },
   { label: "Đối tác", href: "/admin/doi-tac", icon: Users },
