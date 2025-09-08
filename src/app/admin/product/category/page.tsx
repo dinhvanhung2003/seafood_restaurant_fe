@@ -139,7 +139,6 @@ export default function CategoryListPage() {
               <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="MENU">MENU</SelectItem>
               <SelectItem value="INGREDIENT">INGREDIENT</SelectItem>
-              {/* Thêm loại khác nếu BE có */}
             </SelectContent>
           </Select>
         </div>

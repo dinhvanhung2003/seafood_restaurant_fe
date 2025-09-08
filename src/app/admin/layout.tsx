@@ -21,8 +21,8 @@ const NAV: NavItem[] = [
   { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package,
 
  children: [
-      { label: "Mặt hàng", href: "/admin/inventories/list" },
-      { label: "Thực đơn", href: "/admin/kho-hang/nhap-kho" },
+     
+      { label: "Thực đơn", href: "/admin/product/menu" },
       { label: "Danh mục", href: "/admin/product/category" },
       { label: "Combo", href: "/admin/kho-hang/kiem-ke" },
     ],
