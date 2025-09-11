@@ -1,20 +1,40 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getSocket } from "@/lib/socket";
 import {
-  Volume2, Settings, Bell, Menu,
-  UtensilsCrossed, Clock4, ChefHat, CheckCircle2, Truck
+  Volume2,
+  Settings,
+  Bell,
+  Menu as MenuIcon,
+  UtensilsCrossed,
+  Clock4,
+  ChefHat,
+  CheckCircle2,
+  Truck,
+  RotateCcw,
 } from "lucide-react";
 import api from "@/lib/axios";
 
 /* ================= Types ================= */
-type OrderStatus = "PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "SERVED" | "PAID" | "CANCELLED";
+type OrderStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "READY"
+  | "SERVED"
+  | "PAID"
+  | "CANCELLED";
 
 type ApiOrderItem = {
   id: string;
@@ -33,7 +53,7 @@ type ApiOrder = {
 };
 
 export type Ticket = {
-  id: string;          // orderId
+  id: string; // orderId
   orderId: string;
   table: string;
   items: { name: string; qty: number }[];
@@ -43,9 +63,27 @@ export type Ticket = {
 };
 
 /* ================= API helpers ================= */
-async function listOrdersByStatus(status: OrderStatus, page = 1, limit = 50): Promise<ApiOrder[]> {
+// Cột 1: gom đơn mới -> lấy tất cả trừ các trạng thái đã đi xa
+async function listNewOrders(
+  page = 1,
+  limit = 50
+): Promise<ApiOrder[]> {
+  const res = await api.get("/orders", {
+    params: {
+      excludeStatus: "PAID,CANCELLED,PREPARING,READY,SERVED",
+      page,
+      limit,
+    },
+  });
+  return (res.data?.data ?? res.data) as ApiOrder[];
+}
+
+async function listOrdersByStatus(
+  status: OrderStatus,
+  page = 1,
+  limit = 50
+): Promise<ApiOrder[]> {
   const res = await api.get("/orders", { params: { status, page, limit } });
-  // giả định BE trả về { data: ApiOrder[] } hoặc mảng trực tiếp — sửa theo payload thực tế
   return (res.data?.data ?? res.data) as ApiOrder[];
 }
 
@@ -73,9 +111,9 @@ function TicketCard({
 }: {
   t: Ticket;
   variant: "new" | "preparing" | "ready";
-  onStart?: (t: Ticket) => void;     // -> PREPARING
-  onComplete?: (t: Ticket) => void;  // -> READY
-  onServe?: (t: Ticket) => void;     // -> SERVED
+  onStart?: (t: Ticket) => void; // -> PREPARING
+  onComplete?: (t: Ticket) => void; // -> READY
+  onServe?: (t: Ticket) => void; // -> SERVED
 }) {
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
@@ -93,7 +131,9 @@ function TicketCard({
       <div className="mt-2 space-y-1">
         {t.items.map((it, i) => (
           <div key={i} className="flex items-center justify-between">
-            <div className="truncate">{i + 1}. {it.name}</div>
+            <div className="truncate">
+              {i + 1}. {it.name}
+            </div>
             <div className="font-semibold">x{it.qty}</div>
           </div>
         ))}
@@ -113,13 +153,22 @@ function TicketCard({
           </Button>
         )}
         {variant === "preparing" && (
-          <Button size="sm" variant="secondary" className="h-8" onClick={() => onComplete?.(t)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            onClick={() => onComplete?.(t)}
+          >
             <CheckCircle2 className="mr-2 h-4 w-4" />
             Hoàn tất (READY)
           </Button>
         )}
         {variant === "ready" && (
-          <Button size="sm" className="h-8 bg-emerald-600 hover:bg-emerald-600/90" onClick={() => onServe?.(t)}>
+          <Button
+            size="sm"
+            className="h-8 bg-emerald-600 hover:bg-emerald-600/90"
+            onClick={() => onServe?.(t)}
+          >
             <Truck className="mr-2 h-4 w-4" />
             Cung ứng (SERVED)
           </Button>
@@ -133,39 +182,44 @@ function TicketCard({
 export default function KitchenScreen() {
   const qc = useQueryClient();
 
-  // 1) Query ba cột
-  const qConfirmed = useQuery({
-    queryKey: ["orders", "CONFIRMED"],
-    queryFn: () => listOrdersByStatus("CONFIRMED", 1, 50),
+  // Polling + phòng ngừa socket rớt
+  const COMMON_Q = {
     staleTime: 15_000,
     placeholderData: keepPreviousData,
+    refetchInterval: 8_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  } as const;
+
+  // 1) Queries 3 cột
+  const qNew = useQuery({
+    queryKey: ["orders", "NEW"],
+    queryFn: () => listNewOrders(1, 50),
+    ...COMMON_Q,
   });
 
   const qPreparing = useQuery({
     queryKey: ["orders", "PREPARING"],
     queryFn: () => listOrdersByStatus("PREPARING", 1, 50),
-    staleTime: 15_000,
-    placeholderData: keepPreviousData,
+    ...COMMON_Q,
   });
 
   const qReady = useQuery({
     queryKey: ["orders", "READY"],
     queryFn: () => listOrdersByStatus("READY", 1, 50),
-    staleTime: 15_000,
-    placeholderData: keepPreviousData,
+    ...COMMON_Q,
   });
 
-  // 2) Mutations đổi trạng thái
+  // 2) Mutations
   const muUpdate = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
       updateOrderStatus(orderId, status),
     onSuccess: (_data, vars) => {
-      // refetch các cột liên quan
-      const hit = (status: OrderStatus) => qc.invalidateQueries({ queryKey: ["orders", status] });
-      hit("CONFIRMED");
+      const hit = (key: string) => qc.invalidateQueries({ queryKey: ["orders", key] });
+      hit("NEW");
       hit("PREPARING");
       hit("READY");
-      // nếu đã SERVED thì cũng có thể invalid list SERVED (nếu bạn có cột 4)
       if (vars.status === "SERVED") qc.invalidateQueries({ queryKey: ["orders", "SERVED"] });
     },
   });
@@ -179,36 +233,60 @@ export default function KitchenScreen() {
     items: o.items.map((it) => ({ name: it.menuItem.name, qty: it.quantity })),
   });
 
-  const listNew = useMemo(() => (qConfirmed.data ?? []).map(toTicket), [qConfirmed.data]);
-  const listCooking = useMemo(() => (qPreparing.data ?? []).map(toTicket), [qPreparing.data]);
+  const listNew = useMemo(() => (qNew.data ?? []).map(toTicket), [qNew.data]);
+  const listCooking = useMemo(
+    () => (qPreparing.data ?? []).map(toTicket),
+    [qPreparing.data]
+  );
   const listReady = useMemo(() => (qReady.data ?? []).map(toTicket), [qReady.data]);
 
-  // 4) Socket: khi thu ngân bắn món mới → refetch CONFIRMED
+  // 4) Socket: join room + auto refetch khi có event
   useEffect(() => {
-    (async () => { await fetch("/api/socket").catch(() => {}); })(); // đảm bảo server socket
+    (async () => {
+      await fetch("/api/socket").catch(() => {});
+    })(); // đảm bảo server socket khởi tạo
+
     const s = getSocket();
+    s.emit("room:join", "kitchen");
+
+    const burstRefetch = () => {
+      qc.invalidateQueries({ queryKey: ["orders", "NEW"] });
+      qc.invalidateQueries({ queryKey: ["orders", "PREPARING"] });
+      qc.invalidateQueries({ queryKey: ["orders", "READY"] });
+    };
 
     const handleSingle = (p: any) => {
-      // p: { orderId, itemId, name, qty, tableName, createdAt, priority }
-      toast.success(`Món mới: ${p.name}`, {
-        description: `${p.qty} × ${p.name} • ${p.tableName}`,
+      toast.success(`Món mới: ${p?.name ?? ""}`, {
+        description: `${p?.qty ?? ""} × ${p?.name ?? ""} • ${p?.tableName ?? ""}`,
       });
-      qc.invalidateQueries({ queryKey: ["orders", "CONFIRMED"] });
+      burstRefetch();
     };
 
     const handleBatch = (p: any) => {
-      // p: { orderId, tableName, createdAt, items: [{itemId,name,qty}], priority }
       const count = Array.isArray(p?.items) ? p.items.length : 1;
-      toast.success(`Có ${count} món mới`, { description: `Bàn ${p.tableName}` });
-      qc.invalidateQueries({ queryKey: ["orders", "CONFIRMED"] });
+      toast.success(`Có ${count} món mới`, { description: `Bàn ${p?.tableName ?? ""}` });
+      burstRefetch();
+    };
+
+    const onDisconnect = () => {
+      burstRefetch();
+      let n = 0;
+      const id = setInterval(() => {
+        burstRefetch();
+        if (++n >= 3) clearInterval(id);
+      }, 3000);
     };
 
     s.on("cashier:notify_item", handleSingle);
     s.on("cashier:notify_items", handleBatch);
+    s.on("disconnect", onDisconnect);
+    s.on("connect_error", onDisconnect);
 
     return () => {
       s.off("cashier:notify_item", handleSingle);
       s.off("cashier:notify_items", handleBatch);
+      s.off("disconnect", onDisconnect);
+      s.off("connect_error", onDisconnect);
     };
   }, [qc]);
 
@@ -240,29 +318,53 @@ export default function KitchenScreen() {
     }
   };
 
+  // 6) UI
   return (
     <div className="flex h-screen flex-col bg-[#0B3C86] text-white">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="text-lg font-semibold">Màn Bếp</div>
         <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10"><Volume2 /></Button>
-          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10"><Settings /></Button>
-          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10"><Bell /></Button>
-          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10"><Menu /></Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-2"
+            onClick={() => {
+              qc.invalidateQueries({ queryKey: ["orders", "NEW"] });
+              qc.invalidateQueries({ queryKey: ["orders", "PREPARING"] });
+              qc.invalidateQueries({ queryKey: ["orders", "READY"] });
+            }}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Làm mới
+          </Button>
+          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10">
+            <Volume2 />
+          </Button>
+          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10">
+            <Settings />
+          </Button>
+          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10">
+            <Bell />
+          </Button>
+          <Button size="icon" variant="ghost" className="text-white hover:bg-white/10">
+            <MenuIcon />
+          </Button>
         </div>
       </div>
 
       {/* 3 cột trạng thái */}
       <div className="grid flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-3">
-        {/* CONFIRMED */}
+        {/* NEW (PENDING + CONFIRMED) */}
         <div className="rounded-2xl bg-white p-3 shadow-lg text-slate-900">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-base font-semibold text-[#0B3C86]">Mới / Đã xác nhận</div>
+            <div className="text-base font-semibold text-[#0B3C86]">
+              Mới / Đã xác nhận
+            </div>
             <Badge variant="secondary">{listNew.length}</Badge>
           </div>
           <div className="h-[calc(100vh-180px)]">
-            {qConfirmed.isLoading ? (
+            {qNew.isLoading ? (
               <EmptyState text="Đang tải..." />
             ) : listNew.length === 0 ? (
               <EmptyState text="Chưa có đơn mới" />
@@ -293,7 +395,12 @@ export default function KitchenScreen() {
               <ScrollArea className="h-full pr-2">
                 <div className="space-y-3">
                   {listCooking.map((t) => (
-                    <TicketCard key={t.id} t={t} variant="preparing" onComplete={markReady} />
+                    <TicketCard
+                      key={t.id}
+                      t={t}
+                      variant="preparing"
+                      onComplete={markReady}
+                    />
                   ))}
                 </div>
               </ScrollArea>
@@ -304,7 +411,9 @@ export default function KitchenScreen() {
         {/* READY */}
         <div className="rounded-2xl bg-white p-3 shadow-lg text-slate-900">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-base font-semibold text-[#0B3C86]">Sẵn sàng cung ứng</div>
+            <div className="text-base font-semibold text-[#0B3C86]">
+              Sẵn sàng cung ứng
+            </div>
             <Badge variant="secondary">{listReady.length}</Badge>
           </div>
           <div className="h-[calc(100vh-180px)]">

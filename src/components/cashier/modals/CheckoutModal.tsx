@@ -19,7 +19,7 @@ import {
   CircleDollarSign, CreditCard, Wallet, Banknote, Percent, ReceiptText,
 } from "lucide-react";
 
-type PayMethod = "cash" | "card" | "transfer";
+type PayMethod = "cash" | "card" | "vnpay";
 
 type ReceiptLine = { id: string; name: string; qty: number; price: number; total: number; };
 export type Receipt = {
@@ -57,7 +57,18 @@ export default function CheckoutModal({
   const change = Math.max(0, paid - totalUI);
   const canConfirm = totalUI > 0 && paid >= totalUI;
 
- const handleConfirm = async () => {
+const pollPaymentUntilDone = async (txnRef: string, timeoutMs = 5 * 60 * 1000) => {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    // API BE trả {"status":"PENDING"|"PAID"|"FAILED"|"EXPIRED", ...}
+    const s = await api.get(`/payments/vnpay/status`, { params: { txnRef } }).then(r => r.data);
+    if (['PAID', 'FAILED', 'EXPIRED'].includes(s.status)) return s;
+    await new Promise(r => setTimeout(r, 2000)); // 2s/poll
+  }
+  return { status: 'TIMEOUT' };
+};
+
+const handleConfirm = async () => {
   try {
     if (!orderId) {
       toast.error("Chưa có Order cho bàn này. Vui lòng 'Gửi bếp' trước khi thanh toán.");
@@ -68,43 +79,102 @@ export default function CheckoutModal({
     const invRes = await api.post(`/invoices/from-order/${orderId}`, {});
     const invoice = invRes.data;
 
-    // 2) thanh toán tiền mặt = đúng tổng tiền invoice trên BE
+    // 2) số tiền
     const amountToPay = Number(invoice?.totalAmount ?? 0);
     if (!amountToPay) {
       toast.error("Invoice không có tổng tiền hợp lệ.");
       return;
     }
-    await api.post(`/invoices/${invoice.id}/payments`, {
-      amount: amountToPay,
-      method: "CASH",
-    });
 
-    // 3) in bill & báo cho cha dọn UI
-    const receipt: Receipt = {
-      id: invoice.id,
-      tableId: table.id,
-      tableName: `${table.name} / ${table.floor}`,
-      createdAt: new Date().toLocaleString(),
-      cashier: "Thu ngân",
-      items: lines,
-      subtotal,
-      // discount chỉ hiển thị ở bill; KHÔNG áp dụng lên API, tránh mismatch
-      discount,
-      total: Math.max(0, subtotal - discount),
-      paid,
-      change: Math.max(0, paid - Math.max(0, subtotal - discount)),
-      method: "cash",
-    };
+    // === CASH: cộng tiền ngay trên BE như bạn đang làm ===
+    if (method === "cash") {
+      await api.post(`/invoices/${invoice.id}/payments`, {
+        amount: amountToPay,
+        method: "CASH",
+      });
 
-    printReceipt(receipt);
-    onSuccess(receipt);
-    onClose();
-    toast.success("Thanh toán thành công");
+      const receipt: Receipt = {
+        id: invoice.id,
+        tableId: table.id,
+        tableName: `${table.name} / ${table.floor}`,
+        createdAt: new Date().toLocaleString(),
+        cashier: "Thu ngân",
+        items: lines,
+        subtotal,
+        discount,
+        total: Math.max(0, subtotal - discount),
+        paid: amountToPay,
+        change: Math.max(0, paid - Math.max(0, subtotal - discount)),
+        method: "cash",
+      };
+
+      printReceipt(receipt);
+      onSuccess(receipt);
+      onClose();
+      toast.success("Thanh toán tiền mặt thành công");
+      return;
+    }
+
+    // === VNPAY: KHÔNG set PAID ở đây; chờ BE xác nhận IPN ===
+    if (method === "vnpay") {
+      const { data } = await api.post(`/payments/vnpay/create`, {
+        invoiceId: invoice.id,
+        amount: amountToPay,
+        // bankCode: 'VNPAYQR', // bật khi kênh QR đã được VNPay enable
+      });
+
+      if (!data?.payUrl || !data?.vnp_TxnRef) {
+        toast.error("Không tạo được URL VNPay");
+        return;
+      }
+
+      // 1) mở popup VNPay
+      const w = window.open(
+        data.payUrl,
+        "vnpay",
+        "width=520,height=720,noopener,noreferrer"
+      );
+
+      // 2) chờ BE xác nhận qua IPN (polling theo txnRef)
+      const result = await pollPaymentUntilDone(data.vnp_TxnRef, 15 * 60 * 1000);
+
+      try { w?.close(); } catch {}
+
+      if (result.status === "PAID") {
+        const receipt: Receipt = {
+          id: invoice.id,
+          tableId: table.id,
+          tableName: `${table.name} / ${table.floor}`,
+          createdAt: new Date().toLocaleString(),
+          cashier: "Thu ngân",
+          items: lines,
+          subtotal,
+          discount,
+          total: Math.max(0, subtotal - discount),
+          paid: amountToPay,
+          change: 0,
+          method: "vnpay",
+        };
+        printReceipt(receipt);
+        onSuccess(receipt);
+        onClose();
+        toast.success("Thanh toán VNPay thành công");
+      } else if (result.status === "FAILED") {
+        toast.error("Thanh toán VNPay thất bại");
+      } else if (result.status === "EXPIRED") {
+        toast.error("Mã thanh toán đã hết hạn");
+      } else {
+        toast.error("Không nhận được kết quả thanh toán (timeout)");
+      }
+
+      return;
+    }
   } catch (e: any) {
     const msg = e?.response?.data?.message || e.message || "Lỗi thanh toán";
     toast.error("Thanh toán thất bại", { description: msg });
   }
 };
+
 
 
   return (
@@ -167,21 +237,16 @@ export default function CheckoutModal({
 
                   <div className="space-y-2">
                     <Label className="text-slate-500">Khách thanh toán</Label>
-                    <RadioGroup value={method} onValueChange={(v) => setMethod(v as PayMethod)} className="flex flex-wrap gap-4">
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem id="m1" value="cash" />
-                        <Label htmlFor="m1" className="flex items-center gap-1"><Wallet className="h-4 w-4" /> Tiền mặt</Label>
-                      </div>
-                      <div className="flex items-center space-x-2 opacity-50 pointer-events-none">
-                        {/* tạm khóa thẻ & chuyển khoản, BE chưa hỗ trợ */}
-                        <RadioGroupItem id="m2" value="card" disabled />
-                        <Label htmlFor="m2" className="flex items-center gap-1"><CreditCard className="h-4 w-4" /> Thẻ</Label>
-                      </div>
-                      <div className="flex items-center space-x-2 opacity-50 pointer-events-none">
-                        <RadioGroupItem id="m3" value="transfer" disabled />
-                        <Label htmlFor="m3" className="flex items-center gap-1"><Banknote className="h-4 w-4" /> Chuyển khoản</Label>
-                      </div>
-                    </RadioGroup>
+                   <RadioGroup value={method} onValueChange={(v) => setMethod(v as PayMethod)} className="flex flex-wrap gap-4">
+  <div className="flex items-center space-x-2">
+    <RadioGroupItem id="m1" value="cash" />
+    <Label htmlFor="m1" className="flex items-center gap-1">Tiền mặt</Label>
+  </div>
+  <div className="flex items-center space-x-2">
+    <RadioGroupItem id="m4" value="vnpay" />
+    <Label htmlFor="m4" className="flex items-center gap-1">VNPay</Label>
+  </div>
+</RadioGroup>
 
                     <div className="flex items-center gap-2">
                       <Input type="number" className="text-right" value={paid} min={0} onChange={(e) => setPaid(Number(e.target.value) || 0)} />

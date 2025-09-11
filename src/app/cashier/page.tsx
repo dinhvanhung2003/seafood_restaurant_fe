@@ -1,5 +1,5 @@
 "use client";
-
+import api from "@/lib/axios";
 import React, { useMemo, useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -148,14 +148,19 @@ useEffect(() => {
     await clear(selectedTable.id, activeItems);
   };
 
-  const onNotify = async () => {
-    if (!selectedTable) return toast.error("Chưa chọn bàn!");
-    await confirm(selectedTable.id);
+  // chỗ onNotify trên POS
+const onNotify = async () => {
+  if (!selectedTable) return toast.error("Chưa chọn bàn!");
+  const oid = orderIds[selectedTable.id];
+  if (!oid) return toast.error("Chưa có orderId cho bàn này!");
 
-    // Emit socket cho bếp (không xoá state)
+  try {
+    // đảm bảo đơn ở trạng thái CONFIRMED (Kitchen đang xem CONFIRMED)
+    await api.patch(`/orders/${oid}/status`, { status: "CONFIRMED" });
+
     const s = await getSocket();
     s.emit("cashier:notify_items", {
-      orderId: orderIds[selectedTable.id],
+      orderId: oid,
       tableName: selectedTable.name,
       createdAt: new Date().toLocaleString(),
       items: activeItems.map((i) => ({
@@ -167,7 +172,13 @@ useEffect(() => {
       priority: true,
     });
     toast.success("Đã gửi bếp!");
-  };
+  } catch (e: any) {
+    toast.error("Không thể xác nhận đơn", {
+      description: e?.response?.data?.message || e.message,
+    });
+  }
+};
+
 
 const onCancelOrder = async () => {
   if (!selectedTable) return;
