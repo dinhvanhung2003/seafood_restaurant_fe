@@ -312,6 +312,7 @@ const canNotify = !!currentOrderRow && currentOrderRow.status === "PENDING";
 
         {/* Right: Order Panel */}
         <OrderList
+          orderId={currentOrderId}
           table={selectedTable}
           items={activeItems}
           catalog={menuCatalog}
