@@ -22,12 +22,14 @@ export function OrderList({
   onChangeQty,
   onCheckout,
   onNotify,
-  // ⬇️ thêm các prop mà POSPage truyền xuống
   onClear,
   orderTabs,
   onAddOrder,
   onSwitchOrder,
   onCloseOrder,
+   canCancel, 
+  onCancelOrder,
+   canNotify,
 }: {
   table: Table | null;
   items: OrderItem[];
@@ -36,7 +38,9 @@ export function OrderList({
   onChangeQty: (id: string, delta: number) => void;
   onCheckout: () => void;
   onNotify: () => void;
-
+onCancelOrder?: () => void; 
+canCancel?: boolean;
+ canNotify?: boolean;
   // các prop thêm (để khớp POSPage) — đều là tùy chọn
   onClear?: () => void;
   orderTabs?: OrderTabs;
@@ -106,13 +110,15 @@ export function OrderList({
       <div className="space-y-2 p-3">
         <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
           Bạn vừa cập nhật đơn hàng. Click{" "}
-          <button
-            onClick={onNotify}
-            className="font-semibold text-blue-600 underline"
-            disabled={!hasTable}
-          >
-            Thông báo
-          </button>{" "}
+         <Button
+  className="h-12 flex-1 rounded-xl border border-blue-500 bg-white text-blue-500 hover:bg-blue-50"
+  onClick={onNotify}
+  disabled={!hasTable || !canNotify}   // <- chỉ bấm được khi còn PENDING
+>
+  <Bell className="mr-2 h-5 w-5" />
+  Thông báo (F10)
+</Button>
+{}
           để gửi thông tin chế biến đến bar bếp.
         </div>
 
@@ -142,6 +148,7 @@ export function OrderList({
 
         <div className="mt-2 flex items-center gap-2">
           {/* Nếu có truyền onClear thì hiện nút Xoá đơn */}
+           {/* Xoá sạch món trong đơn (giữ order) */}
           {onClear && (
             <Button
               variant="outline"
@@ -150,9 +157,20 @@ export function OrderList({
               disabled={!hasTable}
             >
               <Trash2 className="mr-2 h-5 w-5" />
-              Xoá đơn
+              Xoá món
             </Button>
           )}
+
+          {/* Huỷ đơn (đổi status=CANCELLED, hoàn kho, huỷ invoice chưa trả) */}
+     <Button
+  variant="outline"
+  className="h-12 flex-1 rounded-xl text-black border-2"
+  onClick={onCancelOrder ?? (() => {})}     // nếu chưa truyền hàm thì no-op
+  disabled={!hasTable || !canCancel || !onCancelOrder}  // mờ khi chưa có order/hàm
+>
+  Huỷ đơn
+</Button>
+
 
           <Button
             className="h-12 flex-1 rounded-xl border border-blue-500 bg-white text-blue-500 hover:bg-blue-50"

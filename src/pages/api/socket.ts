@@ -1,11 +1,10 @@
-// pages/api/socket.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { Server as NetServer } from "http";
+import type { Server as HTTPServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 
 type Res = NextApiResponse & {
   socket: NextApiResponse["socket"] & {
-    server: NetServer & { io?: SocketIOServer };
+    server: HTTPServer & { io?: SocketIOServer };
   };
 };
 
@@ -22,11 +21,16 @@ export default function handler(req: NextApiRequest, res: Res) {
     io.on("connection", (socket) => {
       console.log("[socket] client connected:", socket.id);
 
-      socket.on("cashier:notify_item", (payload, cb) => {
-        console.log("[socket] cashier:notify_item", payload);
-        io.emit("kitchen:new_item", payload);
+      const forward = (event: string) => (payload: any, cb?: (x: any) => void) => {
+        console.log(`[socket] ${event}`, payload);
+        // gửi cho client KHÁC (nếu muốn gửi cả chính thu ngân dùng io.emit)
+        socket.broadcast.emit(event, payload);
         cb?.("ok");
-      });
+      };
+
+      // GIỮ NGUYÊN TÊN EVENT
+      socket.on("cashier:notify_item", forward("cashier:notify_item"));
+      socket.on("cashier:notify_items", forward("cashier:notify_items"));
     });
 
     console.log("[socket] Socket.IO server started");

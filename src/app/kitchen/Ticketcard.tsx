@@ -3,14 +3,25 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock4, CheckCircle2, ChefHat, Truck } from "lucide-react";
-import type { Ticket } from "./page";
+
+/* Nếu bạn chưa có type chung thì thêm vào đây */
+export type Ticket = {
+  id: string;
+  orderId: string;
+  table: string;
+  items: { name: string; qty: number }[];
+  createdAt: string;
+  priority?: "high" | "normal";
+  note?: string;
+};
 
 type Props = {
   t: Ticket;
-  variant: "waiting" | "done";
-  onStart?: () => void;
-  onComplete?: () => void;
-  onServe?: () => void;
+  // ✅ Sửa: đồng bộ với KitchenScreen (new | cooking | ready)
+  variant: "new" | "cooking" | "ready";
+  onStart?: (t: Ticket) => void;     // chuyển sang PREPARING
+  onComplete?: (t: Ticket) => void;  // chuyển sang READY
+  onServe?: (t: Ticket) => void;     // chuyển sang SERVED
 };
 
 export default function TicketCard({ t, variant, onStart, onComplete, onServe }: Props) {
@@ -30,7 +41,9 @@ export default function TicketCard({ t, variant, onStart, onComplete, onServe }:
       <div className="mt-2 space-y-1">
         {t.items.map((it, i) => (
           <div key={i} className="flex items-center justify-between">
-            <div className="truncate">{i + 1}. {it.name}</div>
+            <div className="truncate">
+              {i + 1}. {it.name}
+            </div>
             <div className="font-semibold">x{it.qty}</div>
           </div>
         ))}
@@ -43,19 +56,27 @@ export default function TicketCard({ t, variant, onStart, onComplete, onServe }:
       )}
 
       <div className="mt-3 flex items-center gap-2">
-        {variant === "waiting" ? (
-          <>
-            <Button size="sm" className="h-8" onClick={onStart}>
-              <ChefHat className="mr-2 h-4 w-4" />
-              Bắt đầu
-            </Button>
-            <Button size="sm" variant="secondary" className="h-8" onClick={onComplete}>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Hoàn tất
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" className="h-8 bg-emerald-600 hover:bg-emerald-600/90" onClick={onServe}>
+        {/* ✅ Hiển thị nút theo 3 trạng thái */}
+        {variant === "new" && (
+          <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
+            <ChefHat className="mr-2 h-4 w-4" />
+            Bắt đầu
+          </Button>
+        )}
+
+        {variant === "cooking" && (
+          <Button size="sm" variant="secondary" className="h-8" onClick={() => onComplete?.(t)}>
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Hoàn tất
+          </Button>
+        )}
+
+        {variant === "ready" && (
+          <Button
+            size="sm"
+            className="h-8 bg-emerald-600 hover:bg-emerald-600/90"
+            onClick={() => onServe?.(t)}
+          >
             <Truck className="mr-2 h-4 w-4" />
             Cung ứng
           </Button>
