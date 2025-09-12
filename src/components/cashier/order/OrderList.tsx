@@ -104,9 +104,7 @@ export function OrderList({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-3 pb-2">
         <div className="flex items-center gap-2 text-sm font-medium text-[#0B63E5]">
-          <svg className="h-5 w-5" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2" aria-hidden>
-            <path d="M4 3v7a2 2 0 0 0 2 2h1V3M11 3v9M18 3l-3 6h6l-3 6" />
-          </svg>
+        
           {tableFloor ? `${tableName} / ${tableFloor}` : tableName}
         </div>
 

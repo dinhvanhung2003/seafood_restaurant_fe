@@ -129,16 +129,12 @@ const handleConfirm = async () => {
       }
 
       // 1) mở popup VNPay
-      const w = window.open(
-        data.payUrl,
-        "vnpay",
-        "width=520,height=720,noopener,noreferrer"
-      );
+      window.open(data.payUrl, "_blank"); 
 
       // 2) chờ BE xác nhận qua IPN (polling theo txnRef)
       const result = await pollPaymentUntilDone(data.vnp_TxnRef, 15 * 60 * 1000);
 
-      try { w?.close(); } catch {}
+      // try { w?.close(); } catch {}
 
       if (result.status === "PAID") {
         const receipt: Receipt = {

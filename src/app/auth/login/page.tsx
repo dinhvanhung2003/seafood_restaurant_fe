@@ -1,19 +1,12 @@
-// app/auth/login/page.tsx
-import { Suspense } from "react";
 import LoginClient from "./LoginClient";
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: { callbackUrl?: string; redirect?: string };
+  searchParams: Promise<{ callbackUrl?: string; redirect?: string }>;
 }) {
-  const back = searchParams?.callbackUrl ?? searchParams?.redirect;
-  return (
-    <Suspense fallback={null}>
-      <LoginClient back={back} />
-    </Suspense>
-  );
-}
+  const sp = await searchParams;
+  const back = sp?.callbackUrl ?? sp?.redirect;
 
-// (tuỳ chọn) đảm bảo không cố pre-render tĩnh
-export const dynamic = "force-dynamic";
+  return <LoginClient back={back} />;
+}

@@ -311,7 +311,7 @@ const [debouncedSearch] = useDebounce(search,1000);
         <TableCell>
           <div className="w-16 h-16 rounded-md overflow-hidden bg-slate-100 border">
             {m.image ? (
-              <Image
+              <img
                 src={m.image}
                 alt={m.name}
                 width={64}

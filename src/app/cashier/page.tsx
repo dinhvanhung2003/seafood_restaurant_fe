@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, UtensilsCrossed, LayoutGrid, Grid3X3, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ensureSocketReady } from "@/lib/socket";
 
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
@@ -45,7 +46,7 @@ export default function POSPage() {
   const enterSearch = () => setIsSearching(true);
   const exitSearch = () => setIsSearching(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-
+  const [notified, setNotified] = useState<Record<string, Record<string, number>>>({});
 
 useEffect(() => {
   (async () => {
@@ -147,37 +148,105 @@ useEffect(() => {
     if (!selectedTable) return;
     await clear(selectedTable.id, activeItems);
   };
+// chỉ thông báo 1 lần 
+const currentOrderId = selectedTable ? orderIds[selectedTable.id] : undefined;
 
+// snapshot của đơn hiện tại (nếu chưa có thì rỗng)
+const notifiedSnapshot = useMemo(
+  () => (currentOrderId ? (notified[currentOrderId] ?? {}) : {}),
+  [currentOrderId, notified]
+);
+
+// các item cần báo (mới hoặc tăng số lượng so với snapshot)
+const deltaItems = useMemo(() => {
+  if (!currentOrderId) return [];
+  return activeItems
+    .map((i) => {
+      const sent = notifiedSnapshot[i.id] ?? 0;
+      const delta = i.qty - sent;
+      return { id: i.id, name: menuItems.find((m) => m.id === i.id)?.name, delta };
+    })
+    .filter((x) => x.delta > 0);
+}, [activeItems, notifiedSnapshot, currentOrderId, menuItems]);
   // chỗ onNotify trên POS
+// ---- onNotify: gửi theo DELTA ----
 const onNotify = async () => {
   if (!selectedTable) return toast.error("Chưa chọn bàn!");
-  const oid = orderIds[selectedTable.id];
-  if (!oid) return toast.error("Chưa có orderId cho bàn này!");
+  const orderId = orderIds[selectedTable.id];
+  if (!orderId) return toast.error("Chưa có orderId cho bàn này!");
 
   try {
-    // đảm bảo đơn ở trạng thái CONFIRMED (Kitchen đang xem CONFIRMED)
-    await api.patch(`/orders/${oid}/status`, { status: "CONFIRMED" });
+    // 1) Lấy rows hiện tại (ưu tiên từ state; thiếu rowId thì fallback gọi /orders/:id)
+    let rows =
+      activeItems
+        .filter((i) => !!i.rowId && i.qty > 0)
+        .map((i) => ({
+          orderItemId: i.rowId!, // quan trọng
+          name: menuItems.find((m) => m.id === i.id)?.name ?? "",
+          qty: i.qty,            // tổng hiện tại
+        }));
 
-    const s = await getSocket();
+    if (rows.length === 0) {
+      const r = await api.get(`/orders/${orderId}`);
+      const fresh = Array.isArray(r.data?.items) ? r.data.items : [];
+      rows = fresh
+        .filter((it: any) => ["PENDING", "CONFIRMED"].includes(it.status))
+        .map((it: any) => ({
+          orderItemId: it.id,
+          name: it.menuItem?.name ?? "",
+          qty: it.quantity,   // tổng hiện tại
+        }));
+      if (rows.length === 0) return toast.info("Không có món để báo bếp.");
+    }
+
+    // 2) Chuyển sang DELTA (chỉ gửi phần tăng thêm so với snapshot đã gửi)
+    const snapshot = notified[orderId] ?? {};
+    const lines = rows
+      .map((r) => {
+        const sent = snapshot[r.orderItemId] ?? 0;
+        const delta = r.qty - sent;
+        return delta > 0 ? { orderItemId: r.orderItemId, name: r.name, qty: delta } : null;
+      })
+      .filter(Boolean) as { orderItemId: string; name: string; qty: number }[];
+
+    if (!lines.length) return toast.info("Không có phần tăng thêm để báo bếp.");
+
+    // 3) (tuỳ chọn) soft reconfirm
+    await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" }).catch(() => {});
+
+    // 4) Phát socket
+    const batchId =
+      (typeof crypto !== "undefined" && (crypto as any).randomUUID)
+        ? (crypto as any).randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const s = getSocket();
     s.emit("cashier:notify_items", {
-      orderId: oid,
+      orderId,
       tableName: selectedTable.name,
-      createdAt: new Date().toLocaleString(),
-      items: activeItems.map((i) => ({
-        itemId: i.id,
-        name: menuItems.find((m) => m.id === i.id)?.name,
-        qty: i.qty,
-      })),
+      createdAt: new Date().toISOString(),
+      batchId,
+      items: lines,               // <-- CHỈ DELTA
       staff: "Thu ngân",
       priority: true,
     });
+
+    // 5) Cập nhật snapshot: +delta cho từng item đã gửi
+    setNotified((prev) => {
+      const cur = { ...(prev[orderId] || {}) };
+      for (const ln of lines) cur[ln.orderItemId] = (cur[ln.orderItemId] ?? 0) + ln.qty;
+      return { ...prev, [orderId]: cur };
+    });
+
     toast.success("Đã gửi bếp!");
   } catch (e: any) {
-    toast.error("Không thể xác nhận đơn", {
+    toast.error("Không thể gửi bếp", {
       description: e?.response?.data?.message || e.message,
     });
   }
 };
+
+
 
 
 const onCancelOrder = async () => {
@@ -205,16 +274,26 @@ const handleCheckoutSuccess = async () => {
   setCheckoutOpen(false);
 };
 
-// chỉ thông báo 1 lần 
-const currentOrderId = selectedTable ? orderIds[selectedTable.id] : undefined;
 
+
+
+
+
+
+// chỉ cho bấm khi đơn còn PENDING
+// const canNotify = !!currentOrderRow && currentOrderRow.status === "PENDING";
+// Nếu vẫn muốn ràng buộc trạng thái, giữ thêm điều kiện PENDING/CONFIRMED tùy bạn:
 const currentOrderRow = useMemo(
   () => activeOrdersQuery.data?.find((o: any) => o.id === currentOrderId),
   [activeOrdersQuery.data, currentOrderId]
 );
 
-// chỉ cho bấm khi đơn còn PENDING
-const canNotify = !!currentOrderRow && currentOrderRow.status === "PENDING";
+// Ví dụ: chỉ cần có delta là cho bấm (không phụ thuộc status)
+const canNotify = !!currentOrderId && deltaItems.length > 0;
+
+// hoặc kết hợp trạng thái:
+// const canNotify = !!currentOrderId && deltaItems.length > 0
+//   && currentOrderRow && (currentOrderRow.status === "PENDING" || currentOrderRow.status === "CONFIRMED");
 
 
 

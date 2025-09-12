@@ -40,3 +40,8 @@ export type CatalogItem = {
   price: number;
   
 };
+
+
+
+// type tạm
+

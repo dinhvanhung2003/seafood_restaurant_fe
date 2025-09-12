@@ -1,67 +1,37 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
-import ReactConfetti from "react-confetti";
 import {
-  Card,
-  CardHeader,
-  CardContent,
-  CardFooter,
+  Card, CardHeader, CardContent, CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  CheckCircle2,
-  ArrowRight,
-  ReceiptText,
-  CreditCard,
-  Copy,
-  ExternalLink,
-  Printer,
-  ArrowLeft,
+  XCircle, ArrowRight, ReceiptText, CreditCard, Copy, ExternalLink, Printer, ArrowLeft, AlertCircle,
 } from "lucide-react";
 
-/**
- * Trang SuccessPage dùng shadcn/ui
- * - Đẹp, rõ ràng, có hiệu ứng confetti
- * - Nút copy, in hoá đơn, và quay lại POS
- * - Tự đọc query params: status, invoiceId, txnRef, amount, bankCode, code
- */
-export default function SuccessPage() {
+export default function FailPage() {
   const [info, setInfo] = useState<any>(null);
   const [openMeta, setOpenMeta] = useState(false);
-  const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
-    // Lấy thông tin từ query
     const p = new URLSearchParams(window.location.search);
     const amountNumber = Number(p.get("amount") || 0);
     setInfo({
-      status: p.get("status") || "success",
+      status: (p.get("status") || "fail").toLowerCase(),
       invoiceId: p.get("invoiceId") || "—",
       txnRef: p.get("txnRef") || "—",
       amount: isNaN(amountNumber) ? 0 : amountNumber,
       bankCode: p.get("bankCode") || "—",
-      code: p.get("code") || "—",
+      code: p.get("code") || "—", // vnp_ResponseCode (nếu có)
     });
-
-    const setSize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight });
-    };
-    setSize();
-    window.addEventListener("resize", setSize);
-    return () => window.removeEventListener("resize", setSize);
   }, []);
 
   const amountVND = useMemo(() => {
@@ -79,47 +49,53 @@ export default function SuccessPage() {
 
   if (!info) return null;
 
-  const isSuccess = (info.status || "").toLowerCase() === "success";
+  // map một vài mã phổ biến của VNPay (tham khảo)
+  const codeMeaning: Record<string, string> = {
+    "24": "Người dùng đã hủy giao dịch",
+    "07": "Nghi ngờ gian lận – từ chối",
+    "12": "Giao dịch không hợp lệ",
+    "51": "Tài khoản không đủ số dư",
+    "65": "Vượt hạn mức giao dịch",
+    "09": "Thẻ/TK bị khóa",
+    "10": "Sai OTP",
+    "11": "Sai mật khẩu",
+    "75": "Nhập sai OTP quá số lần",
+    "99": "Lỗi chưa xác định",
+  };
+  const humanReason =
+    codeMeaning[String(info.code)] ||
+    (info.status === "cancel" ? "Bạn đã hủy giao dịch" : "Giao dịch không thành công");
 
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      // nhẹ nhàng: rung nút 1 chút
     } catch (e) {
       console.error("Copy failed", e);
     }
   };
 
   const goPOS = () => (window.location.href = "/cashier");
-  const viewInvoice = () => (window.location.href = `/invoices/${info.invoiceId}`);
+  const retry = () => (window.location.href = "/checkout"); // đổi sang route checkout của bạn
+  const viewInvoice = () =>
+    info.invoiceId !== "—" ? (window.location.href = `/invoices/${info.invoiceId}`) : undefined;
 
   return (
     <TooltipProvider>
-      <div className="min-h-dvh bg-gradient-to-b from-emerald-50/60 to-background dark:from-emerald-950/20 flex items-center justify-center p-6">
-        {/* Confetti chỉ hiện khi success */}
-        {isSuccess && viewport.width > 0 && (
-          <ReactConfetti
-            width={viewport.width}
-            height={viewport.height}
-            numberOfPieces={120}
-            recycle={false}
-          />
-        )}
-
+      <div className="min-h-dvh bg-gradient-to-b from-rose-50/60 to-background dark:from-rose-950/20 flex items-center justify-center p-6">
         <Card className="w-full max-w-2xl shadow-lg border-0 ring-1 ring-border/60">
           <CardHeader className="p-0">
             <div className="relative overflow-hidden rounded-t-2xl">
-              <div className="absolute inset-0 bg-emerald-500/10" />
+              <div className="absolute inset-0 bg-rose-500/10" />
               <div className="flex items-center gap-3 p-6">
-                <div className="rounded-full bg-emerald-600/10 p-2">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                <div className="rounded-full bg-rose-600/10 p-2">
+                  <XCircle className="h-6 w-6 text-rose-600" />
                 </div>
                 <div>
                   <h1 className="text-xl md:text-2xl font-semibold tracking-tight">
-                    {isSuccess ? "Thanh toán thành công" : "Kết quả giao dịch"}
+                    Thanh toán thất bại
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    Cảm ơn bạn! Giao dịch đã được ghi nhận.
+                    {humanReason}. Vui lòng thử lại hoặc chọn phương thức khác.
                   </p>
                 </div>
                 <div className="ml-auto">
@@ -132,6 +108,14 @@ export default function SuccessPage() {
           </CardHeader>
 
           <CardContent className="space-y-6 p-6">
+            {/* Banner cảnh báo ngắn */}
+            <div className="flex items-start gap-3 rounded-lg border border-rose-200/60 bg-rose-50 px-3 py-2 text-rose-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="text-sm">
+                Giao dịch không được hoàn tất. Nếu tiền đã trừ, khoản tiền sẽ tự động hoàn về theo quy định của ngân hàng.
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <div className="flex items-center gap-2">
@@ -143,7 +127,12 @@ export default function SuccessPage() {
                   {info.invoiceId !== "—" && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copy(info.invoiceId)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => copy(info.invoiceId)}
+                        >
                           <Copy className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
@@ -172,7 +161,12 @@ export default function SuccessPage() {
                   {info.txnRef !== "—" && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copy(info.txnRef)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => copy(info.txnRef)}
+                        >
                           <Copy className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
@@ -202,9 +196,7 @@ export default function SuccessPage() {
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Trạng thái</span>
-                    <Badge variant={isSuccess ? "default" : "secondary"}>
-                      {String(info.status || "success").toUpperCase()}
-                    </Badge>
+                    <Badge variant="secondary">{String(info.status || "fail").toUpperCase()}</Badge>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Mã phản hồi</span>
@@ -217,19 +209,24 @@ export default function SuccessPage() {
 
           <CardFooter className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 p-6">
             <div className="flex items-center gap-2">
+              {info.invoiceId !== "—" && (
+                <Button variant="outline" onClick={viewInvoice} className="gap-2">
+                  <ExternalLink className="h-4 w-4" /> Xem hoá đơn
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => window.print()} className="gap-2">
-                <Printer className="h-4 w-4" /> In hoá đơn
-              </Button>
-              <Button variant="outline" onClick={viewInvoice} className="gap-2">
-                <ExternalLink className="h-4 w-4" /> Xem hoá đơn
+                <Printer className="h-4 w-4" /> In biên nhận
               </Button>
             </div>
             <div className="flex items-center gap-2 w-full md:w-auto">
               <Button variant="ghost" onClick={() => history.back()} className="gap-2">
                 <ArrowLeft className="h-4 w-4" /> Quay lại
               </Button>
-              <Button onClick={goPOS} className="gap-2">
-                Tiếp tục bán hàng <ArrowRight className="h-4 w-4" />
+              <Button onClick={retry} className="gap-2">
+                Thử thanh toán lại <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" onClick={goPOS} className="gap-2">
+                Về POS <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </CardFooter>
