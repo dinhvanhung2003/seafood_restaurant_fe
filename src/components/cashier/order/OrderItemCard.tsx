@@ -48,7 +48,7 @@ export function OrderItemCard({
               <Minus className="w-4 h-4" />
             </Button>
             <div className="w-8 text-center text-sm font-medium">{order.qty}</div>
-            <Button variant="ghost" size="icon" onClick={() => onChangeQty(order.id, 1)}>
+            <Button variant="ghost" size="icon" onClick={() => onChangeQty(order.id, +1)}>
               <Plus className="w-4 h-4" />
             </Button>
           </div>

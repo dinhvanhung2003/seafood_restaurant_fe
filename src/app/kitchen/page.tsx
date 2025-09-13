@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState,useRef } from "react";
 import {
   useQuery,
   useMutation,
@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/axios";
 
-/* ================= Types (ITEM-LEVEL) ================= */
+/* =============== Types (ROW-LEVEL, GIỮ NGUYÊN QTY) =============== */
 type ItemStatus =
   | "PENDING"
   | "CONFIRMED"
@@ -35,8 +35,9 @@ type ItemStatus =
   | "SERVED"
   | "CANCELLED";
 
-type ApiOrderItemExt = {
-  id: string; // orderItemId
+// Hàng từ BE: mỗi row = 1 "order item" với quantity n
+export type ApiOrderItemExt = {
+  id: string; // orderItemId (ROW-LEVEL)
   quantity: number;
   status: ItemStatus;
   createdAt: string;
@@ -45,18 +46,20 @@ type ApiOrderItemExt = {
   order: { id: string; table: { id: string; name: string } };
 };
 
+// Ticket hiển thị trên UI: GIỮ QTY NHƯ THU NGÂN GỬI
 export type Ticket = {
-  id: string; // ticket id (ưu tiên batchId; nếu không có thì tự sinh)
+  id: string; // = orderItemId (ROW-LEVEL — KHÔNG XÉ LẺ)
   orderId: string;
   table: string;
   createdAt: string;
-  items: { name: string; qty: number }[];
-  itemIds: string[]; // danh sách orderItemId của ticket
+  createdTs: number; // để sort
+  items: { name: string; qty: number }[]; // [{..., qty:n}] — GIỮ n
+  itemIds: string[]; // [orderItemId]
   priority?: "high" | "normal";
   note?: string;
 };
 
-/* ================= API helpers (ITEM-LEVEL) ================= */
+/* =============== API helpers =============== */
 async function listItemsByStatus(
   status: ItemStatus,
   page = 1,
@@ -71,7 +74,7 @@ async function updateItemsStatus(itemIds: string[], status: ItemStatus) {
   return res.data;
 }
 
-/* ================= UI helpers ================= */
+/* =============== UI helpers =============== */
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-slate-400">
@@ -90,9 +93,9 @@ function TicketCard({
 }: {
   t: Ticket;
   variant: "new" | "preparing" | "ready";
-  onStart?: (t: Ticket) => void; // -> PREPARING
-  onComplete?: (t: Ticket) => void; // -> READY
-  onServe?: (t: Ticket) => void; // -> SERVED
+  onStart?: (t: Ticket) => void; // -> PREPARING (toàn bộ row)
+  onComplete?: (t: Ticket) => void; // -> READY (toàn bộ row)
+  onServe?: (t: Ticket) => void; // -> SERVED (toàn bộ row)
 }) {
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
@@ -128,7 +131,7 @@ function TicketCard({
         {variant === "new" && (
           <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
             <ChefHat className="mr-2 h-4 w-4" />
-            Bắt đầu nấu
+            Bắt đầu nấu (toàn bộ)
           </Button>
         )}
         {variant === "preparing" && (
@@ -157,94 +160,44 @@ function TicketCard({
   );
 }
 
-/* ================= Merge/Reconcile helpers ================= */
+/* =============== Helpers (GIỮ QTY, KHÔNG XÉ LẺ/Không gộp lại) =============== */
 
-
-
-function rowsToSingleItemTickets(rows: ApiOrderItemExt[]): Ticket[] {
+// Map 1 row -> 1 ticket, GIỮ quantity như BE/cashier gửi
+function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
   return rows
-    .map((r) => ({
-      id: r.id, // MỖI ITEM = 1 TICKET, id = orderItemId
-      orderId: r.order.id,
-      table: r.order.table?.name ?? "—",
-      createdAt: new Date(r.createdAt).toLocaleString(),
-      items: [{ name: r.menuItem.name, qty: r.quantity }],
-      itemIds: [r.id],
-    }))
-    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-}
-
-
-function mergeTickets(a: Ticket, b: Ticket): Ticket {
-  const map = new Map<string, { name: string; qty: number }>();
-  a.itemIds.forEach((id, i) => map.set(id, a.items[i]));
-  b.itemIds.forEach((id, i) => !map.has(id) && map.set(id, b.items[i]));
-  const itemIds = Array.from(map.keys());
-  const items = itemIds.map((id) => map.get(id)!);
-  return {
-    ...a,
-    ...b,
-    itemIds,
-    items,
-    createdAt: a.createdAt || b.createdAt,
-  };
-}
-
-function groupToTickets(rows: ApiOrderItemExt[]): Ticket[] {
-  const byKey = new Map<string, Ticket>();
-  for (const r of rows) {
-    const key = r.batchId || r.id;
-    const ex = byKey.get(key);
-    if (!ex) {
-      byKey.set(key, {
-        id: key,
+    .map((r) => {
+      const ts = Date.parse(r.createdAt) || Date.now();
+      const t: Ticket = {
+        id: r.id, // ROW-LEVEL
         orderId: r.order.id,
         table: r.order.table?.name ?? "—",
         createdAt: new Date(r.createdAt).toLocaleString(),
-        items: [{ name: r.menuItem.name, qty: r.quantity }],
+        createdTs: ts,
+        items: [{ name: r.menuItem.name, qty: r.quantity }], // GIỮ qty n
         itemIds: [r.id],
-      });
-    } else {
-      ex.items.push({ name: r.menuItem.name, qty: r.quantity });
-      ex.itemIds.push(r.id);
-    }
-  }
-  return Array.from(byKey.values()).sort(
-    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
-  );
-}
-
-function reconcileNewTickets(
-  apiNewRows: ApiOrderItemExt[],
-  socketMap: Record<string, Ticket>,
-): Ticket[] {
-  // 1) Socket tickets (đã là item-level, giữ nguyên)
-  const socketTickets = Object.values(socketMap);
-
-  // 2) Những itemId đã cover bởi socket
-  const covered = new Set<string>();
-  for (const t of socketTickets) t.itemIds.forEach((id) => covered.add(id));
-
-  // 3) Phần còn lại từ API (chưa có trên socket) -> chuyển MỖI ITEM = 1 TICKET
-  const leftovers = apiNewRows.filter((r) => !covered.has(r.id));
-  const apiTickets = rowsToSingleItemTickets(leftovers);
-
-  // 4) Hiển thị (mới nhất lên trước)
-  return [...socketTickets, ...apiTickets].sort(
-    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
-  );
+      };
+      return t;
+    })
+    .sort((a, b) => b.createdTs - a.createdTs);
 }
 
 
-/* ================= Main Screen (ITEM-LEVEL) ================= */
+
+
+/* =============== Main =============== */
 export default function KitchenScreen() {
   const qc = useQueryClient();
 
-  // tickets đến từ socket (map để merge), và danh sách NEW đã reconcile
+  // socket tickets keyed by orderItemId (ROW-LEVEL)
   const [socketTickets, setSocketTickets] = useState<Record<string, Ticket>>({});
   const [listNew, setListNew] = useState<Ticket[]>([]);
+// đã xử lý batch nào (đến từ thu ngân) -> không xử lý lại
+const processedBatchIdsRef = useRef<Set<string>>(new Set());
 
-  // Polling (phòng socket rớt)
+// số lượng đã hiển thị cho từng orderItemId (ROW-LEVEL)
+const shownQtyRef = useRef<Record<string, number>>({});
+// Reconcile NEW: ưu tiên socket (nếu có), KHÔNG xé lẻ, không cộng dồn
+  // polling chống rớt socket
   const COMMON_Q = {
     staleTime: 15_000,
     placeholderData: keepPreviousData,
@@ -278,7 +231,7 @@ export default function KitchenScreen() {
     ...COMMON_Q,
   });
 
-  // Mutations — đổi trạng thái theo itemIds
+  // mutations — đổi trạng thái theo itemIds (BE theo row — BATCH)
   const muUpdateItems = useMutation({
     mutationFn: ({ itemIds, status }: { itemIds: string[]; status: ItemStatus }) =>
       updateItemsStatus(itemIds, status),
@@ -289,26 +242,50 @@ export default function KitchenScreen() {
       hit("READY");
     },
   });
+function reconcileNewTickets(
+  apiNewRows: ApiOrderItemExt[],
+  socketMap: Record<string, Ticket>,
+): Ticket[] {
+  const out: Ticket[] = [];
+  const covered = new Set<string>();
 
-  /* ================= Socket ================= */
+  // ưu tiên socket nếu còn tồn tại ở API
+  const apiIds = new Set(apiNewRows.map((r) => r.id));
+  for (const [orderItemId, t] of Object.entries(socketMap)) {
+    if (apiIds.has(orderItemId)) {
+      out.push(t);
+      covered.add(orderItemId);
+    }
+  }
+
+  // phần còn lại từ API nhưng chỉ lấy những dòng có quantity > shownQty
+  for (const r of apiNewRows) {
+    if (covered.has(r.id)) continue;
+    const shown = shownQtyRef.current[r.id] ?? 0;
+    if (r.quantity > shown) {
+      out.push(mapRowsToTickets([r])[0]!);
+    }
+  }
+
+  return out.sort((a, b) => b.createdTs - a.createdTs);
+}
+  /* =============== Socket =============== */
   useEffect(() => {
     (async () => {
-      // Boot Socket.IO server (Next API route)
       await fetch("/api/socket").catch(() => {});
     })();
 
     const s = getSocket();
 
-    // Debug logs (hữu ích khi deploy)
+    // debug
     s.on("connect", () => console.log("[kitchen] socket connected:", s.id));
-    s.on("disconnect", (reason) => console.warn("[kitchen] socket disconnect:", reason));
-    s.on("connect_error", (err) => console.error("[kitchen] connect_error:", err?.message || err));
-    s.io.on("reconnect_attempt", (n) => console.log("[kitchen] reconnect attempt:", n));
-    s.io.on("reconnect_error", (e) => console.warn("[kitchen] reconnect error:", e?.message || e));
+    s.on("disconnect", (r) => console.warn("[kitchen] socket disconnect:", r));
+    s.on("connect_error", (e) => console.error("[kitchen] connect_error:", e?.message || e));
 
-    // Join room sau khi connect để chắc ăn
+    // join room sau khi connect
     const doJoin = () => s.emit("room:join", "kitchen");
-    if (s.connected) doJoin(); else s.once("connect", doJoin);
+    if (s.connected) doJoin();
+    else s.once("connect", doJoin);
 
     const burstRefetch = () => {
       qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
@@ -316,49 +293,46 @@ export default function KitchenScreen() {
       qc.invalidateQueries({ queryKey: ["items", "READY"] });
     };
 
-    // Nhận 1 payload và thêm/merge ticket
+    // nhận payload từ thu ngân: GIỮ qty, không xé lẻ
     const pushTicket = (p: any) => {
-  console.log("[kitchen] recv payload:", p);
-
   const items = Array.isArray(p?.items) ? p.items : [];
   if (!items.length) return;
 
-  // Tạo một khóa “lần gửi” duy nhất (ưu tiên batchId từ POS; fallback createdAt millisecond; thêm nonce)
-  const sendKey =
-    p.batchId ||
-    p.notifyId ||
-    (typeof p.createdAt === "string" ? p.createdAt : new Date().toISOString()) ||
-    `${Date.now()}`;
-  const nonce = Math.random().toString(36).slice(2, 7);
+  // 1) chống trùng batch
+  const batchId = p?.batchId;
+  if (batchId && processedBatchIdsRef.current.has(batchId)) return;
+  if (batchId) processedBatchIdsRef.current.add(batchId);
 
-  // Fan-out: mỗi item = 1 ticket
-  setSocketTickets((prev) => {
-    const next = { ...prev };
-    items.forEach((it: any, idx: number) => {
-      const orderItemId = it?.orderItemId;
-      if (!orderItemId) return;
+  const createdTs = Date.parse(p.createdAt || "") || Date.now();
 
-      // ⚠️ ID duy nhất theo từng item + từng lần gửi
-      // ví dụ:  <batch-or-createdAt>:<orderItemId>:<idx>:<nonce>
-      const ticketId = `${sendKey}:${orderItemId}:${idx}:${nonce}`;
+  for (const it of items) {
+    const orderItemId = it?.orderItemId;
+    if (!orderItemId) continue;
 
-      next[ticketId] = {
-        id: ticketId,
-        orderId: p.orderId,
-        table: p.tableName ?? "—",
-        createdAt: p.createdAt ?? new Date().toLocaleString(),
-        items: [{ name: it.name, qty: it.qty }], // chỉ 1 item trong ticket
-        itemIds: [orderItemId],
-        priority: p.priority ? "high" : "normal",
-        note: p.note ?? undefined,
-      };
-    });
-    return next;
-  });
+    const qtyIncoming = Math.max(1, Number(it?.qty) || 1);
+
+    // 2) nếu qty nhận <= qty đã hiển thị -> bỏ qua (không “gọi” lại)
+    const shown = shownQtyRef.current[orderItemId] ?? 0;
+    if (qtyIncoming <= shown) continue;
+
+    // 3) cập nhật ticket (giữ qty như cashier gửi) + cập nhật "đã hiển thị"
+    const t: Ticket = {
+      id: orderItemId,
+      orderId: p.orderId,
+      table: p.tableName ?? "—",
+      createdAt: p.createdAt ?? new Date().toLocaleString(),
+      createdTs,
+      items: [{ name: it.name, qty: qtyIncoming }],
+      itemIds: [orderItemId],
+      priority: p.priority ? "high" : "normal",
+      note: p.note ?? undefined,
+    };
+
+    shownQtyRef.current[orderItemId] = qtyIncoming;
+    setSocketTickets(prev => ({ ...prev, [orderItemId]: t }));
+  }
 };
 
-
-    // Handlers cho 2 loại event
     const handleSingle = (p: any) => {
       pushTicket(p);
       burstRefetch();
@@ -368,11 +342,9 @@ export default function KitchenScreen() {
       burstRefetch();
     };
 
-    // Đăng ký
     s.on("cashier:notify_item", handleSingle);
     s.on("cashier:notify_items", handleBatch);
 
-    // WS rớt: refetch bù vài nhịp
     const onDisconnect = () => {
       burstRefetch();
       let n = 0;
@@ -384,7 +356,6 @@ export default function KitchenScreen() {
     s.on("disconnect", onDisconnect);
     s.on("connect_error", onDisconnect);
 
-    // Cleanup
     return () => {
       s.off("cashier:notify_item", handleSingle);
       s.off("cashier:notify_items", handleBatch);
@@ -393,59 +364,60 @@ export default function KitchenScreen() {
     };
   }, [qc]);
 
-  // Reconcile NEW mỗi khi API hoặc socket thay đổi
+  // Clean socketTickets khi NEW từ API thay đổi (chỉ giữ những orderItemId vẫn còn NEW)
+  useEffect(() => {
+    const apiNewSet = new Set((qNewRows.data ?? []).map((r) => r.id));
+    setSocketTickets((prev) => {
+      const next: typeof prev = {};
+      for (const [orderItemId, t] of Object.entries(prev)) {
+        if (apiNewSet.has(orderItemId)) next[orderItemId] = t;
+      }
+      return next;
+    });
+  }, [qNewRows.data]);
+
+  // Reconcile NEW (ưu tiên socket)
   useEffect(() => {
     setListNew(reconcileNewTickets(qNewRows.data ?? [], socketTickets));
   }, [qNewRows.data, socketTickets]);
 
-  // Dữ liệu cho PREPARING / READY
+  // Dữ liệu cho PREPARING / READY (GIỮ qty, không xé lẻ)
   const listCooking = useMemo(
-  () => rowsToSingleItemTickets(qPreparingItems.data ?? []),
-  [qPreparingItems.data],
-);
+    () => mapRowsToTickets(qPreparingItems.data ?? []),
+    [qPreparingItems.data],
+  );
+  const listReady = useMemo(
+    () => mapRowsToTickets(qReadyItems.data ?? []),
+    [qReadyItems.data],
+  );
 
-const listReady = useMemo(
-  () => rowsToSingleItemTickets(qReadyItems.data ?? []),
-  [qReadyItems.data],
-);
-
-
-  // Handlers — item-level
-  const startCooking = async (t: Ticket) => {
-    if (!t.itemIds?.length) return toast.error("Thiếu itemIds để bắt đầu nấu");
+  // Helpers chuyển trạng thái cho TOÀN BỘ row (1 orderItemId)
+  const moveWholeRow = async (orderItemId: string, to: ItemStatus, okMsg: string) => {
     try {
-      await muUpdateItems.mutateAsync({ itemIds: t.itemIds, status: "PREPARING" });
-      setSocketTickets((prev) => {
-        const { [t.id]: _, ...rest } = prev;
-        return rest;
-      });
-      toast.success(`Bắt đầu nấu • ${t.table}`);
+      await muUpdateItems.mutateAsync({ itemIds: [orderItemId], status: to });
+      toast.success(okMsg);
     } catch (e: any) {
-      toast.error("Không thể chuyển PREPARING", { description: e?.message });
+      toast.error(`Không thể chuyển ${to}`, { description: e?.message });
     }
+  };
+
+  const startCooking = async (t: Ticket) => {
+    const [orderItemId] = t.itemIds;
+    if (!orderItemId) return toast.error("Thiếu itemIds");
+    await moveWholeRow(orderItemId, "PREPARING", "Bắt đầu nấu (toàn bộ)");
   };
 
   const markReady = async (t: Ticket) => {
-    if (!t.itemIds?.length) return;
-    try {
-      await muUpdateItems.mutateAsync({ itemIds: t.itemIds, status: "READY" });
-      toast.success(`Đã nấu xong • ${t.table}`);
-    } catch (e: any) {
-      toast.error("Không thể chuyển READY", { description: e?.message });
-    }
+    const [orderItemId] = t.itemIds;
+    await moveWholeRow(orderItemId, "READY", "Đã nấu xong (toàn bộ)");
   };
 
   const serve = async (t: Ticket) => {
-    if (!t.itemIds?.length) return;
-    try {
-      await muUpdateItems.mutateAsync({ itemIds: t.itemIds, status: "SERVED" });
-      toast.success(`Đã cung ứng • ${t.table}`);
-    } catch (e: any) {
-      toast.error("Không thể chuyển SERVED", { description: e?.message });
-    }
+    const [orderItemId] = t.itemIds;
+    await moveWholeRow(orderItemId, "SERVED", "Đã cung ứng (toàn bộ)");
   };
 
-  /* ================= UI ================= */
+  /* =============== UI =============== */
   return (
     <div className="flex h-screen flex-col bg-[#0B3C86] text-white">
       {/* Top bar */}
@@ -485,12 +457,10 @@ const listReady = useMemo(
         {/* NEW */}
         <div className="rounded-2xl bg-white p-3 shadow-lg text-slate-900">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-base font-semibold text-[#0B3C86]">
-              Mới / Đã xác nhận
-            </div>
+            <div className="text-base font-semibold text-[#0B3C86]">Mới / Đã xác nhận</div>
             <Badge variant="secondary">{listNew.length}</Badge>
           </div>
-          <div className="h-[calc(100vh-180px)]">
+          <div className="h[calc(100vh-180px)] md:h-[calc(100vh-180px)]">
             {qNewRows.isLoading && listNew.length === 0 ? (
               <EmptyState text="Đang tải..." />
             ) : listNew.length === 0 ? (
@@ -513,7 +483,7 @@ const listReady = useMemo(
             <div className="text-base font-semibold text-[#0B3C86]">Đang chế biến</div>
             <Badge variant="secondary">{(listCooking ?? []).length}</Badge>
           </div>
-          <div className="h-[calc(100vh-180px)]">
+          <div className="h[calc(100vh-180px)] md:h-[calc(100vh-180px)]">
             {qPreparingItems.isLoading ? (
               <EmptyState text="Đang tải..." />
             ) : (listCooking ?? []).length === 0 ? (
@@ -533,12 +503,10 @@ const listReady = useMemo(
         {/* READY */}
         <div className="rounded-2xl bg-white p-3 shadow-lg text-slate-900">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-base font-semibold text-[#0B3C86]">
-              Sẵn sàng cung ứng
-            </div>
+            <div className="text-base font-semibold text-[#0B3C86]">Sẵn sàng cung ứng</div>
             <Badge variant="secondary">{(listReady ?? []).length}</Badge>
           </div>
-          <div className="h-[calc(100vh-180px)]">
+          <div className="h[calc(100vh-180px)] md:h-[calc(100vh-180px)]">
             {qReadyItems.isLoading ? (
               <EmptyState text="Đang tải..." />
             ) : (listReady ?? []).length === 0 ? (

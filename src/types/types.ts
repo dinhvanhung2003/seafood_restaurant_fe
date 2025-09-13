@@ -42,6 +42,12 @@ export type CatalogItem = {
 };
 
 
-
-// type tạm
+export enum ItemStatus {
+  PENDING   = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  PREPARING = 'PREPARING',
+  READY     = 'READY',
+  SERVED    = 'SERVED',
+  CANCELLED = 'CANCELLED',
+}
 

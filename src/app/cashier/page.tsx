@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, UtensilsCrossed, LayoutGrid, Grid3X3, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ensureSocketReady } from "@/lib/socket";
-
+import CancelItemsModal, { CancelTarget } from "@/components/cashier/modals/CancelModal";
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
 import { TableGrid } from "@/components/cashier/tables/TableGrid";
@@ -26,7 +26,7 @@ import { useAreas } from "@/hooks/cashier/useAreas";
 import { useMenu } from "@/hooks/cashier/useMenu";
 import { useOrders } from "@/hooks/cashier/useOrders";
 import { calcOrderTotal, mapAreasToTables, selectMenuItems } from "@/lib/cashier/pos-helpers";
-
+import {ItemStatus} from "@/types/types";
 export default function POSPage() {
   const qc = useQueryClient();
   const { data: session } = useSession();
@@ -46,8 +46,10 @@ export default function POSPage() {
   const enterSearch = () => setIsSearching(true);
   const exitSearch = () => setIsSearching(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [notified, setNotified] = useState<Record<string, Record<string, number>>>({});
+const [notified, setNotified] = useState<Record<string, Record<string, number>>>({});
 
+const [cancelOpen, setCancelOpen] = useState(false);
+const [cancelTargets, setCancelTargets] = useState<CancelTarget[]>([]);
 useEffect(() => {
   (async () => {
     await fetch("/api/socket").catch(() => {}); // khởi tạo server 1 lần
@@ -139,10 +141,10 @@ useEffect(() => {
     await addOne(selectedTable.id, menuItemId);
   };
 
-  const onChangeQty = async (id: string, delta: number) => {
-    if (!selectedTable) return;
-    await changeQty(selectedTable.id, id, delta, activeItems);
-  };
+  // const onChangeQty = async (id: string, delta: number) => {
+  //   if (!selectedTable) return;
+  //   await changeQty(selectedTable.id, id, delta, activeItems);
+  // };
 
   const onClear = async () => {
     if (!selectedTable) return;
@@ -162,76 +164,133 @@ const deltaItems = useMemo(() => {
   if (!currentOrderId) return [];
   return activeItems
     .map((i) => {
-      const sent = notifiedSnapshot[i.id] ?? 0;
-      const delta = i.qty - sent;
-      return { id: i.id, name: menuItems.find((m) => m.id === i.id)?.name, delta };
+      const key = i.rowId ?? "";                 // <-- orderItemId
+      const sent = notifiedSnapshot[key] ?? 0;    // lượng đã gửi cho dòng này
+      const delta = i.qty - sent;                 // phần tăng thêm
+      return { rowId: key, delta };
     })
-    .filter((x) => x.delta > 0);
-}, [activeItems, notifiedSnapshot, currentOrderId, menuItems]);
-  // chỗ onNotify trên POS
-// ---- onNotify: gửi theo DELTA ----
+    .filter((x) => x.rowId && x.delta > 0);
+}, [activeItems, notifiedSnapshot, currentOrderId]);
+
+
+// ---- onNotify: gửi DELTA, mỗi đơn vị là x1 có unitKey ----
 const onNotify = async () => {
   if (!selectedTable) return toast.error("Chưa chọn bàn!");
   const orderId = orderIds[selectedTable.id];
   if (!orderId) return toast.error("Chưa có orderId cho bàn này!");
 
   try {
-    // 1) Lấy rows hiện tại (ưu tiên từ state; thiếu rowId thì fallback gọi /orders/:id)
+    // 1) Lấy tổng qty hiện tại theo từng dòng
     let rows =
       activeItems
         .filter((i) => !!i.rowId && i.qty > 0)
         .map((i) => ({
-          orderItemId: i.rowId!, // quan trọng
+          orderItemId: i.rowId!,
+          menuItemId: i.id,
           name: menuItems.find((m) => m.id === i.id)?.name ?? "",
-          qty: i.qty,            // tổng hiện tại
+          qtyNow: i.qty,
         }));
 
     if (rows.length === 0) {
       const r = await api.get(`/orders/${orderId}`);
       const fresh = Array.isArray(r.data?.items) ? r.data.items : [];
-      rows = fresh
-        .filter((it: any) => ["PENDING", "CONFIRMED"].includes(it.status))
-        .map((it: any) => ({
-          orderItemId: it.id,
-          name: it.menuItem?.name ?? "",
-          qty: it.quantity,   // tổng hiện tại
-        }));
+      rows = fresh.map((it: any) => ({
+        orderItemId: it.id,
+        menuItemId: it.menuItem?.id ?? it.menuItemId,
+        name: it.menuItem?.name ?? "",
+        qtyNow: it.quantity,
+      }));
       if (rows.length === 0) return toast.info("Không có món để báo bếp.");
     }
 
-    // 2) Chuyển sang DELTA (chỉ gửi phần tăng thêm so với snapshot đã gửi)
+    // 2) Delta so với snapshot
     const snapshot = notified[orderId] ?? {};
-    const lines = rows
+    const deltas = rows
       .map((r) => {
         const sent = snapshot[r.orderItemId] ?? 0;
-        const delta = r.qty - sent;
-        return delta > 0 ? { orderItemId: r.orderItemId, name: r.name, qty: delta } : null;
+        const delta = r.qtyNow - sent;
+        return delta > 0 ? { ...r, delta } : null;
       })
-      .filter(Boolean) as { orderItemId: string; name: string; qty: number }[];
+      .filter(Boolean) as { orderItemId: string; menuItemId: string; name: string; qtyNow: number; delta: number }[];
 
-    if (!lines.length) return toast.info("Không có phần tăng thêm để báo bếp.");
+    if (!deltas.length) return toast.info("Không có phần tăng thêm để báo bếp.");
 
-    // 3) (tuỳ chọn) soft reconfirm
+    // 3) Kiểm tra trạng thái hiện tại để tách dòng nếu cần
+    const detail = await api.get(`/orders/${orderId}`);
+    const itemsNow: any[] = Array.isArray(detail.data?.items) ? detail.data.items : [];
+    const byId = new Map(itemsNow.map((it) => [it.id, it] as const));
+
+    const canUse: { orderItemId: string; name: string; qty: number }[] = [];
+    const needNew = new Map<string, number>(); // menuItemId -> qty delta cần tạo
+
+    for (const d of deltas) {
+      const st = byId.get(d.orderItemId)?.status as ItemStatus | undefined;
+      if (st === "PENDING" || st === "CONFIRMED") {
+        canUse.push({ orderItemId: d.orderItemId, name: d.name, qty: d.delta });
+      } else {
+        needNew.set(d.menuItemId, (needNew.get(d.menuItemId) ?? 0) + d.delta);
+      }
+    }
+
+    // 4) Tạo dòng mới cho phần cần tạo (nếu thêm trong khi row cũ đã PREPARING/READY)
+    let createdLines: { orderItemId: string; name: string; qty: number }[] = [];
+    if (needNew.size) {
+      await api.post(`/orders/${orderId}/items`, {
+        items: Array.from(needNew, ([menuItemId, quantity]) => ({ menuItemId, quantity })),
+      });
+      const afterAdd = await api.get(`/orders/${orderId}`);
+      const items2: any[] = Array.isArray(afterAdd.data?.items) ? afterAdd.data.items : [];
+
+      for (const [menuItemId, quantity] of needNew) {
+        const cand = items2
+          .filter(
+            (it) =>
+              (it.menuItem?.id ?? it.menuItemId) === menuItemId &&
+              (it.status === "PENDING" || it.status === "CONFIRMED")
+          )
+          .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
+
+        const name =
+          cand?.menuItem?.name ??
+          menuItems.find((m) => m.id === menuItemId)?.name ??
+          "—";
+
+        if (cand) createdLines.push({ orderItemId: cand.id, name, qty: quantity });
+      }
+    }
+
+    const lines = [...canUse, ...createdLines];
+    if (!lines.length) return toast.info("Không có món hợp lệ để báo bếp.");
+
+    // 5) Soft reconfirm
     await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" }).catch(() => {});
 
-    // 4) Phát socket
-    const batchId =
-      (typeof crypto !== "undefined" && (crypto as any).randomUUID)
-        ? (crypto as any).randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+   // 6) KHÔNG expand – giữ qty = delta
+const itemsForSocket = lines.map(ln => ({
+  orderItemId: ln.orderItemId,
+  name: ln.name,
+  qty: ln.qty, // phần tăng thêm
+}));
 
-    const s = getSocket();
-    s.emit("cashier:notify_items", {
-      orderId,
-      tableName: selectedTable.name,
-      createdAt: new Date().toISOString(),
-      batchId,
-      items: lines,               // <-- CHỈ DELTA
-      staff: "Thu ngân",
-      priority: true,
-    });
+// 7) Tạo batchId rồi emit
+const batchId =
+  typeof crypto !== "undefined" && (crypto as any).randomUUID
+    ? (crypto as any).randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
 
-    // 5) Cập nhật snapshot: +delta cho từng item đã gửi
+const s = getSocket();
+s.emit("cashier:notify_items", {
+  orderId,
+  tableName: selectedTable.name,
+  createdAt: new Date().toISOString(),
+  batchId,                 // <-- bây giờ đã có biến
+  items: itemsForSocket,   // <-- mỗi dòng có qty = delta
+  staff: "Thu ngân",
+  priority: true,
+});
+
+
+    // 8) Cập nhật snapshot theo SỐ LƯỢNG gốc của từng orderItemId
     setNotified((prev) => {
       const cur = { ...(prev[orderId] || {}) };
       for (const ln of lines) cur[ln.orderItemId] = (cur[ln.orderItemId] ?? 0) + ln.qty;
@@ -245,6 +304,7 @@ const onNotify = async () => {
     });
   }
 };
+
 
 
 
@@ -296,6 +356,111 @@ const canNotify = !!currentOrderId && deltaItems.length > 0;
 //   && currentOrderRow && (currentOrderRow.status === "PENDING" || currentOrderRow.status === "CONFIRMED");
 
 
+// hủy số lượng 
+// helper: item đã báo bếp? (đã từng gửi notify)
+const wasSentToKitchen = (rowId: string | undefined) => {
+  if (!rowId || !currentOrderId) return false;
+  const snap = notified[currentOrderId] ?? {};
+  return (snap[rowId] ?? 0) > 0;
+};
+
+// CHANGE QTY: nếu giảm và item đã báo bếp -> mở modal huỷ nguyên item
+const onChangeQty = async (menuItemId: string, delta: number) => {
+  if (!selectedTable) return;
+  const it = activeItems.find((x) => x.id === menuItemId);
+  const cur = it?.qty ?? 0;
+  const next = Math.max(0, cur + delta);
+
+  // chưa có item -> thêm mới
+  if (!it) {
+    if (delta > 0) await addOne(selectedTable.id, menuItemId);
+    return;
+  }
+
+  const locked = wasSentToKitchen(it.rowId); // đã từng gửi bếp?
+
+  // --- QUY TẮC QUAN TRỌNG ---
+  // Nếu đã gửi bếp:
+  //  - delta > 0: tạo ROW MỚI (không patch qty của row cũ)
+  //  - delta < 0: mở modal huỷ (không giảm qty row cũ)
+  if (locked) {
+    if (delta > 0) {
+      // thêm 1 đơn vị thành dòng mới
+      await addOne(selectedTable.id, menuItemId); // hoặc addItemsMu({quantity:1})
+    } else if (delta < 0) {
+      setCancelTargets([{
+        orderItemId: it.rowId!,
+        name: menuItems.find(m => m.id === it.id)?.name ?? "",
+        qty: it.qty,
+      }]);
+      setCancelOpen(true);
+    }
+    return;
+  }
+
+  // chưa gửi bếp -> chỉnh bình thường
+  if (next === 0) {
+    await changeQty(selectedTable.id, menuItemId, -cur, activeItems); // hoặc removeItemMu
+    return;
+  }
+  await changeQty(selectedTable.id, menuItemId, delta, activeItems);
+};
+
+// Confirm huỷ (1 hoặc nhiều item)
+const confirmCancelItems = async (reason: string) => {
+  const orderId = currentOrderId!;
+  try {
+    // 1) Gọi BE: huỷ bulk
+    await api.patch(`/orderitems/cancel`, {
+      itemIds: cancelTargets.map(t => t.orderItemId),
+      reason,
+    });
+
+    // 2) Phát socket để bếp khoá nút + hiển thị lý do
+    const s = getSocket();
+    s.emit("cashier:cancel_items", {
+      orderId,
+      tableName: selectedTable?.name,
+      createdAt: new Date().toISOString(),
+      items: cancelTargets.map(t => ({
+        orderItemId: t.orderItemId,
+        name: t.name,
+        qty: t.qty,
+        reason,
+      })),
+      staff: "Thu ngân",
+    });
+
+    // 3) invalidate + cập nhật snapshot đã gửi (để lần sau không còn coi như đã gửi)
+    qc.invalidateQueries({ queryKey: ["active-orders"] });
+    setNotified((prev) => {
+      const cur = { ...(prev[orderId] || {}) };
+      for (const t of cancelTargets) cur[t.orderItemId] = 0; // item đã huỷ coi như không còn gửi
+      return { ...prev, [orderId]: cur };
+    });
+
+    toast.success("Đã huỷ món");
+  } catch (e: any) {
+    toast.error("Huỷ món thất bại", { description: e?.response?.data?.message || e.message });
+  } finally {
+    setCancelOpen(false);
+    setCancelTargets([]);
+  }
+};
+
+
+useEffect(() => {
+  if (!currentOrderId) return;
+  setNotified(prev => {
+    if (prev[currentOrderId]) return prev; // đã có snapshot -> giữ nguyên
+    const init: Record<string, number> = {};
+    for (const it of activeItems) {
+      if (it.rowId) init[it.rowId] = it.qty; // coi như đã gửi bếp
+    }
+    return { ...prev, [currentOrderId]: init };
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currentOrderId]); // chỉ phụ thuộc orderId, tránh đè snapshot khi user vừa thêm món
 
   // ===== UI =====
   return (
@@ -447,6 +612,13 @@ canNotify={canNotify}
             orderId={orderIds[selectedTable.id] ?? null}
           />
         )}
+        <CancelItemsModal
+  open={cancelOpen}
+  onClose={() => setCancelOpen(false)}
+  items={cancelTargets}
+  onConfirm={confirmCancelItems}
+/>
+
       </div>
     </div>
   );

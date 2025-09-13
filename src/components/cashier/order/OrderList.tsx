@@ -14,7 +14,8 @@ import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
 import { useAttachCustomer, useCreateCustomerAndAttach, useCustomerSearch } from "@/hooks/cashier/useCustomers";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-
+import type { UIOrderItem } from "@/lib/cashier/pos-helpers";
+import { useMemo } from "react";
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 type ShortCustomer = { id: string; name: string; phone?: string };
 
@@ -38,7 +39,7 @@ export function OrderList({
 }: {
   orderId?: string;
   table: Table | null;
-  items: OrderItem[];
+  items: UIOrderItem[]; 
   catalog: Catalog;
   total: number;
   onChangeQty: (id: string, delta: number) => void;
@@ -83,6 +84,29 @@ export function OrderList({
       }
     );
   };
+
+// Gộp các dòng cùng menuItemId để hiển thị một dòng duy nhất
+const mergedItems = useMemo(() => {
+  const seen = new Map<string, UIOrderItem>();
+  const merged: UIOrderItem[] = [];
+
+  for (const it of items) {
+    const mid = it.id;                 // menuItemId
+    if (!seen.has(mid)) {
+      const clone = { ...it };         // giữ row đại diện đầu tiên
+      seen.set(mid, clone);
+      merged.push(clone);              // PUSH theo thứ tự gặp -> KHÔNG sort
+    } else {
+      seen.get(mid)!.qty += it.qty;    // cộng dồn số lượng
+    }
+  }
+  return merged;                       // thứ tự = thứ tự gặp lần đầu
+}, [items]);
+
+
+
+
+
 
   const handleAttachWalkin = () => {
     if (!orderId) return toast.error("Chưa có đơn để gắn khách.");
@@ -196,23 +220,26 @@ export function OrderList({
       </div>
 
       {/* Danh sách món */}
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-4 pt-0">
-          {items.map((order, idx) => {
-            const item = catalog.items.find((m) => m.id === order.id);
-            if (!item) return null;
-            return (
-              <OrderItemCard
-                key={order.id}
-                index={idx}
-                item={item}
-                order={order}
-                onChangeQty={onChangeQty}
-              />
-            );
-          })}
-        </div>
-      </ScrollArea>
+  <ScrollArea className="min-h-0 flex-1">
+  <div className="space-y-4 p-4 pt-0">
+    {mergedItems.map((oi, idx) => {
+      const menuItem = catalog.items.find((m) => m.id === oi.id);
+      if (!menuItem) return null;
+
+      return (
+        <OrderItemCard
+          key={`${orderId ?? "no-order"}-${oi.id}`}
+          index={idx}
+          item={menuItem}
+          order={oi}               // qty đã gộp
+          onChangeQty={onChangeQty}
+        />
+      );
+    })}
+  </div>
+</ScrollArea>
+
+
 
       {/* Footer */}
       <Separator className="my-2" />
@@ -220,14 +247,14 @@ export function OrderList({
       <div className="space-y-2 p-3">
         <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
           Bạn vừa cập nhật đơn hàng. Click{" "}
-          <Button
-            className="h-12 rounded-xl border border-blue-500 bg-white text-blue-500 hover:bg-blue-50"
-            onClick={onNotify}
-            disabled={!hasTable || !canNotify}
-          >
-            <Bell className="mr-2 h-5 w-5" />
-            Thông báo (F10)
-          </Button>{" "}
+        <Button
+  className="h-12 rounded-xl border"
+  onClick={onNotify}
+  disabled={!hasTable || !canNotify}
+>
+  {canNotify ? "Thông báo (F10)" : "Đã gửi – chờ thay đổi"}
+</Button>
+
         </div>
 
         <div className="flex items-center justify-between">

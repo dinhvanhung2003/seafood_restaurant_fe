@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import type { OrdersByTable, UIOrderItem } from "@/lib/cashier/pos-helpers";
-
+import type { ItemStatus } from "@/types/types";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 const _uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -137,6 +137,19 @@ export function useOrders({ token }: UseOrdersArgs) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
   });
+
+
+
+
+const muMoveOne = useMutation({
+  mutationFn: ({ itemId, to }: { itemId: string; to: ItemStatus }) =>
+    api.patch('/orderitems/move-one', { itemId, to }),
+  onSuccess: () => {
+    const hit = (k: string) => qc.invalidateQueries({ queryKey: ['items', k] });
+    hit('NEW_ROWS'); hit('PREPARING'); hit('READY');
+  },
+});
+
 
   // Soft re-confirm (báo bếp)
   const updateStatusMu = useMutation({

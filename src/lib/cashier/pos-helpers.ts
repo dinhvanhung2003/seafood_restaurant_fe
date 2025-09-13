@@ -1,10 +1,12 @@
 // Helpers & lightweight types cho POS
-
+import type { ItemStatus } from "@/types/types";
 export type UIOrderItem = {
   id: string;          // menuItemId
   qty: number;
-  rowId?: string;      // orderItem.id từ BE (để PATCH/REMOVE)
+  rowId?: string;      // orderItemId
+  status?: ItemStatus; // <-- thêm
 };
+
 
 export type OrdersByTable = Record<string, {
   activeId: string;
