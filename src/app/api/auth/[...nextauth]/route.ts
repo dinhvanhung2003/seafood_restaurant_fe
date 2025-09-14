@@ -1,10 +1,12 @@
-// src/pages/api/auth/[...nextauth].ts
-import NextAuth from "next-auth";
+// src/app/api/auth/[...nextauth]/route.ts
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 const API_BASE = process.env.API_BASE || process.env.NEXT_PUBLIC_API_BASE;
 
-export default NextAuth({
+export const authOptions: NextAuthOptions = {
+  session: { strategy: "jwt" },
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     Credentials({
       name: "credentials",
@@ -19,18 +21,29 @@ export default NextAuth({
               password: credentials?.password,
             }),
           });
-          if (!res.ok) return null;             // => NextAuth trả 401
-          const data = await res.json();        // { user, accessToken, ... }
+          if (!res.ok) return null;
+          const data = await res.json();
           if (!data?.user) return null;
-          return { id: data.user.id, name: data.user.fullName, email: data.user.email, token: data.accessToken };
-        } catch (e) {
-          console.error("authorize error", e);
-          return null;                          // cũng dẫn tới 401
+
+          return {
+            id: data.user.id,
+            name: data.user.fullName,
+            email: data.user.email,
+            token: data.accessToken, // nếu cần dùng trong JWT
+          };
+        } catch {
+          return null;
         }
       },
     }),
   ],
-  session: { strategy: "jwt" },
-  secret: process.env.NEXTAUTH_SECRET,
-  // trustHost: true, // nếu deploy trên Vercel monorepo/subdomain
-});
+};
+
+const handler = NextAuth(authOptions);
+
+// App Router cần export GET/POST
+export { handler as GET, handler as POST };
+
+// Khuyến nghị dùng Node runtime để tránh lỗi trên Edge
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
