@@ -31,7 +31,17 @@ const NAV: NavItem[] = [
    },
   { label: "Phòng/Bàn", href: "/admin/table", icon: TableIcon },
   { label: "Giao dịch", href: "/admin/giao-dich", icon: CreditCard },
-  { label: "Đối tác", href: "/admin/doi-tac", icon: Users },
+  { label: "Đối tác", href: "/admin/doi-tac", icon: Users,
+children: [
+      { label: "Khách hàng", href: "/admin/customer" },
+      { label: "Nhập kho", href: "/admin/kho-hang/nhap-kho" },
+      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
+      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
+      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
+    ],
+
+
+   },
   { label: "Nhân viên", href: "/admin/employee", icon: UserCircle },
   { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
   {
