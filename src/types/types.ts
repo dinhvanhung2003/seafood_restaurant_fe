@@ -51,3 +51,76 @@ export enum ItemStatus {
   CANCELLED = 'CANCELLED',
 }
 
+// Nhà cung cấp ` Supplier`
+// types/supplier.ts
+export type SupplierStatus = "ACTIVE" | "INACTIVE";
+
+export type SupplierGroup = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  status: SupplierStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Supplier = {
+  id: string;
+  code: string;
+  name: string;
+  company?: string | null;
+  taxCode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  district?: string | null;
+  ward?: string | null;
+  supplierGroupId?: string | null;
+  supplierGroup?: SupplierGroup | null;
+  note?: string | null;
+  status: SupplierStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SuppliersFilter = {
+  q: string;
+  status?: "" | SupplierStatus;
+  supplierGroupId: string;
+  city: string;
+  withGroup: boolean;
+};
+
+export type CreateSupplierBody = {
+  name: string;
+  code?: string;
+  company?: string;
+  taxCode?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  ward?: string;
+  supplierGroupId?: string | null;
+  note?: string;
+  status?: "ACTIVE" | "INACTIVE";
+};
+
+export type UpdateBody = {
+  name?: string;
+  code?: string;
+  company?: string;
+  taxCode?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  ward?: string;
+  supplierGroupId?: string | null;
+  note?: string;
+  status?: "ACTIVE" | "INACTIVE";
+};

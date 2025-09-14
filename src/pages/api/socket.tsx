@@ -10,18 +10,23 @@ type Res = NextApiResponse & {
 
 export const config = { api: { bodyParser: false } };
 
-export default function handler(_req: NextApiRequest, res: Res) {
-  // ĐỪNG trả 405 – để Socket.IO tự xử lý GET/POST cho polling/handshake
+// 👇 khai báo rõ ràng hàm trả về void
+export default function handler(_req: NextApiRequest, res: Res): void {
   const srv: any = (res as any)?.socket?.server;
-  if (!srv) return res.status(500).end("Socket server not initialized");
+
+  // ❌ KHÔNG return res...
+  // ✅ chỉ gửi response rồi kết thúc
+  if (!srv) {
+    res.status(500).end("Socket server not initialized");
+    return;
+  }
 
   if (!srv.io) {
     const io = new SocketIOServer(srv, {
       path: "/api/socket",
-      // giúp path khớp tuyệt đối (tránh /api/socket/)
       addTrailingSlash: false,
       cors: { origin: "*", methods: ["GET", "POST"] },
-      transports: ["websocket", "polling"],   // CHO PHÉP polling fallback
+      transports: ["websocket", "polling"],
     });
     srv.io = io;
 
@@ -49,6 +54,6 @@ export default function handler(_req: NextApiRequest, res: Res) {
     console.log("[socket] Socket.IO server started at /api/socket");
   }
 
-  // luôn 200 để boot, phần WS/polling sẽ do engine.io xử lý riêng
+  // luôn trả 200 để engine.io lo phần WS/polling
   res.status(200).end("ok");
 }
