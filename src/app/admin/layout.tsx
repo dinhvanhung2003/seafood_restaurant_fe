@@ -18,10 +18,30 @@ type NavItem = { label: string; href: string; icon: any; children?: NavChild[] }
 
 const NAV: NavItem[] = [
   { label: "Tổng quan", href: "/admin", icon: LayoutDashboard },
-  { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package },
+  { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package,
+
+ children: [
+     
+      { label: "Thực đơn", href: "/admin/product/menu" },
+      { label: "Danh mục", href: "/admin/product/category" },
+      { label: "Combo", href: "/admin/kho-hang/kiem-ke" },
+    ],
+  
+
+   },
   { label: "Phòng/Bàn", href: "/admin/table", icon: TableIcon },
   { label: "Giao dịch", href: "/admin/giao-dich", icon: CreditCard },
-  { label: "Đối tác", href: "/admin/doi-tac", icon: Users },
+  { label: "Đối tác", href: "/admin/doi-tac", icon: Users,
+children: [
+      { label: "Khách hàng", href: "/admin/customer" },
+      { label: "Nhà Cung Cấp", href: "/admin/supplier" },
+      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
+      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
+      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
+    ],
+
+
+   },
   { label: "Nhân viên", href: "/admin/employee", icon: UserCircle },
   { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
   {

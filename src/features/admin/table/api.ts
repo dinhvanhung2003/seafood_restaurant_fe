@@ -47,7 +47,7 @@ async function postArea(body: CreateAreaInput) {
 }
 // các endpoint bàn của bạn vẫn giữ nguyên nếu backend có:
 async function postTable(body: CreateTableInput) {
-  const { data } = await api.post<DiningTableDTO>("/restauranttable", body);
+  const { data } = await api.post<DiningTableDTO>("/restauranttable/create-table", body);
   return data;
 }
 async function patchTable(id: string, body: Partial<CreateTableInput>) {

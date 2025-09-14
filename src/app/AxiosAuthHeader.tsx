@@ -1,14 +1,17 @@
 // app/AxiosAuthHeader.tsx 
 "use client";
+
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { setAuthToken } from "@/lib/axios";
 
 export default function AxiosAuthHeader() {
-  const { data } = useSession();
+  const { data: session } = useSession();      // Session | null (đã được augment)
+  const token = session?.accessToken;          // string | undefined
+
   useEffect(() => {
-    const token = (data as any)?.accessToken;
     setAuthToken(token);
-  }, [data?.accessToken]);
+  }, [token]);                                  //  deps đúng, không cảnh báo
+
   return null;
 }

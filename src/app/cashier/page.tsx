@@ -1,160 +1,107 @@
 "use client";
+import api from "@/lib/axios";
 import React, { useMemo, useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {StatusFilter} from "@/components/cashier/filters/StatusFilter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, UtensilsCrossed, LayoutGrid, Grid3X3, Search, CheckCircle2 } from "lucide-react";
-import { getSocket } from "@/lib/socket";
-import { toast } from "sonner";
-
-import { catalog, floors, tables as seedTables } from "@/data/catalog";
-import type { Catalog as CatalogType, OrderItem, Table as TableType } from "@/types/types";
-
+import { ChevronLeft, ChevronRight, UtensilsCrossed, LayoutGrid, Grid3X3, Search } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ensureSocketReady } from "@/lib/socket";
+import CancelItemsModal, { CancelTarget } from "@/components/cashier/modals/CancelModal";
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
 import { TableGrid } from "@/components/cashier/tables/TableGrid";
 import { CategoryFilter } from "@/components/cashier/menu/CategoryFilter";
 import { MenuGrid } from "@/components/cashier/menu/MenuGrid";
 import { OrderList } from "@/components/cashier/order/OrderList";
-import { StatusFilter } from "@/components/cashier/filters/StatusFilter";
-import { Checkbox } from "@/components/ui/checkbox";
-import CheckoutModal, { type Receipt } from "@/components/cashier/modals/CheckoutModal";
+import CheckoutModal from "@/components/cashier/modals/CheckoutModal";
+import type { Catalog as CatalogType, Table as TableType } from "@/types/types";
 
-// ================= helpers =================
-const uid = () => Math.random().toString(36).slice(2, 9);
-const hasWindow = () => typeof window !== "undefined";
-
-function safeGet<T>(key: string, fallback: T): T {
-  if (!hasWindow()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-function safeSet<T>(key: string, val: T) {
-  if (!hasWindow()) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(val));
-  } catch {}
-}
-
-// LS keys
-const LS = {
-  TABLES: "pos.tables",
-  ORDERS: "pos.orders", // OrdersByTable
-  SELECTED_TABLE_ID: "pos.selectedTableId",
-  OPEN_MENU_ON_SELECT: "openMenuOnSelect",
-  RECEIPTS: "receipts",
-} as const;
-
-// types cho orders
-type TableOrder = { id: string; label: string; items: OrderItem[] };
-type OrdersByTable = Record<string, { activeId: string; orders: TableOrder[] }>;
-
+import { getSocket } from "@/lib/socket";
+import { useAreas } from "@/hooks/cashier/useAreas";
+import { useMenu } from "@/hooks/cashier/useMenu";
+import { useOrders } from "@/hooks/cashier/useOrders";
+import { calcOrderTotal, mapAreasToTables, selectMenuItems } from "@/lib/cashier/pos-helpers";
+import {ItemStatus} from "@/types/types";
 export default function POSPage() {
-  // socket
-  useEffect(() => {
-    (async () => {
-      await fetch("/api/socket").catch(() => {});
-      const s = getSocket();
-      s.on("connect", () => console.log("[socket] connect:", s.id));
-      s.on("connect_error", (e) => console.error("[socket] connect_error:", e));
-    })();
-  }, []);
+  const qc = useQueryClient();
+  const { data: session } = useSession();
+  const token = (session as any)?.accessToken as string | undefined;
 
-  // ================= state =================
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-
+  // ===== local UI state =====
   const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
-
-  const [selectedFloor, setSelectedFloor] = useState<typeof floors[number]>("Tất cả");
+  const [menuPage, setMenuPage] = useState(1);
+  const [menuLimit] = useState(12);
+  const [selectedFloor, setSelectedFloor] = useState<string>("Tất cả");
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "using" | "empty">("all");
-
   const [categoryId, setCategoryId] = useState("all");
   const [menuSearch, setMenuSearch] = useState("");
-
-  // --- tables from localStorage (seed lần đầu bằng seedTables)
-  const [tableList, setTableList] = useState<TableType[]>([]);
-  const [selectedTable, setSelectedTable] = useState<TableType | null>(null);
-
-  // persist option
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const [openMenuOnSelect, setOpenMenuOnSelect] = useState(false);
-
-  // orders (persist)
-  const [orders, setOrders] = useState<OrdersByTable>({});
-
-  // search UI state
+  const [openMenuOnSelect, setOpenMenuOnSelect] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const enterSearch = () => setIsSearching(true);
   const exitSearch = () => setIsSearching(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+const [notified, setNotified] = useState<Record<string, Record<string, number>>>({});
 
-  // ================= bootstrap from LS =================
+const [cancelOpen, setCancelOpen] = useState(false);
+const [cancelTargets, setCancelTargets] = useState<CancelTarget[]>([]);
+useEffect(() => {
+  (async () => {
+    await fetch("/api/socket").catch(() => {}); // khởi tạo server 1 lần
+    getSocket(); // mở kết nối client
+  })();
+}, []);
+
+  // ===== queries =====
+  const areasQuery = useAreas(token);
+  const menuQuery = useMenu({ page: menuPage, limit: menuLimit, search: menuSearch, categoryId, token });
+
+  // ===== derive =====
+  const baseTables: TableType[] = useMemo(() => mapAreasToTables(areasQuery.data ?? []), [areasQuery.data]);
+  const menuItems = useMemo(() => selectMenuItems(menuQuery.data?.data), [menuQuery.data]);
+  const menuCategories = useMemo(
+    () => [{ id: "all", name: "Tất cả" }, ...((menuQuery.data?.data ?? []).reduce((s:any[], r:any) => {
+      if (!s.find((x) => x.id === r.category.id)) s.push({ id: r.category.id, name: r.category.name });
+      return s;
+    }, []))],
+    [menuQuery.data],
+  );
+  const menuCatalog = useMemo(() => ({ categories: menuCategories, items: menuItems }) as unknown as CatalogType, [menuCategories, menuItems]);
+
+  // ===== orders hook (logic gọi API) =====
+ const { activeOrdersQuery, orders, orderIds, addOne, changeQty, clear, confirm: confirmOrder, pay,cancel } =
+  useOrders({ token, menuItems });
+
+
+
+  // ===== table list (view state) =====
+  const [tableList, setTableList] = useState<TableType[]>([]);
+  const [selectedTable, setSelectedTable] = useState<TableType | null>(null);
+
   useEffect(() => {
-    // tables
-    const lsTables = safeGet<TableType[]>(LS.TABLES, []);
-    if (lsTables.length === 0) {
-      // seed lần đầu
-      safeSet(LS.TABLES, seedTables);
-      setTableList(seedTables);
-    } else {
-      setTableList(lsTables);
+    const priceDict = new Map(menuItems.map((i) => [i.id, i.price]));
+    const totals: Record<string, number> = {};
+    for (const [tid, b] of Object.entries(orders)) {
+      const items = b.orders[0]?.items ?? [];
+      totals[tid] = calcOrderTotal(items, priceDict);
     }
+    setTableList(
+      baseTables.map((t) => ({
+        ...t,
+        status: orders[t.id] ? "using" : "empty",
+        currentAmount: totals[t.id] ?? 0,
+      })),
+    );
+    setSelectedTable((prev) => prev ?? (baseTables[0] ?? null));
+  }, [baseTables, orders, menuItems]);
 
-    // orders
-    const lsOrders = safeGet<OrdersByTable>(LS.ORDERS, {});
-    setOrders(lsOrders);
-
-    // selected table
-    const selId = safeGet<string | null>(LS.SELECTED_TABLE_ID, null);
-    if (selId) {
-      const found = lsTables.find((t) => t.id === selId) ?? seedTables.find((t) => t.id === selId) ?? null;
-      setSelectedTable(found ?? (lsTables[0] ?? seedTables[0] ?? null));
-    } else {
-      setSelectedTable(lsTables[0] ?? seedTables[0] ?? null);
-    }
-
-    // option
-    const v = safeGet<boolean | null>(LS.OPEN_MENU_ON_SELECT, null);
-    setOpenMenuOnSelect(v === null ? true : v);
-  }, []);
-
-  // ================= persist to LS =================
-  useEffect(() => {
-    if (!mounted) return;
-    safeSet(LS.TABLES, tableList);
-  }, [mounted, tableList]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    safeSet(LS.ORDERS, orders);
-  }, [mounted, orders]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    safeSet(LS.SELECTED_TABLE_ID, selectedTable?.id ?? null);
-  }, [mounted, selectedTable]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    safeSet(LS.OPEN_MENU_ON_SELECT, openMenuOnSelect);
-  }, [mounted, openMenuOnSelect]);
-
-  // ================= derived =================
-  const ensureBundle = (next: OrdersByTable, tableId: string) => {
-    if (!next[tableId]) {
-      const id = uid();
-      next[tableId] = { activeId: id, orders: [{ id, label: "1", items: [] }] };
-    }
-  };
-
-  const activeItems: OrderItem[] = useMemo(() => {
+  // ===== active items & totals =====
+  const activeItems = useMemo(() => {
     const tid = selectedTable?.id;
     if (!tid || !orders[tid]) return [];
     const b = orders[tid];
@@ -163,32 +110,9 @@ export default function POSPage() {
   }, [orders, selectedTable]);
 
   const orderTotal = useMemo(() => {
-    return activeItems.reduce((sum: number, it) => {
-      const item = catalog.items.find((m) => m.id === it.id)!;
-      return sum + item.price * it.qty;
-    }, 0);
-  }, [activeItems]);
-
-  const tableCounts = useMemo(() => {
-    const r: Record<string, number> = {};
-    for (const [tableId, bundle] of Object.entries(orders)) {
-      r[tableId] = bundle.orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + it.qty, 0), 0);
-    }
-    return r;
-  }, [orders]);
-
-  const tableTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const [tableId, bundle] of Object.entries(orders)) {
-      totals[tableId] = bundle.orders.reduce((s, o) => {
-        return s + o.items.reduce((ss, it) => {
-          const item = catalog.items.find((m) => m.id === it.id);
-          return ss + (item ? item.price * it.qty : 0);
-        }, 0);
-      }, 0);
-    }
-    return totals;
-  }, [orders]);
+    const price = new Map(menuItems.map((i) => [i.id, i.price]));
+    return activeItems.reduce((s, it) => s + (price.get(it.id) ?? 0) * it.qty, 0);
+  }, [activeItems, menuItems]);
 
   const counts = useMemo(() => {
     const all = tableList.length;
@@ -201,248 +125,357 @@ export default function POSPage() {
     return tableList.filter((t) => {
       const byFloor = selectedFloor === "Tất cả" || t.floor === selectedFloor;
       const bySearch = t.name.toLowerCase().includes(tableSearch.toLowerCase());
-      const byStatus =
-        statusFilter === "all" ? true : statusFilter === "using" ? t.status === "using" : t.status === "empty";
+      const byStatus = statusFilter === "all" ? true : statusFilter === "using" ? t.status === "using" : t.status === "empty";
       return byFloor && bySearch && byStatus;
     });
   }, [tableList, selectedFloor, tableSearch, statusFilter]);
 
-  const filteredCatalog = useMemo(() => {
-    return catalog.items.filter(
-      (m) => (categoryId === "all" || m.categoryId === categoryId) && m.name.toLowerCase().includes(menuSearch.toLowerCase()),
-    );
-  }, [categoryId, menuSearch]);
+  const filteredMenuItems = useMemo(() => {
+    const q = menuSearch.toLowerCase();
+    return menuItems.filter((m) => (categoryId === "all" || m.categoryId === categoryId) && m.name.toLowerCase().includes(q));
+  }, [categoryId, menuSearch, menuItems]);
 
-  // ================= actions =================
-  const addItem = (id: string) => {
+  // ===== UI handlers (gọi hook actions) =====
+  const onAdd = async (menuItemId: string) => {
     if (!selectedTable) return;
-    const tid = selectedTable.id;
-
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
-
-      const bundle = next[tid];
-      const idx = bundle.orders.findIndex((o) => o.id === bundle.activeId);
-      const order = bundle.orders[idx];
-
-      const exists = order.items.find((x) => x.id === id);
-      const newItems = exists
-        ? order.items.map((x) => (x.id === id ? { ...x, qty: x.qty + 1 } : x))
-        : [...order.items, { id, qty: 1 }];
-
-      const newOrders = bundle.orders.map((o, i) => (i === idx ? { ...o, items: newItems } : o));
-      next[tid] = { ...bundle, orders: newOrders };
-      return next;
-    });
-
-    setTableList((list) => list.map((t) => (t.id === tid ? { ...t, status: "using" } : t)));
+    await addOne(selectedTable.id, menuItemId);
   };
 
-  const changeQty = (id: string, delta: number) => {
+  // const onChangeQty = async (id: string, delta: number) => {
+  //   if (!selectedTable) return;
+  //   await changeQty(selectedTable.id, id, delta, activeItems);
+  // };
+
+  const onClear = async () => {
     if (!selectedTable) return;
-    const tid = selectedTable.id;
-    let stillHasAfter = false;
-
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
-
-      const bundle = next[tid];
-      const idx = bundle.orders.findIndex((o) => o.id === bundle.activeId);
-      const order = bundle.orders[idx];
-
-      const newItems = order.items
-        .map((x) => (x.id === id ? { ...x, qty: Math.max(0, x.qty + delta) } : x))
-        .filter((x) => x.qty > 0);
-
-      const newOrders = bundle.orders.map((o, i) => (i === idx ? { ...o, items: newItems } : o));
-      next[tid] = { ...bundle, orders: newOrders };
-
-      stillHasAfter = newOrders.some((o) => o.items.length > 0);
-      return next;
-    });
-
-    setTableList((list) => list.map((t) => (t.id === tid ? { ...t, status: stillHasAfter ? "using" : "empty" } : t)));
+    await clear(selectedTable.id, activeItems);
   };
+// chỉ thông báo 1 lần 
+const currentOrderId = selectedTable ? orderIds[selectedTable.id] : undefined;
 
-  const clearOrder = () => {
-    if (!selectedTable) return;
-    const tid = selectedTable.id;
+// snapshot của đơn hiện tại (nếu chưa có thì rỗng)
+const notifiedSnapshot = useMemo(
+  () => (currentOrderId ? (notified[currentOrderId] ?? {}) : {}),
+  [currentOrderId, notified]
+);
 
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
+// các item cần báo (mới hoặc tăng số lượng so với snapshot)
+const deltaItems = useMemo(() => {
+  if (!currentOrderId) return [];
+  return activeItems
+    .map((i) => {
+      const key = i.rowId ?? "";                 // <-- orderItemId
+      const sent = notifiedSnapshot[key] ?? 0;    // lượng đã gửi cho dòng này
+      const delta = i.qty - sent;                 // phần tăng thêm
+      return { rowId: key, delta };
+    })
+    .filter((x) => x.rowId && x.delta > 0);
+}, [activeItems, notifiedSnapshot, currentOrderId]);
 
-      const bundle = next[tid];
-      const idx = bundle.orders.findIndex((o) => o.id === bundle.activeId);
 
-      const newOrders = bundle.orders.map((o, i) => (i === idx ? { ...o, items: [] } : o));
-      next[tid] = { ...bundle, orders: newOrders };
-      return next;
-    });
+// ---- onNotify: gửi DELTA, mỗi đơn vị là x1 có unitKey ----
+const onNotify = async () => {
+  if (!selectedTable) return toast.error("Chưa chọn bàn!");
+  const orderId = orderIds[selectedTable.id];
+  if (!orderId) return toast.error("Chưa có orderId cho bàn này!");
 
-    setTableList((list) => list.map((t) => (t.id === tid ? { ...t, status: "empty" } : t)));
-  };
+  try {
+    // 1) Lấy tổng qty hiện tại theo từng dòng
+    let rows =
+      activeItems
+        .filter((i) => !!i.rowId && i.qty > 0)
+        .map((i) => ({
+          orderItemId: i.rowId!,
+          menuItemId: i.id,
+          name: menuItems.find((m) => m.id === i.id)?.name ?? "",
+          qtyNow: i.qty,
+        }));
 
-  const addOrderTab = () => {
-    if (!selectedTable) return;
-    const tid = selectedTable.id;
+    if (rows.length === 0) {
+      const r = await api.get(`/orders/${orderId}`);
+      const fresh = Array.isArray(r.data?.items) ? r.data.items : [];
+      rows = fresh.map((it: any) => ({
+        orderItemId: it.id,
+        menuItemId: it.menuItem?.id ?? it.menuItemId,
+        name: it.menuItem?.name ?? "",
+        qtyNow: it.quantity,
+      }));
+      if (rows.length === 0) return toast.info("Không có món để báo bếp.");
+    }
 
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
+    // 2) Delta so với snapshot
+    const snapshot = notified[orderId] ?? {};
+    const deltas = rows
+      .map((r) => {
+        const sent = snapshot[r.orderItemId] ?? 0;
+        const delta = r.qtyNow - sent;
+        return delta > 0 ? { ...r, delta } : null;
+      })
+      .filter(Boolean) as { orderItemId: string; menuItemId: string; name: string; qtyNow: number; delta: number }[];
 
-      const bundle = next[tid];
-      const newId = uid();
-      const label = String(bundle.orders.length + 1);
+    if (!deltas.length) return toast.info("Không có phần tăng thêm để báo bếp.");
 
-      next[tid] = {
-        activeId: newId,
-        orders: [...bundle.orders.map((o) => ({ ...o, items: [...o.items] })), { id: newId, label, items: [] }],
-      };
-      return next;
-    });
-  };
+    // 3) Kiểm tra trạng thái hiện tại để tách dòng nếu cần
+    const detail = await api.get(`/orders/${orderId}`);
+    const itemsNow: any[] = Array.isArray(detail.data?.items) ? detail.data.items : [];
+    const byId = new Map(itemsNow.map((it) => [it.id, it] as const));
 
-  const switchOrderTab = (orderId: string) => {
-    if (!selectedTable) return;
-    const tid = selectedTable.id;
+    const canUse: { orderItemId: string; name: string; qty: number }[] = [];
+    const needNew = new Map<string, number>(); // menuItemId -> qty delta cần tạo
 
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
-      next[tid] = { ...next[tid], activeId: orderId };
-      return next;
-    });
-  };
-
-  const closeOrderTab = (orderId: string) => {
-    if (!selectedTable) return;
-    const tid = selectedTable.id;
-    let stillHasAfter = false;
-
-    setOrders((prev) => {
-      const next: OrdersByTable = { ...prev };
-      ensureBundle(next, tid);
-
-      const bundle = next[tid];
-
-      if (bundle.orders.length === 1) {
-        const only = bundle.orders[0];
-        next[tid] = { activeId: only.id, orders: [{ ...only, items: [] }] };
-        stillHasAfter = false;
-        return next;
+    for (const d of deltas) {
+      const st = byId.get(d.orderItemId)?.status as ItemStatus | undefined;
+      if (st === "PENDING" || st === "CONFIRMED") {
+        canUse.push({ orderItemId: d.orderItemId, name: d.name, qty: d.delta });
+      } else {
+        needNew.set(d.menuItemId, (needNew.get(d.menuItemId) ?? 0) + d.delta);
       }
+    }
 
-      const remaining = bundle.orders.filter((o) => o.id !== orderId);
-      const activeId = bundle.activeId === orderId ? remaining[remaining.length - 1].id : bundle.activeId;
+    // 4) Tạo dòng mới cho phần cần tạo (nếu thêm trong khi row cũ đã PREPARING/READY)
+    let createdLines: { orderItemId: string; name: string; qty: number }[] = [];
+    if (needNew.size) {
+      await api.post(`/orders/${orderId}/items`, {
+        items: Array.from(needNew, ([menuItemId, quantity]) => ({ menuItemId, quantity })),
+      });
+      const afterAdd = await api.get(`/orders/${orderId}`);
+      const items2: any[] = Array.isArray(afterAdd.data?.items) ? afterAdd.data.items : [];
 
-      next[tid] = { activeId, orders: remaining.map((o) => ({ ...o, items: [...o.items] })) };
-      stillHasAfter = next[tid].orders.some((o) => o.items.length > 0);
-      return next;
+      for (const [menuItemId, quantity] of needNew) {
+        const cand = items2
+          .filter(
+            (it) =>
+              (it.menuItem?.id ?? it.menuItemId) === menuItemId &&
+              (it.status === "PENDING" || it.status === "CONFIRMED")
+          )
+          .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
+
+        const name =
+          cand?.menuItem?.name ??
+          menuItems.find((m) => m.id === menuItemId)?.name ??
+          "—";
+
+        if (cand) createdLines.push({ orderItemId: cand.id, name, qty: quantity });
+      }
+    }
+
+    const lines = [...canUse, ...createdLines];
+    if (!lines.length) return toast.info("Không có món hợp lệ để báo bếp.");
+
+    // 5) Soft reconfirm
+    await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" }).catch(() => {});
+
+   // 6) KHÔNG expand – giữ qty = delta
+const itemsForSocket = lines.map(ln => ({
+  orderItemId: ln.orderItemId,
+  name: ln.name,
+  qty: ln.qty, // phần tăng thêm
+}));
+
+// 7) Tạo batchId rồi emit
+const batchId =
+  typeof crypto !== "undefined" && (crypto as any).randomUUID
+    ? (crypto as any).randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+
+const s = getSocket();
+s.emit("cashier:notify_items", {
+  orderId,
+  tableName: selectedTable.name,
+  createdAt: new Date().toISOString(),
+  batchId,                 // <-- bây giờ đã có biến
+  items: itemsForSocket,   // <-- mỗi dòng có qty = delta
+  staff: "Thu ngân",
+  priority: true,
+});
+
+
+    // 8) Cập nhật snapshot theo SỐ LƯỢNG gốc của từng orderItemId
+    setNotified((prev) => {
+      const cur = { ...(prev[orderId] || {}) };
+      for (const ln of lines) cur[ln.orderItemId] = (cur[ln.orderItemId] ?? 0) + ln.qty;
+      return { ...prev, [orderId]: cur };
     });
 
-    setTableList((list) => list.map((t) => (t.id === tid ? { ...t, status: stillHasAfter ? "using" : "empty" } : t)));
-  };
+    toast.success("Đã gửi bếp!");
+  } catch (e: any) {
+    toast.error("Không thể gửi bếp", {
+      description: e?.response?.data?.message || e.message,
+    });
+  }
+};
 
-  const orderTabs = useMemo(() => {
-    const tid = selectedTable?.id;
-    if (!tid || !orders[tid]) return { activeId: "", orders: [] as { id: string; label: string }[] };
-    return {
-      activeId: orders[tid].activeId,
-      orders: orders[tid].orders.map((o) => ({ id: o.id, label: o.label })),
-    };
-  }, [orders, selectedTable]);
 
-  // ================= checkout =================
+
+
+
+const onCancelOrder = async () => {
+  if (!selectedTable) return;
+  const ok = confirm('Xác nhận huỷ đơn? Hệ thống sẽ hoàn kho (nếu đã trừ) và huỷ hóa đơn chưa thanh toán.');
+  if (!ok) return;
+  try {
+    await cancel(selectedTable.id);
+    toast.success('Đã huỷ đơn');
+  } catch (e:any) {
+    toast.error('Huỷ đơn thất bại', { description: e?.response?.data?.message || e.message });
+  }
+};
+const hasOrder = !!(selectedTable && orderIds[selectedTable.id]);
+
   const handleCheckout = () => {
     if (!selectedTable || activeItems.length === 0) return;
     setCheckoutOpen(true);
   };
 
-  const handleCheckoutSuccess = (r: Receipt) => {
-    const arr = safeGet<Receipt[]>(LS.RECEIPTS, []);
-    safeSet(LS.RECEIPTS, [r, ...arr]);
+ // Nhận số tiền thanh toán (nếu modal trả ra), hoặc dùng orderTotal hiện tại
+const handleCheckoutSuccess = async () => {
+  if (!selectedTable) return;
+  await pay(selectedTable.id, orderTotal);  // <-- NEW: tạo invoice + trả tiền mặt
+  setCheckoutOpen(false);
+};
 
-    clearOrder();
-    if (selectedTable) {
-      setTableList((list) => list.map((t) => (t.id === selectedTable.id ? { ...t, status: "empty" } : t)));
+
+
+
+
+
+
+// chỉ cho bấm khi đơn còn PENDING
+// const canNotify = !!currentOrderRow && currentOrderRow.status === "PENDING";
+// Nếu vẫn muốn ràng buộc trạng thái, giữ thêm điều kiện PENDING/CONFIRMED tùy bạn:
+const currentOrderRow = useMemo(
+  () => activeOrdersQuery.data?.find((o: any) => o.id === currentOrderId),
+  [activeOrdersQuery.data, currentOrderId]
+);
+
+// Ví dụ: chỉ cần có delta là cho bấm (không phụ thuộc status)
+const canNotify = !!currentOrderId && deltaItems.length > 0;
+
+// hoặc kết hợp trạng thái:
+// const canNotify = !!currentOrderId && deltaItems.length > 0
+//   && currentOrderRow && (currentOrderRow.status === "PENDING" || currentOrderRow.status === "CONFIRMED");
+
+
+// hủy số lượng 
+// helper: item đã báo bếp? (đã từng gửi notify)
+const wasSentToKitchen = (rowId: string | undefined) => {
+  if (!rowId || !currentOrderId) return false;
+  const snap = notified[currentOrderId] ?? {};
+  return (snap[rowId] ?? 0) > 0;
+};
+
+// CHANGE QTY: nếu giảm và item đã báo bếp -> mở modal huỷ nguyên item
+const onChangeQty = async (menuItemId: string, delta: number) => {
+  if (!selectedTable) return;
+  const it = activeItems.find((x) => x.id === menuItemId);
+  const cur = it?.qty ?? 0;
+  const next = Math.max(0, cur + delta);
+
+  // chưa có item -> thêm mới
+  if (!it) {
+    if (delta > 0) await addOne(selectedTable.id, menuItemId);
+    return;
+  }
+
+  const locked = wasSentToKitchen(it.rowId); // đã từng gửi bếp?
+
+  // --- QUY TẮC QUAN TRỌNG ---
+  // Nếu đã gửi bếp:
+  //  - delta > 0: tạo ROW MỚI (không patch qty của row cũ)
+  //  - delta < 0: mở modal huỷ (không giảm qty row cũ)
+  if (locked) {
+    if (delta > 0) {
+      // thêm 1 đơn vị thành dòng mới
+      await addOne(selectedTable.id, menuItemId); // hoặc addItemsMu({quantity:1})
+    } else if (delta < 0) {
+      setCancelTargets([{
+        orderItemId: it.rowId!,
+        name: menuItems.find(m => m.id === it.id)?.name ?? "",
+        qty: it.qty,
+      }]);
+      setCancelOpen(true);
     }
-  };
+    return;
+  }
 
-  // ================= notify kitchen =================
-  const onNotify = async () => {
-    if (!selectedTable) {
-      toast.error("Chưa chọn bàn!");
-      return;
+  // chưa gửi bếp -> chỉnh bình thường
+  if (next === 0) {
+    await changeQty(selectedTable.id, menuItemId, -cur, activeItems); // hoặc removeItemMu
+    return;
+  }
+  await changeQty(selectedTable.id, menuItemId, delta, activeItems);
+};
+
+// Confirm huỷ (1 hoặc nhiều item)
+const confirmCancelItems = async (reason: string) => {
+  const orderId = currentOrderId!;
+  try {
+    // 1) Gọi BE: huỷ bulk
+    await api.patch(`/orderitems/cancel`, {
+      itemIds: cancelTargets.map(t => t.orderItemId),
+      reason,
+    });
+
+    // 2) Phát socket để bếp khoá nút + hiển thị lý do
+    const s = getSocket();
+    s.emit("cashier:cancel_items", {
+      orderId,
+      tableName: selectedTable?.name,
+      createdAt: new Date().toISOString(),
+      items: cancelTargets.map(t => ({
+        orderItemId: t.orderItemId,
+        name: t.name,
+        qty: t.qty,
+        reason,
+      })),
+      staff: "Thu ngân",
+    });
+
+    // 3) invalidate + cập nhật snapshot đã gửi (để lần sau không còn coi như đã gửi)
+    qc.invalidateQueries({ queryKey: ["active-orders"] });
+    setNotified((prev) => {
+      const cur = { ...(prev[orderId] || {}) };
+      for (const t of cancelTargets) cur[t.orderItemId] = 0; // item đã huỷ coi như không còn gửi
+      return { ...prev, [orderId]: cur };
+    });
+
+    toast.success("Đã huỷ món");
+  } catch (e: any) {
+    toast.error("Huỷ món thất bại", { description: e?.response?.data?.message || e.message });
+  } finally {
+    setCancelOpen(false);
+    setCancelTargets([]);
+  }
+};
+
+
+useEffect(() => {
+  if (!currentOrderId) return;
+  setNotified(prev => {
+    if (prev[currentOrderId]) return prev; // đã có snapshot -> giữ nguyên
+    const init: Record<string, number> = {};
+    for (const it of activeItems) {
+      if (it.rowId) init[it.rowId] = it.qty; // coi như đã gửi bếp
     }
-    try {
-      const s = await getSocket();
+    return { ...prev, [currentOrderId]: init };
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currentOrderId]); // chỉ phụ thuộc orderId, tránh đè snapshot khi user vừa thêm món
 
-      const activeBundle = orders[selectedTable.id];
-      const activeOrderId = activeBundle?.activeId ?? "default";
-
-      await Promise.all(
-        activeItems.map(async ({ id: itemId, qty }) => {
-          const item = catalog.items.find((m) => m.id === itemId);
-          if (!item) return;
-
-          s.emit(
-            "cashier:notify_item",
-            {
-              orderId: `${selectedTable.id}-${activeOrderId}`,
-              itemId,
-              name: item.name,
-              qty,
-              tableName: selectedTable.name,
-              createdAt: new Date().toLocaleString(),
-              staff: "Nguyễn Văn Hưng",
-              priority: true,
-            },
-            (_ack: string) => {
-              toast.success("Đã gửi tới bếp", {
-                description: item.name,
-                duration: 3000,
-                icon: <CheckCircle2 className="h-5 w-5 text-white" />,
-                style: { background: "#16a34a", color: "#fff", border: "1px solid #15803d" },
-                className: "shadow-lg",
-              });
-            },
-          );
-        }),
-      );
-    } catch (e) {
-      toast.error("Không gửi được đến bếp");
-      console.error(e);
-    }
-  };
-
-  // ================= UI =================
+  // ===== UI =====
   return (
     <div className="h-[100dvh] w-full text-slate-900 bg-[#0A2B61]">
-      <div
-        className="
-          grid h-[calc(100dvh-56px)] grid-cols-1 gap-3 p-3 min-h-0
-          md:grid-cols-[3fr_2fr]
-        "
-      >
+      <div className="grid h-[calc(100dvh-56px)] grid-cols-1 gap-3 p-3 min-h-0 md:grid-cols-[3fr_2fr]">
         {/* Left */}
         <Card className="bg-white shadow rounded-xl h-full flex flex-col">
           <CardHeader className="pb-2">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "tables" | "menu")}>
               <TabsList className="grid w-full grid-cols-2 md:w-max">
-                <TabsTrigger
-                  value="tables"
-                  className="gap-2 px-4 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+                <TabsTrigger value="tables" className="gap-2 px-4 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600">
                   <LayoutGrid className="h-4 w-4" />
                   Phòng bàn
                 </TabsTrigger>
-                <TabsTrigger
-                  value="menu"
-                  className="gap-2 px-4 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+                <TabsTrigger value="menu" className="gap-2 px-4 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600">
                   <UtensilsCrossed className="h-4 w-4" />
                   Thực đơn
                 </TabsTrigger>
@@ -453,31 +486,19 @@ export default function POSPage() {
           <CardContent className="pt-0 flex-1 min-h-0 flex flex-col">
             <Tabs value={activeTab} className="flex-1 min-h-0 flex flex-col">
               <TabsContent value="tables" className="mt-0 flex-1 min-h-0 flex flex-col">
-                {/* FILTER BAR */}
                 <div className="space-y-2 pb-3">
                   {!isSearching ? (
                     <>
                       <div className="flex items-center gap-3">
-                        <FloorFilter
-                          floors={floors}
+                        <FloorFilter floors={["Tất cả", ...Array.from(new Set((areasQuery.data ?? []).map((a:any)=>a.name)))]}
                           selected={selectedFloor}
-                          onSelect={(f) => setSelectedFloor(f as typeof selectedFloor)}
+                          onSelect={setSelectedFloor}
                         />
                         <div className="ml-auto flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 transition"
-                            aria-label="Bố cục"
-                          >
+                          <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 transition" aria-label="Bố cục">
                             <Grid3X3 className="h-4 w-4 text-slate-700" />
                           </button>
-
-                          <button
-                            type="button"
-                            onClick={enterSearch}
-                            className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 transition"
-                            aria-label="Tìm kiếm (F3)"
-                          >
+                          <button type="button" onClick={enterSearch} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 transition" aria-label="Tìm kiếm (F3)">
                             <Search className="h-4 w-4 text-slate-700" />
                           </button>
                         </div>
@@ -487,18 +508,14 @@ export default function POSPage() {
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <button onClick={exitSearch} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100">
-                        …
-                      </button>
+                      <button onClick={exitSearch} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100">…</button>
                       <div className="flex-1">
                         <SearchField
                           placeholder="Tìm theo tên bàn, tên khách hàng, món trong đơn…"
                           value={tableSearch}
                           onChange={setTableSearch}
                           autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") exitSearch();
-                          }}
+                          onKeyDown={(e) => e.key === "Escape" && exitSearch()}
                         />
                       </div>
                     </div>
@@ -508,8 +525,16 @@ export default function POSPage() {
                 <TableGrid
                   tables={filteredTables}
                   selectedId={selectedTable?.id}
-                  totals={tableTotals}
-                  counts={tableCounts}
+                  totals={
+                    Object.fromEntries(
+                      tableList.map((t) => [t.id, t.currentAmount ?? 0]),
+                    )
+                  }
+                  counts={{
+                    ...Object.fromEntries(tableList.map((t) => [t.id,
+                      (orders[t.id]?.orders[0]?.items ?? []).reduce((s,i)=>s+i.qty,0),
+                    ])),
+                  }}
                   onSelect={(t) => {
                     setSelectedTable(t);
                     if (openMenuOnSelect) setActiveTab("menu");
@@ -517,84 +542,63 @@ export default function POSPage() {
                 />
 
                 <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
-                  <div className="flex items-center gap-2" suppressHydrationWarning>
-                    {mounted && (
-                      <>
-                        <Checkbox
-                          id="openMenuOnSelect"
-                          checked={openMenuOnSelect}
-                          onCheckedChange={(v) => setOpenMenuOnSelect(Boolean(v))}
-                        />
-                        <label htmlFor="openMenuOnSelect" className="cursor-pointer select-none">
-                          Mở thực đơn khi chọn bàn
-                        </label>
-                      </>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="openMenuOnSelect" checked={openMenuOnSelect} onCheckedChange={(v) => setOpenMenuOnSelect(Boolean(v))} />
+                    <label htmlFor="openMenuOnSelect" className="cursor-pointer select-none">Mở thực đơn khi chọn bàn</label>
                   </div>
-
                   <div className="flex gap-1">
-                    <Button size="icon" variant="outline">
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="outline">
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <Button size="icon" variant="outline"><ChevronLeft className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="outline"><ChevronRight className="h-4 w-4" /></Button>
                   </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="menu" className="mt-0 flex-1 min-h-0 flex flex-col">
                 <div className="flex flex-wrap items-center gap-2 pb-3">
-                  <CategoryFilter
-                    categories={catalog.categories}
-                    selected={categoryId}
-                    onSelect={setCategoryId}
-                  />
+                  <CategoryFilter categories={menuCategories} selected={categoryId} onSelect={setCategoryId} />
                   <SearchField placeholder="Tìm món (F3)" value={menuSearch} onChange={setMenuSearch} />
                 </div>
 
-                <MenuGrid items={filteredCatalog} onAdd={addItem} />
+                <MenuGrid items={filteredMenuItems} onAdd={onAdd} />
               </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
-<Button
-  variant="outline"
-  className="fixed bottom-4 right-4"
-  onClick={() => {
-    const tables = JSON.parse(localStorage.getItem("pos.tables") ?? "[]");
-
-    const resetTables = tables.map((t:any) => ({
-      ...t,
-      status: "empty",
-      startedAt: null,
-      currentAmount: 0, 
-    }));
-
-    localStorage.setItem("pos.tables", JSON.stringify(resetTables));
-    localStorage.setItem("pos.orders", "{}");
-    localStorage.setItem("pos.selectedTableId", "null");
-    location.reload();
-  }}
->
-  Reset
-</Button>
-
 
         {/* Right: Order Panel */}
         <OrderList
+          orderId={currentOrderId}
           table={selectedTable}
           items={activeItems}
-          catalog={catalog as CatalogType}
-          onChangeQty={changeQty}
-          onClear={clearOrder}
+          catalog={menuCatalog}
           total={orderTotal}
-          orderTabs={orderTabs}
-          onAddOrder={addOrderTab}
-          onSwitchOrder={switchOrderTab}
-          onCloseOrder={closeOrderTab}
+          onChangeQty={onChangeQty}     // <- BẮT BUỘC truyền prop này
+          onClear={onClear}
+          orderTabs={
+            selectedTable && orders[selectedTable.id]
+              ? {
+                  activeId: orders[selectedTable.id].activeId,
+                  orders: orders[selectedTable.id].orders.map((o) => ({ id: o.id, label: o.label })),
+                }
+              : { activeId: "", orders: [] }
+          }
+          onAddOrder={() => {}}
+          onSwitchOrder={() => {}}
+          onCloseOrder={() => {}}
           onNotify={onNotify}
           onCheckout={handleCheckout}
+          onCancelOrder={() => {
+  if (!selectedTable) return;
+  const ok = window.confirm("Xác nhận huỷ đơn? Hệ thống sẽ hoàn kho và huỷ hoá đơn chưa thanh toán.");
+  if (!ok) return;
+  cancel(selectedTable.id)
+    .then(() => toast.success("Đã huỷ đơn"))
+    .catch((e:any) =>
+      toast.error("Huỷ đơn thất bại", { description: e?.response?.data?.message || e.message })
+    );
+}}
+canCancel={hasOrder} 
+canNotify={canNotify}
         />
 
         {selectedTable && (
@@ -603,10 +607,18 @@ export default function POSPage() {
             onClose={() => setCheckoutOpen(false)}
             table={selectedTable}
             items={activeItems}
-            catalog={catalog as CatalogType}
+            catalog={menuCatalog}
             onSuccess={handleCheckoutSuccess}
+            orderId={orderIds[selectedTable.id] ?? null}
           />
         )}
+        <CancelItemsModal
+  open={cancelOpen}
+  onClose={() => setCancelOpen(false)}
+  items={cancelTargets}
+  onConfirm={confirmCancelItems}
+/>
+
       </div>
     </div>
   );
