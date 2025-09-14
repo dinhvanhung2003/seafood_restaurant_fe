@@ -1,24 +1,18 @@
+// src/pages/api/socket.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { Server as HTTPServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 
-type Res = NextApiResponse & {
-  socket: NextApiResponse["socket"] & {
-    server: HTTPServer & { io?: SocketIOServer };
-  };
-};
-
 export const config = { api: { bodyParser: false } };
 
-// 👇 khai báo rõ ràng hàm trả về void
-export default function handler(_req: NextApiRequest, res: Res): void {
-  const srv: any = (res as any)?.socket?.server;
+// ✅ khai báo kiểu trả về rõ ràng: void
+export default function handler(req: NextApiRequest, res: NextApiResponse): void {
+  // Lấy server từ socket, cast any để khỏi lệch kiểu
+  const srv = (res.socket as any)?.server as (HTTPServer & { io?: SocketIOServer });
 
-  // ❌ KHÔNG return res...
-  // ✅ chỉ gửi response rồi kết thúc
   if (!srv) {
     res.status(500).end("Socket server not initialized");
-    return;
+    return; // ✅ kết thúc hàm, KHÔNG return response
   }
 
   if (!srv.io) {
@@ -40,7 +34,6 @@ export default function handler(_req: NextApiRequest, res: Res): void {
 
       const toKitchen =
         (event: string) => (payload: any, cb?: (x: any) => void) => {
-          console.log(`[socket] ${event}`, payload);
           io.to("kitchen").emit(event, payload);
           cb?.("ok");
         };
@@ -54,6 +47,6 @@ export default function handler(_req: NextApiRequest, res: Res): void {
     console.log("[socket] Socket.IO server started at /api/socket");
   }
 
-  // luôn trả 200 để engine.io lo phần WS/polling
+  // ✅ chỉ end response, không return response
   res.status(200).end("ok");
 }
