@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 // 👇 đúng path + đúng tên file xuất
-import SuppliersTable from "@/components/admin/partner/supplier/table/SuppliterTable";
+import SuppliersTable from "@/components/admin/partner/supplier/table/SupplierTable";
 import SidebarSupplierFilter from "@/components/admin/partner/supplier/filter/SideBarSupplierFilter";
 import { useSuppliers } from "@/hooks/admin/useSupplier";
 import type { SuppliersFilter } from "@/types/types";

@@ -1,13 +1,21 @@
+// Định nghĩa các kiểu dữ liệu dùng chung trong ứng dụng
+// Type cho bàn (Table)
 export type Table = {
 id: string;
 name: string;
 floor: string;
-status: "empty" | "using" | "reserved";
-startedAt?: string; // ISO
+status: "empty" | "using";
+startedAt?: string; 
 currentAmount?: number;
 };
 
 
+
+
+
+
+
+// Các type ở chỗ thu ngân và quản lý đơn hàng
 export type MenuItem = {
 id: string;
 name: string;
@@ -31,9 +39,6 @@ categories: Category[];
 items: MenuItem[];
 };
 
-
-
-
 export type CatalogItem = {
   id: string;
   name: string;
@@ -41,6 +46,8 @@ export type CatalogItem = {
   
 };
 
+
+//Type cho orderitem trong order
 
 export enum ItemStatus {
   PENDING   = 'PENDING',
@@ -51,19 +58,8 @@ export enum ItemStatus {
   CANCELLED = 'CANCELLED',
 }
 
-// Nhà cung cấp ` Supplier`
-// types/supplier.ts
+// Nhà cung cấp (Supplier)
 export type SupplierStatus = "ACTIVE" | "INACTIVE";
-
-export type SupplierGroup = {
-  id: string;
-  code: string;
-  name: string;
-  description?: string | null;
-  status: SupplierStatus;
-  createdAt: string;
-  updatedAt: string;
-};
 
 export type Supplier = {
   id: string;
@@ -86,13 +82,12 @@ export type Supplier = {
 };
 
 export type SuppliersFilter = {
-  q: string;
-  status?: "" | SupplierStatus;
-  supplierGroupId: string;
-  city: string;
-  withGroup: boolean;
+  q?: string;
+  status?: "" | "ACTIVE" | "INACTIVE";
+  city?: string;
+  supplierGroupId?: string | null; // <- thêm field này
+  withGroup?: boolean;
 };
-
 export type CreateSupplierBody = {
   name: string;
   code?: string;
@@ -123,4 +118,53 @@ export type UpdateBody = {
   supplierGroupId?: string | null;
   note?: string;
   status?: "ACTIVE" | "INACTIVE";
+};
+
+// Nhóm nhà cung cấp (Supplier Group)
+export type SupplierGroupStatus = "ACTIVE" | "INACTIVE";
+
+export interface SupplierGroup {
+  id: string;
+  code?: string | null;
+  name: string;
+  description?: string | null;
+  status: SupplierGroupStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+
+//Type dành cho nhân viên 
+export type Role = "MANAGER" | "CASHIER" | "WAITER" | "KITCHEN";
+export const ROLES: Role[] = ["MANAGER", "CASHIER", "WAITER", "KITCHEN"];
+
+/** Item trả về từ GET /users */
+export type UserItem = {
+  id: string;
+  email: string;
+  phoneNumber: string | null;
+  username: string | null;
+  password?: string;           // có nhưng không hiển thị
+  role: Role;
+  profile?: { fullName?: string | null } | null;
+};
+
+/** Payload tạo user vẫn như trước */
+export type CreateUserPayload = {
+  email: string;
+  phoneNumber?: string | null;
+  username?: string | null;
+  password: string;
+  role: Role;
+  profile: { fullName: string; dob?: string | null; address?: string | null };
+};
+
+/** Row hiển thị bảng (phẳng) */
+export type EmployeeRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  username: string;
+  phoneNumber: string;
+  role: Role;
 };

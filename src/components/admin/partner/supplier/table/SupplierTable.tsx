@@ -44,7 +44,7 @@ export default function SuppliersTable({ data, onRowClick }: Props) {
               <TableCell>{dash(s.city)}</TableCell>
               <TableCell className="max-w-[320px] truncate">{dash(s.address)}</TableCell>
 
-              {/* ✅ KHÔNG render object; chỉ hiển thị tên nhóm */}
+              {/*  KHÔNG render object; chỉ hiển thị tên nhóm */}
               <TableCell>{s.supplierGroup?.name ?? "-"}</TableCell>
 
               <TableCell className="text-right">

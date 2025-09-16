@@ -5,8 +5,8 @@ import { Dispatch, SetStateAction } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import type { SuppliersFilter } from "@/types/types";
+import SupplierGroupPicker from "@/components/admin/partner/supplier/supplier-group/SupplierGroupPicker";
 
 export default function SidebarSupplierFilter({
   filters,
@@ -48,14 +48,11 @@ export default function SidebarSupplierFilter({
         </RadioGroup>
       </div>
 
-      {/* <div>
-        <Label>Nhóm NCC (ID)</Label>
-        <Input
-          placeholder="supplierGroupId"
-          value={filters.supplierGroupId ?? ""}
-          onChange={(e) => set("supplierGroupId", e.target.value)}
-        />
-      </div> */}
+      {/* === Nhóm NCC ngay trong filter === */}
+      <SupplierGroupPicker
+        value={filters.supplierGroupId ?? null}
+        onChange={(id) => set("supplierGroupId", id)}
+      />
 
       <div>
         <Label>Thành phố</Label>
@@ -65,17 +62,6 @@ export default function SidebarSupplierFilter({
           onChange={(e) => set("city", e.target.value)}
         />
       </div>
-
-      {/* <div className="flex items-center justify-between">
-        <div>
-          <Label>Include SupplierGroup</Label>
-          <div className="text-xs text-muted-foreground">withGroup=true</div>
-        </div>
-        <Switch
-          checked={!!filters.withGroup}
-          onCheckedChange={(v) => set("withGroup", v)}
-        />
-      </div> */}
     </div>
   );
 }
