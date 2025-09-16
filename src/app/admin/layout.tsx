@@ -35,9 +35,7 @@ const NAV: NavItem[] = [
 children: [
       { label: "Khách hàng", href: "/admin/customer" },
       { label: "Nhà Cung Cấp", href: "/admin/supplier" },
-      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
-      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
-      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
+     
     ],
 
 
