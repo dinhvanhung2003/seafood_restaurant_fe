@@ -1,54 +1,47 @@
 // hooks/admin/useSuppliers.ts
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
-import type { SuppliersFilter } from "@/types/types";
-import type { Supplier } from "@/types/types";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { CreateSupplierBody } from "@/types/types";
-import type { UpdateBody } from "@/types/types";
-
+import type { SuppliersFilter, Supplier, CreateSupplierBody, UpdateBody } from "@/types/types";
 
 type ListResp = { items: Supplier[]; total: number; page: number; limit: number };
 
-function buildParams(page: number, limit: number, f: SuppliersFilter) {
-  const p: any = { page, limit };
-  if (f.q) p.q = f.q;
-  if (f.status) p.status = f.status;
-  if (f.supplierGroupId) p.supplierGroupId = f.supplierGroupId;
-  if (f.city) p.city = f.city;
-  if (typeof f.withGroup === "boolean") p.withGroup = f.withGroup;
-  return p;
-}
+const clean = (p: Record<string, any>) => {
+  const q = { ...p };
+  Object.keys(q).forEach((k) => (q as any)[k] === "" || (q as any)[k] == null ? delete (q as any)[k] : null);
+  return q;
+};
 
 export function useSuppliers(
   page: number,
   limit: number,
-  filters: any,
-  initialData?: any
+  filters: SuppliersFilter,
+  initialData?: ListResp
 ) {
-  return useQuery({
-    queryKey: ["suppliers", page, limit, filters],
+  // ép withGroup = true để luôn có supplierGroup trong response
+  const params = clean({
+    page,
+    limit,
+    q: filters?.q,
+    status: filters?.status,
+    supplierGroupId: filters?.supplierGroupId,
+    city: filters?.city,
+    withGroup: true, // 👈 bắt buộc
+  });
+
+  return useQuery<ListResp>({
+    queryKey: ["suppliers", params],          // gom key gọn theo params đã clean
     queryFn: async () => {
-      const { data } = await api.get("/supplier/get-list-suppliers", {
-        params: {
-          page,
-          limit,
-          q: filters?.q || undefined,
-          status: filters?.status || undefined,
-          supplierGroupId: filters?.supplierGroupId || undefined,
-          city: filters?.city || undefined,
-          withGroup: filters?.withGroup || undefined,
-        },
-      });
-      return data; // { items, total, page, limit }
+      const { data } = await api.get<ListResp>("/supplier/get-list-suppliers", { params });
+      return data;
     },
-    initialData,                       // dữ liệu từ server (SSR) nếu có
-    placeholderData: keepPreviousData, //  thay cho keepPreviousData ở v4
-    staleTime: 30_000,                 // dữ liệu “tươi” trong 30s
-    gcTime: 5 * 60_000,                // thời gian giữ cache trong bộ nhớ
+    initialData,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 }
+
 export function useCreateSupplier() {
   const qc = useQueryClient();
   return useMutation({
@@ -70,9 +63,8 @@ export function useCreateSupplier() {
   });
 }
 
-// GET detail
 export function useSupplierDetail(id?: string, enabled = true) {
-  return useQuery({
+  return useQuery<Supplier>({
     queryKey: ["supplier", id],
     enabled: !!id && enabled,
     queryFn: async () => {
@@ -82,14 +74,11 @@ export function useSupplierDetail(id?: string, enabled = true) {
   });
 }
 
-// PATCH status
 export function useChangeSupplierStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: { id: string; status: "ACTIVE" | "INACTIVE" }) => {
-      const { data } = await api.patch(
-        `/supplier/${p.id}/status/${p.status}`
-      );
+      const { data } = await api.patch(`/supplier/${p.id}/status/${p.status}`);
       return data;
     },
     onSuccess: (_, vars) => {
@@ -102,14 +91,12 @@ export function useChangeSupplierStatus() {
     },
   });
 }
+
 export function useUpdateSupplier() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: { id: string; body: UpdateBody }) => {
-      const { data } = await api.patch(
-        `/supplier/update-supplier/${p.id}`,
-        p.body
-      );
+      const { data } = await api.patch(`/supplier/update-supplier/${p.id}`, p.body);
       return data;
     },
     onSuccess: (_, vars) => {

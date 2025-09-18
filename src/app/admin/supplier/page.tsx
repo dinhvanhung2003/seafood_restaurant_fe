@@ -1,56 +1,82 @@
 // app/(admin)/suppliers/page.tsx
-import SuppliersClient from "./supplier-client";
-import type { SupplierStatus } from "@/types/types";
+"use client";
 
-export const revalidate = 30;
-export const dynamic = "force-dynamic";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+// 👇 đúng path + đúng tên file xuất
+import SuppliersTable from "@/components/admin/partner/supplier/table/SupplierTable";
+import SidebarSupplierFilter from "@/components/admin/partner/supplier/filter/SideBarSupplierFilter";
+import { useSuppliers } from "@/hooks/admin/useSupplier";
+import type { SuppliersFilter } from "@/types/types";
+import AddSupplierModal from "@/components/admin/partner/supplier/modal/AddSupplierModal";
+import SupplierDetailModal from "@/components/admin/partner/supplier/modal/SupplierDetailModal";
 
-// ✅ helper ép kiểu an toàn
-const toSupplierStatus = (v?: string): "" | SupplierStatus => {
-  return v === "ACTIVE" || v === "INACTIVE" ? (v as SupplierStatus) : "";
-};
-
-type Search = {
-  page?: string;
-  q?: string;
-  status?: string;
-  supplierGroupId?: string;
-  city?: string;
-  withGroup?: string;
-};
-
-export default async function SuppliersPage({ searchParams }: { searchParams: Search }) {
-  const page = Number(searchParams.page ?? 1);
+export default function SuppliersPage() {
+  const [page, setPage] = useState(1);
   const limit = 20;
+  const [open, setOpen] = useState(false);
 
-  const params = new URLSearchParams({
-    page: String(page),
-    limit: String(limit),
-    ...(searchParams.q ? { q: searchParams.q } : {}),
-    ...(searchParams.status ? { status: searchParams.status } : {}),
-    ...(searchParams.supplierGroupId ? { supplierGroupId: searchParams.supplierGroupId } : {}),
-    ...(searchParams.city ? { city: searchParams.city } : {}),
-    ...(searchParams.withGroup ? { withGroup: searchParams.withGroup } : {}),
+  const [detailId, setDetailId] = useState<string | undefined>();
+  const [openDetail, setOpenDetail] = useState(false);
+
+  const [filters, setFilters] = useState<SuppliersFilter>({
+    q: "",
+    status: "",
+    supplierGroupId: "",
+    city: "",
+    withGroup: false,
   });
 
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE}/supplier/get-list-suppliers?${params.toString()}`,
-    { next: { revalidate: 30 } }
-  );
-  const initial = await res.json();
+  const { data, isLoading } = useSuppliers(page, limit, filters);
 
   return (
-    <SuppliersClient
-      initial={initial}
-      page={page}
-      limit={limit}
-      defaultFilters={{
-        q: searchParams.q ?? "",
-        status: toSupplierStatus(searchParams.status), // ✅ dùng helper
-        supplierGroupId: searchParams.supplierGroupId ?? "",
-        city: searchParams.city ?? "",
-        withGroup: searchParams.withGroup === "true",
-      }}
-    />
+    <div className="flex">
+      <aside className="border-r">
+        <SidebarSupplierFilter filters={filters} onChange={setFilters} />
+      </aside>
+
+      <main className="flex-1 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold">Nhà cung cấp</h2>
+          <Button onClick={() => setOpen(true)}>+ Nhà cung cấp</Button>
+        </div>
+
+        {isLoading ? (
+          <div>Đang tải…</div>
+        ) : (
+          <SuppliersTable
+            data={data?.items ?? []}
+            onRowClick={(id) => {
+              setDetailId(id);
+              setOpenDetail(true);
+            }}
+          />
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+            Trước
+          </Button>
+          <Button
+            variant="outline"
+            disabled={page * limit >= (data?.total ?? 0)}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Sau
+          </Button>
+        </div>
+      </main>
+
+      <AddSupplierModal open={open} onOpenChange={setOpen} />
+
+      <SupplierDetailModal
+        open={openDetail}
+        onOpenChange={(v) => {
+          setOpenDetail(v);
+          if (!v) setDetailId(undefined);
+        }}
+        id={detailId}
+      />
+    </div>
   );
 }

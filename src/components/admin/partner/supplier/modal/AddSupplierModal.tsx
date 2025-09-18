@@ -13,8 +13,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useCreateSupplier } from "@/hooks/admin/useSupplier";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+
+import { useCreateSupplier } from "@/hooks/admin/useSupplier";
+import { useSupplierGroups } from "@/hooks/admin/useSupplierGroup";
+import CreateSupplierGroupModal from "@/components/admin/partner/supplier/supplier-group/modal/CreaGroupSupplier";
+// (tuỳ bạn có muốn cho sửa ngay trong form không thì import EditSupplierGroupModal)
 
 type Props = { open: boolean; onOpenChange: (v: boolean) => void };
 
@@ -29,21 +40,23 @@ type Form = {
   city?: string;
   district?: string;
   ward?: string;
-  supplierGroupId?: string;
+  supplierGroupId?: string; // để undefined khi chọn "Tất cả/không gán"
   note?: string;
   status: "ACTIVE" | "INACTIVE";
 };
 
+const ALL = "__ALL__";
+
 export default function AddSupplierModal({ open, onOpenChange }: Props) {
   const create = useCreateSupplier();
+  const { groups, isLoading } = useSupplierGroups({ limit: 100 });
 
   const [form, setForm] = React.useState<Form>({
     name: "",
     status: "ACTIVE",
   });
 
-  const set = (k: keyof Form, v: any) =>
-    setForm((s) => ({ ...s, [k]: v }));
+  const set = (k: keyof Form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
@@ -155,14 +168,43 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
             />
           </Field>
 
-          {/* <Field label="Nhóm NCC (ID)">
-            <Input
-              placeholder="fa4d1702-..."
-              value={form.supplierGroupId ?? ""}
-              onChange={(e) => set("supplierGroupId", e.target.value)}
-            />
-          </Field> */}
-          <Field label="Ghi chú">
+          {/* Nhóm NCC */}
+          <Field label="Nhóm NCC" className="col-span-2">
+            <div className="flex items-center gap-2">
+              <Select
+                // dùng "__ALL__" cho không chọn
+                value={form.supplierGroupId ?? ALL}
+                onValueChange={(v) =>
+                  set("supplierGroupId", v === ALL ? undefined : v)
+                }
+                disabled={isLoading}
+              >
+                <SelectTrigger className="w-[320px]">
+                  <SelectValue placeholder="Chọn nhóm" />
+                </SelectTrigger>
+                {/* tránh “z mờ” trong Dialog */}
+                <SelectContent position="popper" className="z-[10000] max-h-64">
+                  <SelectItem value={ALL}>Không gán nhóm</SelectItem>
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Thêm nhóm nhanh */}
+              <CreateSupplierGroupModal
+                triggerAs="button" // hoặc "icon" nếu bạn đã làm
+                onSuccess={(newId) => {
+                  // chọn luôn nhóm vừa tạo
+                  if (newId) set("supplierGroupId", newId);
+                }}
+              />
+            </div>
+          </Field>
+
+          <Field label="Ghi chú" className="col-span-2">
             <Input
               value={form.note ?? ""}
               onChange={(e) => set("note", e.target.value)}

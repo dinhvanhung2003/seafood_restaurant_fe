@@ -3,11 +3,7 @@
 
 import * as React from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,13 +14,20 @@ import {
   useChangeSupplierStatus,
   useUpdateSupplier,
 } from "@/hooks/admin/useSupplier";
+import { useSupplierGroups } from "@/hooks/admin/useSupplierGroup";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select";
+import CreateSupplierGroupModal from "@/components/admin/partner/supplier/supplier-group/modal/CreaGroupSupplier";
 
 type Props = { open: boolean; onOpenChange: (v: boolean) => void; id?: string };
+const ALL = "__ALL__";
 
 export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
   const { data, isLoading } = useSupplierDetail(id, open);
   const changeStatus = useChangeSupplierStatus();
   const update = useUpdateSupplier();
+  const { groups, isLoading: loadingGroups } = useSupplierGroups({ limit: 100 });
 
   const [edit, setEdit] = React.useState(false);
   const [form, setForm] = React.useState<any>({});
@@ -42,7 +45,8 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
         city: data.city ?? "",
         district: data.district ?? "",
         ward: data.ward ?? "",
-        supplierGroupId: data.supplierGroupId ?? "",
+        // để undefined khi không gán nhóm
+        supplierGroupId: data.supplierGroupId ?? undefined,
         note: data.note ?? "",
         status: data.status,
       });
@@ -68,21 +72,11 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
     await changeStatus.mutateAsync({ id, status: next });
   };
 
-  // ---- helper: chuẩn hoá giá trị hiển thị (tránh render object) ----
-  const readValue = (k: string): React.ReactNode => {
-    const v = (data as any)?.[k];
-    if (v === null || v === undefined || v === "") return "-";
-    if (typeof v === "object") {
-      // trường hợp object như supplierGroup → lấy name nếu có
-      if ("name" in v) return (v as any).name ?? "-";
-      try {
-        return JSON.stringify(v);
-      } catch {
-        return "-";
-      }
-    }
-    return v as React.ReactNode;
-  };
+  // tên nhóm để hiển thị (ưu tiên data.supplierGroup, fallback tra theo id từ list groups)
+  const groupName =
+    data?.supplierGroup?.name ??
+    groups.find((g) => g.id === (form.supplierGroupId ?? data?.supplierGroupId))?.name ??
+    "-";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,13 +126,51 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
                     />
                   ) : (
                     <div className="h-9 px-3 flex items-center rounded-md border bg-muted/20">
-                      {readValue(f.key)}
+                      {displayValue((data as any)?.[f.key])}
                     </div>
                   )}
                 </Field>
               ))}
 
-              {/* Note full width */}
+              {/* --- NHÓM NCC --- */}
+              <Field label="Nhóm NCC" className="col-span-2">
+                {edit ? (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={form.supplierGroupId ?? ALL}
+                      onValueChange={(v) =>
+                        set("supplierGroupId", v === ALL ? undefined : v)
+                      }
+                      disabled={loadingGroups}
+                    >
+                      <SelectTrigger className="w-[340px]">
+                        <SelectValue placeholder="Chọn nhóm" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" className="z-[10000] max-h-64">
+                        <SelectItem value={ALL}>Không gán nhóm</SelectItem>
+                        {groups.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>
+                            {g.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <CreateSupplierGroupModal
+                      triggerAs="button"
+                      onSuccess={(newId) => {
+                        if (newId) set("supplierGroupId", newId);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-9 px-3 flex items-center rounded-md border bg-muted/20">
+                    {groupName}
+                  </div>
+                )}
+              </Field>
+
+              {/* Ghi chú full width */}
               <Field className="col-span-2" label="Ghi chú">
                 {edit ? (
                   <Input
@@ -147,7 +179,7 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
                   />
                 ) : (
                   <div className="h-9 px-3 flex items-center rounded-md border bg-muted/20">
-                    {readValue("note")}
+                    {displayValue(data.note)}
                   </div>
                 )}
               </Field>
@@ -193,6 +225,7 @@ function Field({
   );
 }
 
+// các field text thường
 const fields: Array<{ key: string; label: string }> = [
   { key: "name", label: "Tên nhà cung cấp" },
   { key: "company", label: "Công ty" },
@@ -203,7 +236,19 @@ const fields: Array<{ key: string; label: string }> = [
   { key: "city", label: "Thành phố" },
   { key: "district", label: "Quận / Huyện" },
   { key: "ward", label: "Phường / Xã" },
-  // nếu muốn hiển thị tên nhóm từ object:
-  // { key: "supplierGroup", label: "Nhóm NCC" },
-  { key: "supplierGroupId", label: "Nhóm NCC (ID)" },
+  // BỎ supplierGroupId ở đây vì đã làm block riêng có Select
 ];
+
+// helper hiển thị giá trị trong view mode
+function displayValue(v: any) {
+  if (v === null || v === undefined || v === "") return "-";
+  if (typeof v === "object") {
+    if ("name" in v) return (v as any).name ?? "-";
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return "-";
+    }
+  }
+  return String(v);
+}
