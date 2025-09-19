@@ -12,7 +12,7 @@ type TableGridProps = {
 };
 
 
-export function TableGrid({ tables, selectedId, onSelect, totals }: TableGridProps) {
+export function TableGrid({ tables, selectedId, onSelect, totals,counts }: TableGridProps) {
   return (
     <ScrollArea className="h-[58vh] md:h-[60vh]">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -23,6 +23,7 @@ export function TableGrid({ tables, selectedId, onSelect, totals }: TableGridPro
             selected={t.id === selectedId}
             onSelect={() => onSelect(t)}
             amount={totals?.[t.id]}
+            count={counts?.[t.id]}
           />
         ))}
       </div>

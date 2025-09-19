@@ -17,7 +17,7 @@ type NavChild = { label: string; href: string };
 type NavItem = { label: string; href: string; icon: any; children?: NavChild[] };
 
 const NAV: NavItem[] = [
-  { label: "Tổng quan", href: "/admin", icon: LayoutDashboard },
+  { label: "Tổng quan", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package,
 
  children: [

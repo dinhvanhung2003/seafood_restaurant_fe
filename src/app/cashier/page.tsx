@@ -32,7 +32,24 @@ export default function POSPage() {
   const { data: session } = useSession();
   const token = (session as any)?.accessToken as string | undefined;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   // ===== local UI state =====
+  const [localOrderCreatedAt, setLocalOrderCreatedAt] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
   const [menuPage, setMenuPage] = useState(1);
   const [menuLimit] = useState(12);
@@ -86,15 +103,19 @@ useEffect(() => {
   useEffect(() => {
     const priceDict = new Map(menuItems.map((i) => [i.id, i.price]));
     const totals: Record<string, number> = {};
+     const starts: Record<string, string | undefined> = {};
     for (const [tid, b] of Object.entries(orders)) {
+      
       const items = b.orders[0]?.items ?? [];
       totals[tid] = calcOrderTotal(items, priceDict);
+    
     }
     setTableList(
       baseTables.map((t) => ({
         ...t,
         status: orders[t.id] ? "using" : "empty",
         currentAmount: totals[t.id] ?? 0,
+      
       })),
     );
     setSelectedTable((prev) => prev ?? (baseTables[0] ?? null));
@@ -138,7 +159,9 @@ useEffect(() => {
   // ===== UI handlers (gọi hook actions) =====
   const onAdd = async (menuItemId: string) => {
     if (!selectedTable) return;
+      const hadOrder = !!orderIds[selectedTable.id]; 
     await addOne(selectedTable.id, menuItemId);
+      if (!hadOrder) activeOrdersQuery.refetch?.();
   };
 
   // const onChangeQty = async (id: string, delta: number) => {
@@ -335,6 +358,25 @@ const handleCheckoutSuccess = async () => {
 };
 
 
+// tính giờ 
+const tablesWithStart = useMemo(() => {
+  return filteredTables.map((t) => {
+    const activeId = orderIds[t.id];
+    const srv: any = activeOrdersQuery.data?.find((o: any) => o.id === activeId);
+
+    const local = activeId ? localOrderCreatedAt[activeId] : undefined;
+    // ƯU TIÊN local (thời điểm bạn tạo đơn), fallback sang BE
+    const startedAt: string | undefined = local ?? (srv?.createdAt as string | undefined);
+
+    return { ...t, startedAt };
+  });
+}, [filteredTables, orderIds, activeOrdersQuery.data, localOrderCreatedAt]);
+
+
+
+
+
+
 
 
 
@@ -447,6 +489,26 @@ const confirmCancelItems = async (reason: string) => {
     setCancelTargets([]);
   }
 };
+useEffect(() => {
+  for (const [tid, oid] of Object.entries(orderIds)) {
+    if (!oid) continue;
+    const srv: any = activeOrdersQuery.data?.find((o: any) => o.id === oid);
+    const beCreated = srv?.createdAt as string | undefined;
+    setLocalOrderCreatedAt(prev => {
+      if (prev[oid]) return prev;
+      // tạo ISO LOCAL có offset, KHÔNG dùng toISOString()
+      const now = new Date();
+      const tz = -now.getTimezoneOffset();              // phút lệch múi giờ
+      const sign = tz >= 0 ? "+" : "-";
+      const hh = String(Math.floor(Math.abs(tz) / 60)).padStart(2, "0");
+      const mm = String(Math.abs(tz) % 60).padStart(2, "0");
+      const localIso = new Date(now.getTime() - now.getTimezoneOffset()*60000)
+        .toISOString()
+        .replace("Z", `${sign}${hh}:${mm}`);
+      return { ...prev, [oid]: beCreated ?? localIso };
+    });
+  }
+}, [orderIds, activeOrdersQuery.data]);
 
 
 useEffect(() => {
@@ -523,7 +585,8 @@ useEffect(() => {
                 </div>
 
                 <TableGrid
-                  tables={filteredTables}
+                  // tables={filteredTables}
+                   tables={tablesWithStart}  
                   selectedId={selectedTable?.id}
                   totals={
                     Object.fromEntries(

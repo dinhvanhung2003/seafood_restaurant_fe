@@ -11,13 +11,110 @@ import { currency } from "@/utils/money";
 import type { Table, OrderItem, Catalog } from "@/types/types";
 import { CustomerModal } from "@/components/cashier/modals/CustomerModal";
 import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
-import { useAttachCustomer, useCreateCustomerAndAttach, useCustomerSearch } from "@/hooks/cashier/useCustomers";
+import { useCreateCustomerAndAttach, useCustomerSearch } from "@/hooks/cashier/useCustomers";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import type { UIOrderItem } from "@/lib/cashier/pos-helpers";
 import { useMemo } from "react";
+import { useCashierStore } from '@/store/cashier';
+import api from "@/lib/axios"; 
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 type ShortCustomer = { id: string; name: string; phone?: string };
+
+
+
+// ====== INPUT: mỗi item là 1 dòng OrderItem thật từ BE ======
+export type UIOrderItemInput = {
+  rowId?: string;           // orderItemId
+  id: string;               // menuItemId
+  qty: number;              // quantity của row này
+  status: "PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "SERVED" | "CANCELLED";
+  batchId?: string | null;  // null khi chưa gửi bếp
+};
+
+type Props = {
+  orderId?: string;
+  table: Table | null;
+  items: UIOrderItemInput[];
+  catalog: Catalog;
+  total: number;
+  onChangeQty: (menuItemId: string, delta: number) => void; // POS sẽ xử lý quy tắc +/-
+  onCheckout: () => void;
+  onNotify: () => void;
+  onClear?: () => void;
+  orderTabs?: { activeId: string; orders: { id: string; label: string }[] };
+  onAddOrder?: () => void;
+  onSwitchOrder?: (id: string) => void;
+  onCloseOrder?: (id: string) => void;
+  canCancel?: boolean;
+  onCancelOrder?: () => void;
+  canNotify?: boolean;
+};
+
+// ====== Gom theo món để hiển thị 1 dòng ======
+type GroupRow = {
+  menuItemId: string;
+  name: string;
+  totalQty: number;
+  pendingQty: number;     // PENDING & batchId=null
+  confirmedQty: number;
+  preparingQty: number;
+  readyQty: number;
+  servedQty: number;
+  // một row PENDING để – / xóa (nếu cần)
+  anyPendingRowId?: string;
+};
+
+function buildGroups(items: UIOrderItemInput[], catalog: Catalog): GroupRow[] {
+  const m = new Map<string, GroupRow>();
+
+  for (const it of items) {
+    const mid = it.id;
+    const def = catalog.items.find(x => x.id === mid);
+    if (!def) continue;
+
+    if (!m.has(mid)) {
+      m.set(mid, {
+        menuItemId: mid,
+        name: def.name,
+        totalQty: 0,
+        pendingQty: 0,
+        confirmedQty: 0,
+        preparingQty: 0,
+        readyQty: 0,
+        servedQty: 0,
+      });
+    }
+    const g = m.get(mid)!;
+    g.totalQty += it.qty;
+
+    switch (it.status) {
+      case "PENDING":
+        if (!it.batchId) {
+          g.pendingQty += it.qty;
+          if (!g.anyPendingRowId) g.anyPendingRowId = it.rowId;
+        }
+        break;
+      case "CONFIRMED": g.confirmedQty += it.qty; break;
+      case "PREPARING": g.preparingQty += it.qty; break;
+      case "READY":     g.readyQty += it.qty; break;
+      case "SERVED":    g.servedQty += it.qty; break;
+    }
+  }
+
+  return Array.from(m.values());
+}
+
+
+
+
+
+
+
+
+
+
+
 
 export function OrderList({
   orderId,
@@ -61,29 +158,26 @@ export function OrderList({
 
   const [openCustomerModal, setOpenCustomerModal] = useState(false);
   const [guestModalOpen, setGuestModalOpen] = useState(false);
-  const [guestCount, setGuestCount] = useState(0);
+  
 
-  const [selectedCus, setSelectedCus] = useState<ShortCustomer | null>(null);
+  const guestCount = useCashierStore((s) => s.guestCount);
+  const setGuestCount = useCashierStore((s) => s.setGuestCount);
+
+   const selectedCus = useCashierStore(s => s.selectedCustomer);
+  const setSelectedCus = useCashierStore(s => s.setSelectedCustomer);
   const [q, setQ] = useState("");
 
   const { data: results = [] } = useCustomerSearch(q);
-  const attachMu = useAttachCustomer(orderId);
   const createAndAttachMu = useCreateCustomerAndAttach(orderId);
 
-  const handleSelectCustomer = (c: any) => {
-    if (!orderId) return toast.error("Chưa có đơn để gắn khách.");
-    attachMu.mutate(
-      { customerId: c.id },
-      {
-        onSuccess: () => {
-          setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
-          setQ("");
-          toast.success("Đã gắn khách");
-        },
-        onError: (e: any) => toast.error(e?.message || "Gắn khách thất bại"),
-      }
-    );
+   const handleSelectCustomer = (c: any) => {
+    if (!orderId) return toast.error("Chưa có đơn để chọn khách.");
+    setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
+    setQ("");
+    toast.success("Đã chọn khách");
   };
+
+
 
 // Gộp các dòng cùng menuItemId để hiển thị một dòng duy nhất
 const mergedItems = useMemo(() => {
@@ -108,20 +202,7 @@ const mergedItems = useMemo(() => {
 
 
 
-  const handleAttachWalkin = () => {
-    if (!orderId) return toast.error("Chưa có đơn để gắn khách.");
-    attachMu.mutate(
-      { walkin: true },
-      {
-        onSuccess: () => {
-          setSelectedCus({ id: "WALKIN", name: "Khách lẻ" });
-          setQ("");
-          toast.success("Đã gắn khách lẻ");
-        },
-        onError: (e: any) => toast.error(e?.message || "Gắn khách lẻ thất bại"),
-      }
-    );
-  };
+  
 
   return (
     <div className="flex h-full flex-col rounded-xl border bg-white">
@@ -179,14 +260,14 @@ const mergedItems = useMemo(() => {
                   <span className="text-sm text-slate-500">{c.phone || c.code}</span>
                 </button>
               ))}
-              <div className="mt-1 flex items-center justify-between border-t pt-2">
+              {/* <div className="mt-1 flex items-center justify-between border-t pt-2">
                 <Button size="sm" variant="outline" onClick={handleAttachWalkin}>
                   Khách lẻ
                 </Button>
                 <Button size="sm" onClick={() => setOpenCustomerModal(true)}>
                   Thêm mới
                 </Button>
-              </div>
+              </div> */}
             </div>
           )}
         </div>
@@ -316,7 +397,23 @@ const mergedItems = useMemo(() => {
       </div>
 
       {/* Modals */}
-      {/* BỎ CustomerModal lặp ở cuối */}
+      <CustomerModal
+  open={openCustomerModal}
+  onClose={() => setOpenCustomerModal(false)}
+  onSaved={async (payload) => {
+    try {
+      const res = await api.post("/customers", payload); 
+      const c = res?.data;
+      if (!c?.id) throw new Error("Không tạo được khách");
+      setSelectedCus({ id: c.id, name: c.name, phone: c.phone }); 
+      setQ("");
+      toast.success("Đã tạo & chọn khách");
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu khách");
+    }
+  }}
+/>
+
       <GuestCountModal
         open={guestModalOpen}
         onClose={() => setGuestModalOpen(false)}
