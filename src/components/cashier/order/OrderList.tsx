@@ -11,13 +11,15 @@ import { currency } from "@/utils/money";
 import type { Table, OrderItem, Catalog } from "@/types/types";
 import { CustomerModal } from "@/components/cashier/modals/CustomerModal";
 import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
-import { useCreateCustomerAndAttach, useCustomerSearch } from "@/hooks/cashier/useCustomers";
+import {useCustomerSearch } from "@/hooks/cashier/useCustomers";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import type { UIOrderItem } from "@/lib/cashier/pos-helpers";
 import { useMemo } from "react";
 import { useCashierStore } from '@/store/cashier';
 import api from "@/lib/axios"; 
+import AddCustomerModal from "@/components/admin/partner/customer/modal/AddCustomerModal";
+
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 type ShortCustomer = { id: string; name: string; phone?: string };
 
@@ -168,8 +170,6 @@ export function OrderList({
   const [q, setQ] = useState("");
 
   const { data: results = [] } = useCustomerSearch(q);
-  const createAndAttachMu = useCreateCustomerAndAttach(orderId);
-
    const handleSelectCustomer = (c: any) => {
     if (!orderId) return toast.error("Chưa có đơn để chọn khách.");
     setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
@@ -214,60 +214,52 @@ const mergedItems = useMemo(() => {
         </div>
 
         {/* Search + chip */}
+          {/* Khối tìm kiếm/ chọn khách */}
         <div className="relative ml-auto w-full max-w-sm">
-          <Input
-            placeholder="Tìm khách (tên/SĐT)"
-            disabled={!orderId}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className={selectedCus ? "text-transparent caret-transparent" : ""}
-          />
-
-          {selectedCus && (
+          {/* ẨN input nếu đã chọn khách */}
+          {!selectedCus ? (
             <>
-              <div className="pointer-events-none absolute inset-y-0 left-3 right-9 flex items-center">
-                <div className="flex items-center gap-2 max-w-full overflow-hidden">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-600">
-                      <circle cx="12" cy="8" r="3" />
-                      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
-                    </svg>
-                  </span>
-                  <span className="truncate text-blue-600 font-medium">{selectedCus.name}</span>
+              <Input
+                placeholder="Tìm khách (tên/SĐT)"
+                disabled={!orderId}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              {q && results.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border bg-white p-2 shadow">
+                  {results.map((c: any) => (
+                    <button
+                      key={c.id}
+                      className="flex w-full items-center justify-between rounded-md px-2 py-1.5 hover:bg-slate-50"
+                      onClick={() => handleSelectCustomer(c)}
+                    >
+                      <span className="truncate">{c.name}</span>
+                      <span className="text-sm text-slate-500">{c.phone || c.code}</span>
+                    </button>
+                  ))}
                 </div>
-              </div>
-
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-600">
+                  <circle cx="12" cy="8" r="3" />
+                  <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+                </svg>
+              </span>
+              <span className="truncate text-blue-600 font-medium">{selectedCus.name}</span>
               <button
                 type="button"
-                onClick={() => { setSelectedCus(null); setQ(""); }}
-                className="absolute inset-y-0 right-2 my-auto grid h-7 w-7 place-items-center rounded-full hover:bg-slate-100"
+                onClick={() => {
+                  setSelectedCus(null);
+                  setQ("");
+                }}
+                className="ml-auto grid h-7 w-7 place-items-center rounded-full hover:bg-slate-100"
                 title="Bỏ chọn khách"
               >
                 <X className="h-4 w-4" />
               </button>
-            </>
-          )}
-
-          {!selectedCus && q && results.length > 0 && (
-            <div className="absolute z-50 mt-1 w-full rounded-lg border bg-white p-2 shadow">
-              {results.map((c: any) => (
-                <button
-                  key={c.id}
-                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 hover:bg-slate-50"
-                  onClick={() => handleSelectCustomer(c)}
-                >
-                  <span className="truncate">{c.name}</span>
-                  <span className="text-sm text-slate-500">{c.phone || c.code}</span>
-                </button>
-              ))}
-              {/* <div className="mt-1 flex items-center justify-between border-t pt-2">
-                <Button size="sm" variant="outline" onClick={handleAttachWalkin}>
-                  Khách lẻ
-                </Button>
-                <Button size="sm" onClick={() => setOpenCustomerModal(true)}>
-                  Thêm mới
-                </Button>
-              </div> */}
             </div>
           )}
         </div>
@@ -276,27 +268,7 @@ const mergedItems = useMemo(() => {
           <Button onClick={() => setOpenCustomerModal(true)} disabled={!hasTable}>
             <Plus className="h-5 w-5" />
           </Button>
-          <CustomerModal
-            open={openCustomerModal}
-            onClose={() => setOpenCustomerModal(false)}
-            onSaved={(payload) => {
-              if (!orderId) return toast.error("Chưa có đơn để gắn khách.");
-              // dùng hook gộp: tạo + gắn
-              createAndAttachMu.mutate(payload, {
-                onSuccess: (res: any) => {
-                  const c = res?.customer ?? res;
-                  setSelectedCus({
-                    id: c?.id,
-                    name: c?.name || payload.name,
-                    phone: c?.phone || payload.phone,
-                  });
-                  setQ("");
-                  toast.success("Đã tạo & gắn khách");
-                },
-                onError: (e: any) => toast.error(e?.message || "Lỗi lưu khách"),
-              });
-            }}
-          />
+          
         </div>
       </div>
 
@@ -397,22 +369,17 @@ const mergedItems = useMemo(() => {
       </div>
 
       {/* Modals */}
-      <CustomerModal
-  open={openCustomerModal}
-  onClose={() => setOpenCustomerModal(false)}
-  onSaved={async (payload) => {
-    try {
-      const res = await api.post("/customers", payload); 
-      const c = res?.data;
-      if (!c?.id) throw new Error("Không tạo được khách");
-      setSelectedCus({ id: c.id, name: c.name, phone: c.phone }); 
-      setQ("");
-      toast.success("Đã tạo & chọn khách");
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi lưu khách");
-    }
-  }}
-/>
+      <AddCustomerModal
+        open={openCustomerModal}
+        onOpenChange={setOpenCustomerModal}
+        onCreated={(c) => {
+          // c là object khách từ BE (do mutateAsync trả về)
+          if (c?.id) {
+            setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
+            toast.success("Đã tạo & chọn khách");
+          }
+        }}
+      />
 
       <GuestCountModal
         open={guestModalOpen}
