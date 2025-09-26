@@ -12,11 +12,7 @@ import {
   DialogTrigger, DialogClose
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton"; 
-
 export default function IngredientsPage() {
-
-
-  console.log("Rerender IngredientsPage");
   const toast = useAppToast();
 
   // Query list

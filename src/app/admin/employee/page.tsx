@@ -1,14 +1,11 @@
+// app/(admin)/staff/page.tsx  (ví dụ đường dẫn)
 "use client";
 
 import { useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import {
-  useEmployeesQuery,
-  useCreateUserMutation,
-  toRow,
-} from "@/components/admin/employee/queries";
-import type { CreateUserPayload, Role } from "@/types/employee";
-import { ROLES } from "@/types/employee";
+import { useEmployee } from "@/hooks/admin/useEmployee";
+import type { CreateUserPayload, Role } from "@/types/types";
+import { ROLES } from "@/types/types";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,33 +20,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
+  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 
 // helper: YYYY-MM-DD -> ISO 8601
 function toISODate(d: string | undefined) {
   if (!d) return undefined;
-  // thêm T00:00:00 để tránh lệch timezone
-  const iso = new Date(`${d}T00:00:00`).toISOString();
-  return iso;
+  return new Date(`${d}T00:00:00`).toISOString();
 }
-
-// Form shape dành cho react-hook-form (UI nhập vào)
-// khác biệt nhỏ: profile.dob là string theo định dạng <input type="date"> (YYYY-MM-DD)
-// còn khi submit sẽ chuyển sang ISO 8601 để khớp với CreateUserPayload của BE
 
 type FormValues = {
   email: string;
@@ -65,24 +47,23 @@ type FormValues = {
 };
 
 export default function StaffPage() {
-  const { data, isLoading } = useEmployeesQuery();
-  const { mutate, isPending } = useCreateUserMutation();
+  // 🔹 chỉ 1 hook
+  const { rows, isLoading, createUser, createStatus } = useEmployee();
 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
-  const rows = useMemo(() => {
-    const list = (data ?? []).map(toRow);
+  const filtered = useMemo(() => {
     const k = q.trim().toLowerCase();
-    if (!k) return list;
-    return list.filter(
+    if (!k) return rows;
+    return rows.filter(
       (r) =>
         r.fullName.toLowerCase().includes(k) ||
         r.email.toLowerCase().includes(k) ||
         r.username.toLowerCase().includes(k) ||
         r.phoneNumber.toLowerCase().includes(k)
     );
-  }, [data, q]);
+  }, [rows, q]);
 
   const {
     control,
@@ -103,7 +84,6 @@ export default function StaffPage() {
   });
 
   const onSubmit = handleSubmit((values) => {
-    // Chuẩn hoá payload trước khi gửi
     const payload: CreateUserPayload = {
       email: values.email,
       password: values.password,
@@ -117,11 +97,12 @@ export default function StaffPage() {
       },
     };
 
-    mutate(payload, {
-      onSuccess: () => {
+    // gọi mutation từ hook gộp
+    createUser(payload).then(() => {
+      if (!createStatus.error) {
         setOpen(false);
         reset();
-      },
+      }
     });
   });
 
@@ -142,10 +123,7 @@ export default function StaffPage() {
               <DialogTitle>Thêm nhân viên</DialogTitle>
             </DialogHeader>
 
-            <form
-              className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2"
-              onSubmit={onSubmit}
-            >
+            <form className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2" onSubmit={onSubmit}>
               <div>
                 <Label>Họ và tên *</Label>
                 <Input
@@ -174,18 +152,14 @@ export default function StaffPage() {
                     },
                   })}
                 />
-                {errors.email && (
-                  <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>
-                )}
+                {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>}
               </div>
 
               <div>
                 <Label>Số điện thoại *</Label>
                 <Input
                   placeholder="0801234587"
-                  {...register("phoneNumber", {
-                    required: "Vui lòng nhập số điện thoại",
-                  })}
+                  {...register("phoneNumber", { required: "Vui lòng nhập số điện thoại" })}
                 />
                 {errors.phoneNumber && (
                   <p className="text-sm text-red-500 mt-1">{errors.phoneNumber.message}</p>
@@ -208,10 +182,7 @@ export default function StaffPage() {
                 <Input
                   type="password"
                   placeholder="123456789"
-                  {...register("password", {
-                    required: "Vui lòng nhập mật khẩu",
-                    minLength: { value: 6, message: "Ít nhất 6 ký tự" },
-                  })}
+                  {...register("password", { required: "Vui lòng nhập mật khẩu", minLength: { value: 6, message: "Ít nhất 6 ký tự" } })}
                 />
                 {errors.password && (
                   <p className="text-sm text-red-500 mt-1">{errors.password.message}</p>
@@ -225,18 +196,11 @@ export default function StaffPage() {
                   name="role"
                   rules={{ required: "Vui lòng chọn vai trò" }}
                   render={({ field }) => (
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => field.onChange(v as Role)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn vai trò" />
-                      </SelectTrigger>
+                    <Select value={field.value} onValueChange={(v) => field.onChange(v as Role)}>
+                      <SelectTrigger><SelectValue placeholder="Chọn vai trò" /></SelectTrigger>
                       <SelectContent>
                         {ROLES.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {r}
-                          </SelectItem>
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -274,8 +238,8 @@ export default function StaffPage() {
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? "Đang lưu..." : "Lưu nhân viên"}
+                <Button type="submit" disabled={createStatus.isPending}>
+                  {createStatus.isPending ? "Đang lưu..." : "Lưu nhân viên"}
                 </Button>
               </DialogFooter>
             </form>
@@ -311,14 +275,14 @@ export default function StaffPage() {
                   Đang tải...
                 </TableCell>
               </TableRow>
-            ) : rows.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                   Chưa có nhân viên
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((r) => (
+              filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{r.fullName}</TableCell>
                   <TableCell>{r.email}</TableCell>

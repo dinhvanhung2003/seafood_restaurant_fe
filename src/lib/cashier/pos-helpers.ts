@@ -5,6 +5,7 @@ export type UIOrderItem = {
   qty: number;
   rowId?: string;      // orderItemId
   status?: ItemStatus; // <-- thêm
+  createAt?: string; // <-- thêm
 };
 
 

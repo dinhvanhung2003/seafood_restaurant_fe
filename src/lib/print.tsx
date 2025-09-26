@@ -36,7 +36,8 @@ export function printReceipt(r: Receipt) {
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:8px;">
         <div>
           <div><b>Chi nhánh trung tâm</b> - Thu ngân</div>
-          <div>Khách: Khách lẻ</div>
+         <div>Khách: ${escapeHtml(r.customerName || 'Khách lẻ')}</div>
+         <div>SL: ${r.guestCount}</div>
           <div>Bàn: ${escapeHtml(r.tableName)}</div>
         </div>
         <div style="text-align:right;">

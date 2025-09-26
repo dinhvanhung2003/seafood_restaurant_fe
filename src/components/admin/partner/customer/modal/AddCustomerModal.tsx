@@ -2,11 +2,7 @@
 
 import * as React from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +11,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useCreateCustomer } from "@/hooks/admin/useCustomer";
 
-/** Enums trùng BE */
 type CustomerType = "PERSONAL" | "COMPANY";
 type Gender = "" | "MALE" | "FEMALE" | "OTHER";
 
@@ -23,11 +18,11 @@ type FormState = {
   type: CustomerType;
   code?: string;
   name: string;
-  companyName?: string; // chỉ dùng khi COMPANY
+  companyName?: string;
   phone?: string;
   email?: string;
   gender: Gender;
-  birthday?: string; // YYYY-MM-DD
+  birthday?: string;
   address?: string;
   province?: string;
   district?: string;
@@ -40,9 +35,11 @@ type FormState = {
 export default function AddCustomerModal({
   open,
   onOpenChange,
+  onCreated, // <— NEW: POS sẽ nhận khách mới tạo
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onCreated?: (customer: any) => void;
 }) {
   const create = useCreateCustomer();
 
@@ -68,13 +65,11 @@ export default function AddCustomerModal({
       return;
     }
 
-    // build payload: bỏ field rỗng để tránh 400
     const payload: any = {
       type: form.type,
       name: form.name.trim(),
       code: form.code || undefined,
-      companyName:
-        form.type === "COMPANY" ? form.companyName || undefined : undefined,
+      companyName: form.type === "COMPANY" ? form.companyName || undefined : undefined,
       phone: form.phone || undefined,
       email: form.email || undefined,
       gender: form.gender || undefined,
@@ -89,25 +84,24 @@ export default function AddCustomerModal({
     };
 
     try {
-      await create.mutateAsync(payload);
-      toast.success("Thêm khách hàng thành công");
+      const customer = await create.mutateAsync(payload); // <— NHẬN customer
+      onCreated?.(customer);                              // <— BẮN RA
       onOpenChange(false);
       resetMinimal();
     } catch {
-      /* toast đã hiển thị trong hook onError (nếu bạn set) */
+      /* onError đã toast */
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+     <DialogContent className="w-[min(96vw,1200px)] max-w-none max-h-[90vh] overflow-auto p-6">
+
         <DialogHeader>
           <DialogTitle>Thêm khách hàng</DialogTitle>
         </DialogHeader>
 
-        {/* GRID CHA 3 CỘT: 132px (ảnh) + 2 cột form */}
         <div className="grid grid-cols-[132px_1fr_1fr] gap-x-5 gap-y-4 items-start">
-          {/* Cột ảnh */}
           <div className="col-span-1">
             <div className="h-[120px] w-[120px] rounded border bg-muted" />
             <Button className="mt-2 w-[120px] bg-emerald-600 hover:bg-emerald-700">
@@ -115,9 +109,7 @@ export default function AddCustomerModal({
             </Button>
           </div>
 
-          {/* GRID CON 2 CỘT CHO TOÀN BỘ FIELD */}
           <div className="col-span-2 grid grid-cols-2 gap-x-5 gap-y-4 min-w-0">
-            {/* Loại khách (chiếm 2 cột) */}
             <div className="col-span-2">
               <Label>Loại khách</Label>
               <RadioGroup
@@ -134,7 +126,6 @@ export default function AddCustomerModal({
               </RadioGroup>
             </div>
 
-            {/* Hàng 1 */}
             <Field label="Mã khách hàng">
               <Input
                 placeholder="Mặc định"
@@ -150,38 +141,22 @@ export default function AddCustomerModal({
               />
             </Field>
 
-            {/* Hàng 2 */}
             <Field label="Tên khách hàng/Công ty">
               <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
             </Field>
             <Field label="Mã số thuế">
-              <Input
-                value={form.taxNo || ""}
-                onChange={(e) => set("taxNo", e.target.value)}
-              />
+              <Input value={form.taxNo || ""} onChange={(e) => set("taxNo", e.target.value)} />
             </Field>
 
-            {/* Hàng 3 */}
             <Field label="Điện thoại">
-              <Input
-                value={form.phone || ""}
-                onChange={(e) => set("phone", e.target.value)}
-              />
+              <Input value={form.phone || ""} onChange={(e) => set("phone", e.target.value)} />
             </Field>
             <Field label="Căn cước công dân">
-              <Input
-                value={form.identityNo || ""}
-                onChange={(e) => set("identityNo", e.target.value)}
-              />
+              <Input value={form.identityNo || ""} onChange={(e) => set("identityNo", e.target.value)} />
             </Field>
 
-            {/* Hàng 4 */}
             <Field label="Ngày sinh">
-              <Input
-                type="date"
-                value={form.birthday || ""}
-                onChange={(e) => set("birthday", e.target.value)}
-              />
+              <Input type="date" value={form.birthday || ""} onChange={(e) => set("birthday", e.target.value)} />
             </Field>
             <div className="space-y-1">
               <Label>Giới tính</Label>
@@ -205,44 +180,22 @@ export default function AddCustomerModal({
               </RadioGroup>
             </div>
 
-            {/* Hàng 5 */}
             <Field label="Email">
-              <Input
-                type="email"
-                value={form.email || ""}
-                onChange={(e) => set("email", e.target.value)}
-              />
+              <Input type="email" value={form.email || ""} onChange={(e) => set("email", e.target.value)} />
             </Field>
             <Field label="Địa chỉ">
-              <Input
-                value={form.address || ""}
-                onChange={(e) => set("address", e.target.value)}
-              />
+              <Input value={form.address || ""} onChange={(e) => set("address", e.target.value)} />
             </Field>
 
-            {/* Hàng 6 */}
             <Field label="Tỉnh / Thành phố">
-              <Input
-                value={form.province || ""}
-                onChange={(e) => set("province", e.target.value)}
-                placeholder="Tỉnh / Thành phố"
-              />
+              <Input value={form.province || ""} onChange={(e) => set("province", e.target.value)} />
             </Field>
             <Field label="Quận / Huyện">
-              <Input
-                value={form.district || ""}
-                onChange={(e) => set("district", e.target.value)}
-                placeholder="Quận / Huyện"
-              />
+              <Input value={form.district || ""} onChange={(e) => set("district", e.target.value)} />
             </Field>
 
-            {/* Hàng 7 */}
             <Field label="Phường / Xã">
-              <Input
-                value={form.ward || ""}
-                onChange={(e) => set("ward", e.target.value)}
-                placeholder="Phường / Xã"
-              />
+              <Input value={form.ward || ""} onChange={(e) => set("ward", e.target.value)} />
             </Field>
             <Field label="Ghi chú">
               <Input value={form.note || ""} onChange={(e) => set("note", e.target.value)} />
@@ -263,7 +216,6 @@ export default function AddCustomerModal({
   );
 }
 
-/** Helper nhỏ: giữ layout nhịp nhàng cho từng field */
 function Field({
   label,
   children,

@@ -1,12 +1,12 @@
 // Định nghĩa các kiểu dữ liệu dùng chung trong ứng dụng
 // Type cho bàn (Table)
 export type Table = {
-id: string;
-name: string;
-floor: string;
-status: "empty" | "using";
-startedAt?: string; 
-currentAmount?: number;
+  id: string;
+  name: string;
+  floor: string;
+  status: "empty" | "using";
+  startedAt?: string;
+  currentAmount?: number;
 };
 
 
@@ -17,44 +17,44 @@ currentAmount?: number;
 
 // Các type ở chỗ thu ngân và quản lý đơn hàng
 export type MenuItem = {
-id: string;
-name: string;
-price: number;
-image?: string;
-categoryId: string;
+  id: string;
+  name: string;
+  price: number;
+  image?: string;
+  categoryId: string;
 };
 
 
 export type Category = { id: string; name: string };
 
 
-export type OrderItem = { id: string; qty: number,note?:string };
+export type OrderItem = { id: string; qty: number, note?: string };
 
 
 export type OrderMap = Record<string, OrderItem[]>; // key = tableId
 
 
 export type Catalog = {
-categories: Category[];
-items: MenuItem[];
+  categories: Category[];
+  items: MenuItem[];
 };
 
 export type CatalogItem = {
   id: string;
   name: string;
   price: number;
-  
+
 };
 
 
 //Type cho orderitem trong order
 
 export enum ItemStatus {
-  PENDING   = 'PENDING',
+  PENDING = 'PENDING',
   CONFIRMED = 'CONFIRMED',
   PREPARING = 'PREPARING',
-  READY     = 'READY',
-  SERVED    = 'SERVED',
+  READY = 'READY',
+  SERVED = 'SERVED',
   CANCELLED = 'CANCELLED',
 }
 
@@ -167,4 +167,51 @@ export type EmployeeRow = {
   username: string;
   phoneNumber: string;
   role: Role;
+};
+
+
+
+/** type chỗ giao diện nhập hàng */
+export type NumMaybeEmpty = number | "";
+export type DiscountType = "AMOUNT" | "PERCENT";
+
+export type Line = {
+  tmpId: string;
+  itemId: string;
+  itemName: string;
+  quantity: NumMaybeEmpty;
+  unitPrice: NumMaybeEmpty;
+  discountType: DiscountType;
+  discountValue: NumMaybeEmpty;
+  /** Mã đơn vị nhận theo BE (VD: "KG", "BOX", ...) */
+  receivedUomCode: string;
+  lotNumber?: string;
+  expiryDate?: string;
+  note?: string;
+};
+
+// Type cho phiếu nhập hàng (Purchase Receipt)
+export enum ReceiptStatus {
+  DRAFT = "DRAFT",
+  POSTED = "POSTED",
+  PAID = "PAID",
+  CANCELLED = "CANCELLED",
+  OWING = "OWING",
+}
+// Label tiếng Việt
+export const ReceiptStatusLabel: Record<ReceiptStatus, string> = {
+  [ReceiptStatus.DRAFT]: "Nháp",
+  [ReceiptStatus.POSTED]: "Đã ghi sổ",
+  [ReceiptStatus.PAID]: "Đã thanh toán",
+  [ReceiptStatus.CANCELLED]: "Đã hủy",
+  [ReceiptStatus.OWING]: "Còn nợ",
+};
+
+// (Optional) Nếu muốn hiển thị màu
+export const ReceiptStatusColor: Record<ReceiptStatus, string> = {
+  [ReceiptStatus.DRAFT]: "bg-gray-100 text-gray-700",
+  [ReceiptStatus.POSTED]: "bg-blue-100 text-blue-700",
+  [ReceiptStatus.PAID]: "bg-green-100 text-green-700",
+  [ReceiptStatus.CANCELLED]: "bg-red-100 text-red-700",
+  [ReceiptStatus.OWING]: "bg-yellow-100 text-yellow-700",
 };

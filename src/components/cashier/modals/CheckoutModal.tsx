@@ -18,24 +18,34 @@ import api from "@/lib/axios"; // ✅ default import (QUAN TRỌNG)
 import {
   CircleDollarSign, CreditCard, Wallet, Banknote, Percent, ReceiptText,
 } from "lucide-react";
-
+import { useCashierStore } from "@/store/cashier";
 type PayMethod = "cash" | "card" | "vnpay";
 
 type ReceiptLine = { id: string; name: string; qty: number; price: number; total: number; };
 export type Receipt = {
   id: string; tableId: string; tableName: string; createdAt: string; cashier: string;
   items: ReceiptLine[]; subtotal: number; discount: number; total: number; paid: number; change: number; method: PayMethod;
+  customerName?: string;
+  guestCount?: number;
 };
 
 type Props = {
   open: boolean; onClose: () => void;
   table: TableType; items: OrderItem[]; catalog: Catalog;
   onSuccess: (r: Receipt) => void; orderId: string | null;
+  customer?: { id: string; name: string } | null;
+onClearCustomer?: () => void; // gọi sau khi thanh toán thành công
 };
 
 export default function CheckoutModal({
   open, onClose, table, items, catalog, onSuccess, orderId,
+ 
 }: Props) {
+
+const selectedCus = useCashierStore(s => s.selectedCustomer);
+  const clearSelectedCus = useCashierStore(s => s.clearSelectedCustomer);
+ const guestCount = useCashierStore((s) => s.guestCount);
+  const resetGuest = useCashierStore((s) => s.resetGuestCount);
   const lines: ReceiptLine[] = useMemo(() => {
     return items.map((it) => {
       const m = catalog.items.find((x) => x.id === it.id);
@@ -76,8 +86,12 @@ const handleConfirm = async () => {
     }
 
     // 1) tạo invoice từ order
-    const invRes = await api.post(`/invoices/from-order/${orderId}`, {});
-    const invoice = invRes.data;
+     
+ const invRes = await api.post(`/invoices/from-order/${orderId}`, {
+    customerId: selectedCus?.id ?? null, 
+ });
+const invoice = invRes.data;
+
 
     // 2) số tiền
     const amountToPay = Number(invoice?.totalAmount ?? 0);
@@ -96,6 +110,7 @@ const handleConfirm = async () => {
       const receipt: Receipt = {
         id: invoice.id,
         tableId: table.id,
+         customerName: selectedCus?.name ?? invoice?.customer?.name ?? 'Khách lẻ',
         tableName: `${table.name} / ${table.floor}`,
         createdAt: new Date().toLocaleString(),
         cashier: "Thu ngân",
@@ -106,10 +121,14 @@ const handleConfirm = async () => {
         paid: amountToPay,
         change: Math.max(0, paid - Math.max(0, subtotal - discount)),
         method: "cash",
+        guestCount
+         
       };
 
       printReceipt(receipt);
       onSuccess(receipt);
+     clearSelectedCus();   
+       resetGuest();
       onClose();
       toast.success("Thanh toán tiền mặt thành công");
       return;
@@ -153,6 +172,8 @@ const handleConfirm = async () => {
         };
         printReceipt(receipt);
         onSuccess(receipt);
+       clearSelectedCus();   
+        resetGuest();
         onClose();
         toast.success("Thanh toán VNPay thành công");
       } else if (result.status === "FAILED") {
