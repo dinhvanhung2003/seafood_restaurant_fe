@@ -171,9 +171,12 @@ const muMoveOne = useMutation({
     },
   });
 
-  const cashPayMu = useMutation({
+   const cashPayMu = useMutation({
     mutationFn: async ({ invoiceId, amount }: { invoiceId: string; amount: number }) => {
-      const res = await api.post(`/payments/manual`, { invoiceId, amount });
+      const res = await api.post(`/invoices/${invoiceId}/payments`, {
+        amount,
+        method: "CASH",
+      });
       return res.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),

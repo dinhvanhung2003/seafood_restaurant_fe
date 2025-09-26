@@ -27,6 +27,7 @@ export default function PurchaseListPage() {
               <th className="px-3 py-2 text-left">Mã phiếu</th>
               <th className="px-3 py-2 text-left">Thời gian</th>
               <th className="px-3 py-2 text-left">Nhà cung cấp</th>
+              <th className="px-3 py-2 text-right">Trạng thái</th>
               {/* <th className="px-3 py-2 text-right">Tổng tiền</th> */}
               <th className="px-3 py-2"></th>
             </tr>
@@ -37,6 +38,7 @@ export default function PurchaseListPage() {
                 <td className="px-3 py-2">{r.code}</td>
                 <td className="px-3 py-2">{r.receiptDate}</td>
                 <td className="px-3 py-2">{r.supplier?.name}</td>
+                <td className="px-3 py-2 text-right">{r.status}</td>
                 {/* <td className="px-3 py-2 text-right">
                   {Number(r.grandTotal || 0).toLocaleString()}
                 </td> */}

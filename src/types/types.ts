@@ -168,3 +168,24 @@ export type EmployeeRow = {
   phoneNumber: string;
   role: Role;
 };
+
+
+
+/** type chỗ giao diện nhập hàng */
+export type NumMaybeEmpty = number | "";
+export type DiscountType = "AMOUNT" | "PERCENT";
+
+export type Line = {
+  tmpId: string;
+  itemId: string;
+  itemName: string;
+  quantity: NumMaybeEmpty;
+  unitPrice: NumMaybeEmpty;
+  discountType: DiscountType;
+  discountValue: NumMaybeEmpty;
+  /** Mã đơn vị nhận theo BE (VD: "KG", "BOX", ...) */
+  receivedUomCode: string;
+  lotNumber?: string;
+  expiryDate?: string;
+  note?: string;
+};

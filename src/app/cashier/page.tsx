@@ -353,7 +353,9 @@ const hasOrder = !!(selectedTable && orderIds[selectedTable.id]);
  // Nhận số tiền thanh toán (nếu modal trả ra), hoặc dùng orderTotal hiện tại
 const handleCheckoutSuccess = async () => {
   if (!selectedTable) return;
-  await pay(selectedTable.id, orderTotal);  // <-- NEW: tạo invoice + trả tiền mặt
+  // await pay(selectedTable.id, orderTotal); 
+  //  // <-- NEW: tạo invoice + trả tiền mặt
+  await activeOrdersQuery.refetch();
   setCheckoutOpen(false);
 };
 

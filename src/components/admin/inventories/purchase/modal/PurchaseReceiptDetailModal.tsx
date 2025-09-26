@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils"; // nếu có, không thì bỏ
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
-
+import { printPurchaseReceipt } from "@/lib/print/purchase_receipt";
 type ReceiptItem = {
   id: string;
   itemId: string;
@@ -214,9 +214,28 @@ export default function PurchaseReceiptDetailModal({
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => window.print()}>
-                  In/PDF
-                </Button>
+                <Button
+    variant="outline"
+    onClick={() => {
+      if (!data) return;
+      printPurchaseReceipt(data, {
+        openInNewTab: false, // hoặc true nếu bạn thích mở tab mới
+        currencyLocale: "vi-VN",
+        currencyPrefix: "",  // nếu muốn thêm "₫ " thì set "₫ "
+        title: "PHIẾU NHẬP HÀNG",
+        company: {
+          name: "Nhà hàng Hải Sản",
+          address: "Nguyễn Văn Bảo, Gò Vấp, TP.HCM",
+          phone: "0909 000 000",
+          taxCode: "0123456789",
+          // logoUrl: "/logo.png" // nếu có
+        },
+        footerText: "Phiếu in từ hệ thống",
+      });
+    }}
+  >
+    In/PDF
+  </Button>
                 <Button onClick={() => onOpenChange(false)}>Đóng</Button>
               </div>
             </>
