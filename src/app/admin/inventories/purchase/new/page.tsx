@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,19 +15,41 @@ import LinesTable from "@/components/admin/inventories/purchase/lines/LineTable"
 
 import AddSupplierModal from "@/components/admin/partner/supplier/modal/AddSupplierModal";
 import AddIngredientModal from "@/components/admin/inventories/inventory-item/modal/AddIngredientModal";
-import { usePRCreate, usePRCreateDraft } from "@/hooks/admin/usePurchase";
+import {
+  usePRCreate,
+  usePRCreateDraft,
+  usePROne,
+  usePRUpdateDraftOrPost,
+} from "@/hooks/admin/usePurchase";
 import type { PRCreatePayload } from "@/hooks/admin/usePurchase";
+
+import { useSearchParams, useRouter } from "next/navigation";
+
 export default function PurchaseCreatePage() {
+  const router = useRouter();
+  const search = useSearchParams();
+  const editingId = search ? search.get("id") || undefined : undefined;
+  const isEdit = !!editingId;
+
+  // fetch detail khi sửa
+  const { data: detail } = usePROne(editingId);
+
   /** ---------- FORM BASICS ---------- */
-  const [receiptDate, setReceiptDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [globalDiscountType, setGlobalDiscountType] = useState<DiscountType>("AMOUNT");
-  const [globalDiscountValue, setGlobalDiscountValue] = useState<NumMaybeEmpty>("");
+  const [receiptDate, setReceiptDate] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [globalDiscountType, setGlobalDiscountType] =
+    useState<DiscountType>("AMOUNT");
+  const [globalDiscountValue, setGlobalDiscountValue] =
+    useState<NumMaybeEmpty>("");
   const [shippingFee, setShippingFee] = useState<NumMaybeEmpty>("");
   const [amountPaid, setAmountPaid] = useState<NumMaybeEmpty>("");
   const [note, setNote] = useState<string>("");
 
   /** ---------- LINES ---------- */
   const [lines, setLines] = useState<Line[]>([]);
+  const [openAddSupplier, setOpenAddSupplier] = useState(false);
+  const [openAddIngredient, setOpenAddIngredient] = useState(false);
   const addLine = (id: string, name: string, unitCode?: string) => {
     setLines((prev) => [
       ...prev,
@@ -43,9 +65,39 @@ export default function PurchaseCreatePage() {
       },
     ]);
   };
-  const removeLine = (tmpId: string) => setLines((s) => s.filter((l) => l.tmpId !== tmpId));
+  const removeLine = (tmpId: string) =>
+    setLines((s) => s.filter((l) => l.tmpId !== tmpId));
   const updateLine = (tmpId: string, patch: Partial<Line>) =>
     setLines((s) => s.map((l) => (l.tmpId === tmpId ? { ...l, ...patch } : l)));
+
+  /** ---------- map DETAIL -> FORM khi edit ---------- */
+  const [supplierId, setSupplierId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!detail) return;
+    setReceiptDate(detail.receiptDate);
+    setGlobalDiscountType(detail.globalDiscountType);
+    setGlobalDiscountValue(detail.globalDiscountValue);
+    setShippingFee(detail.shippingFee);
+    setAmountPaid(detail.amountPaid);
+    setNote(detail.note || "");
+    setSupplierId(detail.supplier?.id);
+    setLines(
+      (detail.items || []).map((it: any) => ({
+        tmpId: crypto.randomUUID(),
+        itemId: it.itemId,
+        itemName: it.itemName,
+        quantity: String(it.quantity),
+        unitPrice: String(it.unitPrice),
+        discountType: it.discountType,
+        discountValue: String(it.discountValue),
+        receivedUomCode: it.receivedUomCode || "",
+        lotNumber: it.lotNumber || "",
+        expiryDate: it.expiryDate || "",
+        note: "",
+      }))
+    );
+  }, [detail]);
 
   /** ---------- TOTALS ---------- */
   const subTotal = useMemo(() => {
@@ -59,95 +111,172 @@ export default function PurchaseCreatePage() {
     }, 0);
   }, [lines]);
 
-  /** ---------- CREATE (dùng hook) ---------- */
-  const createFinalMu = usePRCreate();    
-const createDraftMu = usePRCreateDraft();
-
-
-
   const grandTotal = useMemo(() => {
-    const { after } = applyGlobalDiscount(subTotal, globalDiscountType, globalDiscountValue);
+    const { after } = applyGlobalDiscount(
+      subTotal,
+      globalDiscountType,
+      globalDiscountValue
+    );
     return Math.max(0, after + asNum(shippingFee));
   }, [subTotal, shippingFee, globalDiscountType, globalDiscountValue]);
 
-  /** ---------- SUPPLIER & INGREDIENT MODALS ---------- */
-  const [openAddSupplier, setOpenAddSupplier] = useState(false);
-  const [openAddIngredient, setOpenAddIngredient] = useState(false);
-  const [supplierId, setSupplierId] = useState<string | undefined>(undefined);
+  /** ---------- MUTATIONS ---------- */
+  const createFinalMu = usePRCreate();
+  const createDraftMu = usePRCreateDraft();
+  const updateMu = usePRUpdateDraftOrPost();
 
+  /** ---------- PAYLOAD ---------- */
+  const buildPayload = (): PRCreatePayload => ({
+    supplierId: supplierId!, // đảm bảo đã chọn NCC
+    receiptDate,
+    globalDiscountType,
+    globalDiscountValue: asNum(globalDiscountValue),
+    shippingFee: asNum(shippingFee),
+    amountPaid: asNum(amountPaid),
+    note: note || "",
+    items: lines.map((l) => ({
+      itemId: l.itemId,
+      quantity: asNum(l.quantity),
+      unitPrice: asNum(l.unitPrice),
+      discountType: l.discountType,
+      discountValue: asNum(l.discountValue),
+      receivedUomCode: l.receivedUomCode || undefined,
+      lotNumber: l.lotNumber || undefined,
+      expiryDate: l.expiryDate || undefined,
+      note: l.note || undefined,
+    })),
+  });
+  
+  /** ---------- ACTIONS ---------- */
+  const ensureValid = () => {
+    if (!supplierId) return toast.error("Vui lòng chọn nhà cung cấp"), false;
+    if (!receiptDate) return toast.error("Vui lòng chọn ngày nhập"), false;
+    if (lines.length === 0) return toast.error("Chưa có dòng hàng nào"), false;
+    return true;
+  };
 
-
-
-
-const buildPayload = (): PRCreatePayload => ({
-  supplierId: supplierId!,               
-  receiptDate,
-  globalDiscountType,
-  globalDiscountValue: asNum(globalDiscountValue),
-  shippingFee: asNum(shippingFee),
-  amountPaid: asNum(amountPaid),
-  note: note || "",
-  items: lines.map((l) => ({
-    itemId: l.itemId,
-    quantity: asNum(l.quantity),
-    unitPrice: asNum(l.unitPrice),
-    discountType: l.discountType,
-    discountValue: asNum(l.discountValue),
-    receivedUomCode: l.receivedUomCode || undefined,
-    lotNumber: l.lotNumber || undefined,
-    expiryDate: l.expiryDate || undefined,
-    note: l.note || undefined,
-  })),
-});
-
-
+  // Lưu NHÁP
   const handleSaveDraft = () => {
-  if (!supplierId) return toast.error("Vui lòng chọn nhà cung cấp");
-  if (!receiptDate) return toast.error("Vui lòng chọn ngày nhập");
-  if (lines.length === 0) return toast.error("Chưa có dòng hàng nào");
+    if (!ensureValid()) return;
 
-  createDraftMu.mutate(buildPayload(), {
-    onSuccess: (res) => {
-      toast.success("Đã lưu NHÁP", { description: res?.code });
-    },
-    onError: (e: any) => {
-      toast.error(e?.response?.data?.message || e?.message || "Lưu nháp thất bại");
-    },
-  });
-};
+    if (isEdit) {
+      if (detail?.status !== "DRAFT") {
+        return toast.error("Chỉ phiếu nháp mới được chỉnh sửa");
+      }
+      updateMu.mutate(
+        { id: editingId!, postNow: false, payload: buildPayload() },
+        {
+          onSuccess: (res) => {
+            toast.success("Đã cập nhật NHÁP", {
+              description: res?.code || editingId,
+            });
+            router.push("/admin/inventories/purchase"); // Chuyển hướng sau khi cập nhật nháp
+          },
+          onError: (e: any) =>
+            toast.error(
+              e?.response?.data?.message ||
+                e?.message ||
+                "Cập nhật nháp thất bại"
+            ),
+        }
+      );
+    } else {
+      createDraftMu.mutate(buildPayload(), {
+        onSuccess: (res) => {
+          toast.success("Đã lưu NHÁP", { description: res?.code });
+          router.push("/admin/inventories/purchase");
+        },
+        onError: (e: any) =>
+          toast.error(
+            e?.response?.data?.message || e?.message || "Lưu nháp thất bại"
+          ),
+      });
+    }
+  };
 
-const handleComplete = () => {
-  if (!supplierId) return toast.error("Vui lòng chọn nhà cung cấp");
-  if (!receiptDate) return toast.error("Vui lòng chọn ngày nhập");
-  if (lines.length === 0) return toast.error("Chưa có dòng hàng nào");
+  // Hoàn thành (POST NOW)
+  const handleComplete = () => {
+    if (!ensureValid()) return;
 
-  createFinalMu.mutate(buildPayload(), {
-    onSuccess: (res) => {
-      toast.success("Đã tạo phiếu (HOÀN THÀNH)", { description: res?.code });
-      // reset form
-      setLines([]);
-      setGlobalDiscountValue("");
-      setShippingFee("");
-      setAmountPaid("");
-      setNote("");
-    },
-    onError: (e: any) => {
-      toast.error(e?.response?.data?.message || e?.message || "Tạo phiếu thất bại");
-    },
-  });
-};
+    if (isEdit) {
+      if (detail?.status !== "DRAFT") {
+        return toast.error("Chỉ phiếu nháp mới được ghi sổ");
+      }
+      updateMu.mutate(
+        { id: editingId!, postNow: true, payload: buildPayload() },
+        {
+          onSuccess: (res) => {
+            toast.success("Đã ghi sổ phiếu", {
+              description: res?.code || editingId,
+            });
+            router.push("/admin/inventories/purchase");
+          },
+          onError: (e: any) =>
+            toast.error(
+              e?.response?.data?.message || e?.message || "Ghi sổ thất bại"
+            ),
+        }
+      );
+    } else {
+      createFinalMu.mutate(buildPayload(), {
+        onSuccess: (res) => {
+          toast.success("Đã tạo phiếu (HOÀN THÀNH)", {
+            description: res?.code,
+          });
+          router.push("/admin/inventories/purchase");
+        },
+        onError: (e: any) =>
+          toast.error(
+            e?.response?.data?.message || e?.message || "Tạo phiếu thất bại"
+          ),
+      });
+    }
+  };
 
+  const isNotDraft = isEdit && detail?.status !== "DRAFT";
+  const norm = (s?: string) => (s ?? "").trim().toUpperCase();
+
+  // kiểm tra: lô có trùng với dòng khác (cùng item + uom) không?
+  const isLotDuplicate = (tmpId: string, lot?: string, uom?: string) => {
+    const me = lines.find((x) => x.tmpId === tmpId);
+    if (!me) return false;
+
+    const key = (it: {
+      itemId: string;
+      receivedUomCode?: string;
+      lotNumber?: string;
+    }) => `${it.itemId}|${norm(it.receivedUomCode)}|${norm(it.lotNumber)}`;
+
+    const myKey = `${me.itemId}|${norm(uom ?? me.receivedUomCode)}|${norm(
+      lot ?? me.lotNumber
+    )}`;
+    if (!norm(lot ?? me.lotNumber)) return false; // chưa nhập lô thì không check
+
+    return lines.some((l) => l.tmpId !== tmpId && key(l) === myKey);
+  };
   /** ---------- UI ---------- */
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Tạo phiếu nhập</h1>
+        <h1 className="text-2xl font-semibold">
+          {isEdit
+            ? `Sửa phiếu ${detail?.code ? `— ${detail.code}` : ""}`
+            : "Tạo phiếu nhập"}
+        </h1>
         <div className="text-sm text-muted-foreground">
           Cần trả NCC: <b className="text-black">{currency(grandTotal)}</b>
         </div>
       </div>
 
+      {/* Nếu muốn: hiện cảnh báo khi không phải DRAFT */}
+      {isNotDraft && (
+        <div className="text-sm text-amber-600">
+          Phiếu không ở trạng thái NHÁP – chỉ xem, không thể sửa/ghi sổ.
+        </div>
+      )}
+
       <FormBasics
+        // nếu các component hỗ trợ, có thể truyền disabled={isNotDraft}
         receiptDate={receiptDate}
         setReceiptDate={setReceiptDate}
         note={note}
@@ -160,43 +289,88 @@ const handleComplete = () => {
         setShippingFee={setShippingFee}
         amountPaid={amountPaid}
         setAmountPaid={setAmountPaid}
-        renderTotals={<TotalsBar subTotal={Math.max(0, subTotal)} grandTotal={Math.max(0, grandTotal)} />}
+        renderTotals={
+          <TotalsBar
+            subTotal={Math.max(0, subTotal)}
+            grandTotal={Math.max(0, grandTotal)}
+          />
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <IngredientPicker onAdd={addLine} onOpenAddIngredient={setOpenAddIngredient} />
-        <SupplierPicker supplierId={supplierId} setSupplierId={setSupplierId} onOpenAddSupplier={setOpenAddSupplier} />
+        <IngredientPicker
+          onAdd={addLine}
+          onOpenAddIngredient={setOpenAddIngredient}
+          // disabled={isNotDraft}
+        />
+        <SupplierPicker
+          supplierId={supplierId}
+          setSupplierId={setSupplierId}
+          onOpenAddSupplier={setOpenAddSupplier}
+          // disabled={isNotDraft}
+        />
       </div>
 
-      <LinesTable lines={lines} onUpdateLine={updateLine} onRemoveLine={removeLine} />
+      <LinesTable
+        lines={lines}
+        onUpdateLine={updateLine}
+        onRemoveLine={removeLine}
+        isLotDuplicate={isLotDuplicate}
+        // disabled={isNotDraft}
+      />
 
       <div className="flex items-center justify-end gap-2">
+        {!isEdit && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setLines([]);
+              setGlobalDiscountValue("");
+              setShippingFee("");
+              setAmountPaid("");
+              setNote("");
+            }}
+          >
+            Xoá trắng
+          </Button>
+        )}
+
         <Button
           variant="outline"
-          onClick={() => {
-            setLines([]);
-            setGlobalDiscountValue("");
-            setShippingFee("");
-            setAmountPaid("");
-            setNote("");
-          }}
+          onClick={handleSaveDraft}
+          disabled={isNotDraft || createDraftMu.isPending || updateMu.isPending}
         >
-          Xoá trắng
+          {isEdit
+            ? updateMu.isPending
+              ? "Đang lưu nháp…"
+              : "Cập nhật nháp"
+            : createDraftMu.isPending
+            ? "Đang lưu nháp…"
+            : "Lưu nháp"}
         </Button>
-      <div className="flex items-center justify-end gap-2">
-  <Button variant="outline" onClick={handleSaveDraft} disabled={createDraftMu.isPending}>
-    {createDraftMu.isPending ? "Đang lưu nháp..." : "Lưu nháp"}
-  </Button>
 
-  <Button onClick={handleComplete} disabled={createFinalMu.isPending}>
-    {createFinalMu.isPending ? "Đang lưu..." : "Hoàn thành"}
-  </Button>
-</div>
+        <Button
+          onClick={handleComplete}
+          disabled={isNotDraft || createFinalMu.isPending || updateMu.isPending}
+        >
+          {isEdit
+            ? updateMu.isPending
+              ? "Đang ghi sổ…"
+              : "Ghi sổ (Hoàn thành)"
+            : createFinalMu.isPending
+            ? "Đang lưu…"
+            : "Hoàn thành"}
+        </Button>
       </div>
 
-      {/* Modals */}
-      <AddSupplierModal open={openAddSupplier} onOpenChange={setOpenAddSupplier} />
-      <AddIngredientModal open={openAddIngredient} onOpenChange={setOpenAddIngredient} />
+      <AddSupplierModal
+        open={openAddSupplier}
+        onOpenChange={setOpenAddSupplier}
+      />
+      <AddIngredientModal
+        open={openAddIngredient}
+        onOpenChange={setOpenAddIngredient}
+      />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// src/components/admin/inventories/purchase/lines/LineTable.tsx
 "use client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Th, Td } from "@/helper/purchase";
@@ -8,10 +9,15 @@ export default function LinesTable({
   lines,
   onUpdateLine,
   onRemoveLine,
+  disabled = false,
+  isLotDuplicate, // <-- NEW
 }: {
   lines: Line[];
   onUpdateLine: (tmpId: string, patch: Partial<Line>) => void;
   onRemoveLine: (tmpId: string) => void;
+  disabled?: boolean;
+  // NEW: hàm kiểm tra trùng lô (cùng SP + ĐVT)
+  isLotDuplicate?: (tmpId: string, lot?: string, uom?: string) => boolean;
 }) {
   return (
     <Card>
@@ -42,6 +48,11 @@ export default function LinesTable({
                   l={l}
                   onUpdate={(patch) => onUpdateLine(l.tmpId, patch)}
                   onRemove={() => onRemoveLine(l.tmpId)}
+                  disabled={disabled}
+                  // pass xuống LineRow
+                  checkLot={(lot?: string, uom?: string) =>
+                    isLotDuplicate?.(l.tmpId, lot, uom) ?? false
+                  }
                 />
               ))}
 

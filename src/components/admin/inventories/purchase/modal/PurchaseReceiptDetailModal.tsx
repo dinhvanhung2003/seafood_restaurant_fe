@@ -1,13 +1,16 @@
 "use client";
 
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils"; // nếu có, không thì bỏ
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { printPurchaseReceipt } from "@/lib/print/purchase_receipt";
+import { useRouter } from "next/navigation";
 type ReceiptItem = {
   id: string;
   itemId: string;
@@ -16,10 +19,11 @@ type ReceiptItem = {
   unitPrice: number;
   discountType: "AMOUNT" | "PERCENT";
   discountValue: number;
-  receivedUnit?: string;
+  receivedUomCode?: string;
+  receivedUomName?: string;
   conversionToBase?: number;
   lotNumber?: string;
-  expiryDate?: string; // YYYY-MM-DD
+  expiryDate?: string;
   lineTotal: number;
 };
 
@@ -57,6 +61,7 @@ export default function PurchaseReceiptDetailModal({
 }) {
   const [data, setData] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!open || !id) return;
@@ -66,6 +71,14 @@ export default function PurchaseReceiptDetailModal({
       .then((r) => setData(r.data))
       .finally(() => setLoading(false));
   }, [open, id]);
+
+  // === handler nhảy sang trang SỬA ===
+  const handleEdit = () => {
+    if (!data?.id) return;
+    onOpenChange(false);
+    // đổi sang mở trang tạo với query id
+    router.push(`/admin/inventories/purchase/new?id=${data.id}`);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,7 +106,9 @@ export default function PurchaseReceiptDetailModal({
                 </div>
                 <div>
                   <div className="text-slate-500 text-sm">Nhà cung cấp</div>
-                  <div className="font-medium">{data.supplier?.name || "—"}</div>
+                  <div className="font-medium">
+                    {data.supplier?.name || "—"}
+                  </div>
                 </div>
                 <div>
                   {/* <div className="text-slate-500 text-sm">Trạng thái</div>
@@ -146,7 +161,7 @@ export default function PurchaseReceiptDetailModal({
                           {fmtDiscount(it.discountType, it.discountValue)}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          {it.receivedUnit || "—"}
+                          {it.receivedUomName ?? it.receivedUomCode ?? "—"}
                         </td>
                         <td className="px-3 py-2 text-right">
                           {money(it.lineTotal)}
@@ -172,9 +187,12 @@ export default function PurchaseReceiptDetailModal({
                         )})`}
                       </td>
                       <td className="px-3 py-2 text-right font-medium">
-                        -{money(
+                        -
+                        {money(
                           data.globalDiscountType === "PERCENT"
-                            ? Math.round((data.subTotal * data.globalDiscountValue) / 100)
+                            ? Math.round(
+                                (data.subTotal * data.globalDiscountValue) / 100
+                              )
                             : data.globalDiscountValue
                         )}
                       </td>
@@ -188,7 +206,10 @@ export default function PurchaseReceiptDetailModal({
                       </td>
                     </tr>
                     <tr className="border-t">
-                      <td colSpan={5} className="px-3 py-2 text-right font-semibold">
+                      <td
+                        colSpan={5}
+                        className="px-3 py-2 text-right font-semibold"
+                      >
                         Tổng thanh toán
                       </td>
                       <td className="px-3 py-2 text-right font-semibold">
@@ -199,13 +220,15 @@ export default function PurchaseReceiptDetailModal({
                       <td colSpan={5} className="px-3 py-2 text-right">
                         Đã thanh toán
                       </td>
-                      <td className="px-3 py-2 text-right">{money(data.amountPaid)}</td>
+                      <td className="px-3 py-2 text-right">
+                        {money(data.amountPaid)}
+                      </td>
                     </tr>
                     <tr>
                       <td colSpan={5} className="px-3 py-2 text-right">
                         Còn phải trả
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right font-bold text-red-500 text-lg">
                         {money(data.grandTotal - data.amountPaid)}
                       </td>
                     </tr>
@@ -214,28 +237,35 @@ export default function PurchaseReceiptDetailModal({
               </div>
 
               <div className="flex justify-end gap-2">
+                {/* Hiện nút SỬA khi là nháp */}
+                {data.status === "DRAFT" && (
+                  <Button variant="secondary" onClick={handleEdit}>
+                    Sửa
+                  </Button>
+                )}
+
                 <Button
-    variant="outline"
-    onClick={() => {
-      if (!data) return;
-      printPurchaseReceipt(data, {
-        openInNewTab: false, // hoặc true nếu bạn thích mở tab mới
-        currencyLocale: "vi-VN",
-        currencyPrefix: "",  // nếu muốn thêm "₫ " thì set "₫ "
-        title: "PHIẾU NHẬP HÀNG",
-        company: {
-          name: "Nhà hàng Hải Sản",
-          address: "Nguyễn Văn Bảo, Gò Vấp, TP.HCM",
-          phone: "0909 000 000",
-          taxCode: "0123456789",
-          // logoUrl: "/logo.png" // nếu có
-        },
-        footerText: "Phiếu in từ hệ thống",
-      });
-    }}
-  >
-    In/PDF
-  </Button>
+                  variant="outline"
+                  onClick={() => {
+                    if (!data) return;
+                    printPurchaseReceipt(data, {
+                      openInNewTab: false, // hoặc true nếu bạn thích mở tab mới
+                      currencyLocale: "vi-VN",
+                      currencyPrefix: "", // nếu muốn thêm "₫ " thì set "₫ "
+                      title: "PHIẾU NHẬP HÀNG",
+                      company: {
+                        name: "Nhà hàng Hải Sản",
+                        address: "Nguyễn Văn Bảo, Gò Vấp, TP.HCM",
+                        phone: "0909 000 000",
+                        taxCode: "0123456789",
+                        // logoUrl: "/logo.png" // nếu có
+                      },
+                      footerText: "Phiếu in từ hệ thống",
+                    });
+                  }}
+                >
+                  In/PDF
+                </Button>
                 <Button onClick={() => onOpenChange(false)}>Đóng</Button>
               </div>
             </>

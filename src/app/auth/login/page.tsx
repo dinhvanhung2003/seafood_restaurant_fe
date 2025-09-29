@@ -1,5 +1,6 @@
 import LoginClient from "./LoginClient";
 
+
 export default async function Page({
   searchParams,
 }: {
@@ -10,3 +11,4 @@ export default async function Page({
 
   return <LoginClient back={back} />;
 }
+
