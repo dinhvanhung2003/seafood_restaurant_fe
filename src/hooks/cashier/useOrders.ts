@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import type { OrdersByTable, UIOrderItem } from "@/lib/cashier/pos-helpers";
 import type { ItemStatus } from "@/types/types";
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 const _uid = () => Math.random().toString(36).slice(2, 9);
 
 // Tạo batchId an toàn phía client
@@ -19,33 +19,29 @@ const makeBatchId = () => {
 };
 
 type UseOrdersArgs = {
-  token?: string;
   menuItems: { id: string; price: number }[];
 };
 
-/* ----------------------- API helpers ----------------------- */
-async function fetchOrders(token?: string) {
-  const url = `${API_BASE}/orders?page=1&limit=200&excludeStatus=PAID,CANCELLED`;
-  const res = await fetch(url, {
-    headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    cache: "no-store",
+/* ----------------------- API helpers (qua axios instance) ----------------------- */
+async function fetchOrders() {
+  const res = await api.get("/orders", {
+    params: { page: 1, limit: 200, excludeStatus: "PAID,CANCELLED" },
   });
-  if (!res.ok) throw new Error(await res.text());
-  const json = await res.json();
+  const json = res.data;
   return Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
 }
 
 /* ----------------------- Hook chính ----------------------- */
-export function useOrders({ token }: UseOrdersArgs) {
+export function useOrders() {
   const qc = useQueryClient();
 
   const [orders, setOrders] = useState<OrdersByTable>({});
   const [orderIds, setOrderIds] = useState<Record<string, string>>({});
 
   const activeOrdersQuery = useQuery({
-    queryKey: ["active-orders", token],
-    queryFn: () => fetchOrders(token),
-    enabled: !!token,
+    queryKey: ["active-orders"], // đủ nếu auth chạy qua interceptor
+    queryFn: () => fetchOrders(),
+    enabled: true, // nếu vẫn muốn chặn khi chưa có token: !!token
     staleTime: 10_000,
   });
 
@@ -111,45 +107,36 @@ export function useOrders({ token }: UseOrdersArgs) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
   });
 
-  const setItemQtyMu = useMutation({
-    mutationFn: async (arg: { orderId: string; orderItemId: string; quantity: number; menuItemId: string }) => {
-      try {
-        const res = await api.patch(`/orders/${arg.orderId}/items/${arg.orderItemId}/qty`, {
-          quantity: arg.quantity,
-        });
-        return res.data;
-      } catch (e: any) {
-        if (e?.response?.status === 404) {
-          // fallback: remove + add lại
-          await api.patch(`/orders/${arg.orderId}/items/${arg.orderItemId}/remove`, {});
-          if (arg.quantity > 0) {
-            await api.post(`/orders/${arg.orderId}/items`, {
-              items: [{ menuItemId: arg.menuItemId, quantity: arg.quantity }],
-            });
-          }
-          return { ok: true };
-        }
-        if (e?.response?.status === 400) {
-          toast.error("Không thể chỉnh số lượng ở trạng thái hiện tại.");
-        }
-        throw e;
-      }
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
-  });
-
-
-
-
-const muMoveOne = useMutation({
-  mutationFn: ({ itemId, to }: { itemId: string; to: ItemStatus }) =>
-    api.patch('/orderitems/move-one', { itemId, to }),
-  onSuccess: () => {
-    const hit = (k: string) => qc.invalidateQueries({ queryKey: ['items', k] });
-    hit('NEW_ROWS'); hit('PREPARING'); hit('READY');
+const setItemQtyMu = useMutation({
+  mutationFn: async (arg: { orderId: string; orderItemId: string; quantity: number; menuItemId: string }) => {
+    try {
+      const res = await api.patch(`/orders/${arg.orderId}/items/${arg.orderItemId}/qty`, {
+        quantity: arg.quantity,
+      });
+      return { ok: true, data: res.data as any };
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 404) return { ok: false, reason: "NOT_FOUND" as const };
+      if (status === 400) return { ok: false, reason: "LOCKED" as const };
+      throw e;
+    }
+  },
+  onSuccess: (data) => {
+    if (data?.ok) qc.invalidateQueries({ queryKey: ["active-orders"] });
   },
 });
 
+
+  const muMoveOne = useMutation({
+    mutationFn: ({ itemId, to }: { itemId: string; to: ItemStatus }) =>
+      api.patch("/orderitems/move-one", { itemId, to }).then((r) => r.data),
+    onSuccess: () => {
+      const hit = (k: string) => qc.invalidateQueries({ queryKey: ["items", k] });
+      hit("NEW_ROWS");
+      hit("PREPARING");
+      hit("READY");
+    },
+  });
 
   // Soft re-confirm (báo bếp)
   const updateStatusMu = useMutation({
@@ -171,7 +158,7 @@ const muMoveOne = useMutation({
     },
   });
 
-   const cashPayMu = useMutation({
+  const cashPayMu = useMutation({
     mutationFn: async ({ invoiceId, amount }: { invoiceId: string; amount: number }) => {
       const res = await api.post(`/invoices/${invoiceId}/payments`, {
         amount,
@@ -184,7 +171,8 @@ const muMoveOne = useMutation({
 
   const cancelMu = useMutation({
     mutationFn: async (orderId: string) => {
-      await api.patch(`/orders/${orderId}/cancel`, { reason: "Cashier cancel" });
+      const res = await api.patch(`/orders/${orderId}/cancel`, { reason: "Cashier cancel" });
+      return res.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
   });
@@ -192,30 +180,44 @@ const muMoveOne = useMutation({
   /* ----------------------- Actions ----------------------- */
 
   // Thêm 1 món (tạo order nếu chưa có)
-  async function addOne(tableId: string, menuItemId: string) {
+ async function addOne(tableId: string, menuItemId: string) {
   let oid = orderIds[tableId];
   if (!oid) {
     const created = await createOrderMu.mutateAsync({
-      tableId, items: [{ menuItemId, quantity: 1 }], orderType: "DINE_IN",
+      tableId,
+      items: [{ menuItemId, quantity: 1 }],
+      orderType: "DINE_IN",
     });
     oid = created.id;
     setOrderIds((p) => ({ ...p, [tableId]: oid! }));
     return;
   }
 
-  // tìm item hiện có (theo menuItemId) trong state hiện tại
   const curItems = orders[tableId]?.orders?.[0]?.items ?? [];
   const ex = curItems.find((x) => x.id === menuItemId);
 
-  if (ex?.rowId) {
-    // tăng số lượng trên đúng dòng (không tạo dòng mới)
-    await setItemQtyMu.mutateAsync({
-      orderId: oid, orderItemId: ex.rowId, quantity: ex.qty + 1, menuItemId
-    });
-  } else {
+  if (!ex?.rowId) {
     await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
+    return;
+  }
+
+  // đã có rowId -> thử tăng qty
+  const r = await setItemQtyMu.mutateAsync({
+    orderId: oid,
+    orderItemId: ex.rowId,
+    quantity: ex.qty + 1,
+    menuItemId,
+  });
+
+  if (!r?.ok) {
+    // row bị khóa (PREPARING/READY) hoặc 404 -> tạo dòng mới
+    if (r.reason === "LOCKED" || r.reason === "NOT_FOUND") {
+      await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
+    }
   }
 }
+
+
 
   // Thêm nhiều món trong 1 lần báo (gom cùng batchId)
   async function addMany(
@@ -227,8 +229,7 @@ const muMoveOne = useMutation({
     let oid = orderIds[tableId];
 
     if (!oid) {
-      // Tạo đơn ban đầu với các items (nếu muốn đảm bảo batch cho lần đầu,
-      // có thể tạo đơn trống rồi gọi addItemsMu với batchId; tuỳ bạn).
+      // Tạo đơn ban đầu với các items
       const created = await createOrderMu.mutateAsync({
         tableId,
         items,
@@ -245,24 +246,39 @@ const muMoveOne = useMutation({
 
   const addWithBatch = addMany;
 
-  async function changeQty(tableId: string, menuItemId: string, delta: number, currentItems: UIOrderItem[]) {
-    const oid = orderIds[tableId];
-    if (!oid) {
-      if (delta > 0) return addOne(tableId, menuItemId);
-      return;
-    }
-    const it = currentItems.find((x) => x.id === menuItemId);
-    const cur = it?.qty ?? 0;
-    const next = Math.max(0, cur + delta);
-
-    if (!it && delta > 0) {
-      await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
-      return;
-    }
-    if (!it) return;
-
-    await setItemQtyMu.mutateAsync({ orderId: oid, orderItemId: it.rowId!, quantity: next, menuItemId });
+async function changeQty(tableId: string, menuItemId: string, delta: number, currentItems: UIOrderItem[]) {
+  const oid = orderIds[tableId];
+  if (!oid) {
+    if (delta > 0) return addOne(tableId, menuItemId);
+    return;
   }
+  const it = currentItems.find((x) => x.id === menuItemId);
+  const cur = it?.qty ?? 0;
+  const next = Math.max(0, cur + delta);
+
+  if (!it && delta > 0) {
+    await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
+    return;
+  }
+  if (!it) return;
+
+  try {
+    await setItemQtyMu.mutateAsync({
+      orderId: oid, orderItemId: it.rowId!, quantity: next, menuItemId,
+    });
+  } catch (e: any) {
+    if (e?.response?.status === 400 && delta > 0) {
+      // ✅ row bị khóa (PREPARING/READY) → thêm dòng mới với delta dương
+      await addItemsMu.mutateAsync({
+        orderId: oid,
+        items: [{ menuItemId, quantity: delta }],
+      });
+      return;
+    }
+    throw e;
+  }
+}
+
 
   async function clear(tableId: string, items: UIOrderItem[]) {
     const oid = orderIds[tableId];
@@ -300,8 +316,8 @@ const muMoveOne = useMutation({
     orders,
     orderIds,
     addOne,
-    addMany,       // dùng để gom món trong 1 batch
-    addWithBatch,  // alias
+    addMany, // dùng để gom món trong 1 batch
+    addWithBatch, // alias
     changeQty,
     clear,
     confirm,

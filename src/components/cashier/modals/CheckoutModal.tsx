@@ -21,13 +21,23 @@ import {
 import { useCashierStore } from "@/store/cashier";
 type PayMethod = "cash" | "card" | "vnpay";
 
-type ReceiptLine = { id: string; name: string; qty: number; price: number; total: number; };
+type ReceiptLine = {
+  id: string;        // menuItemId
+  name: string;
+  qty: number;
+  price: number;
+  total: number;
+  rowId?: string;    // <-- optional
+};
+
+
 export type Receipt = {
   id: string; tableId: string; tableName: string; createdAt: string; cashier: string;
   items: ReceiptLine[]; subtotal: number; discount: number; total: number; paid: number; change: number; method: PayMethod;
   customerName?: string;
   guestCount?: number;
 };
+
 
 type Props = {
   open: boolean; onClose: () => void;
@@ -46,13 +56,20 @@ const selectedCus = useCashierStore(s => s.selectedCustomer);
   const clearSelectedCus = useCashierStore(s => s.clearSelectedCustomer);
  const guestCount = useCashierStore((s) => s.guestCount);
   const resetGuest = useCashierStore((s) => s.resetGuestCount);
-  const lines: ReceiptLine[] = useMemo(() => {
-    return items.map((it) => {
-      const m = catalog.items.find((x) => x.id === it.id);
-      if (!m) return null as any;
-      return { id: it.id, name: m.name, qty: it.qty, price: m.price, total: m.price * it.qty };
-    }).filter(Boolean) as ReceiptLine[];
-  }, [items, catalog.items]);
+ const lines: ReceiptLine[] = useMemo(() => {
+  const map = new Map<string, ReceiptLine>(); // key = menuItemId
+  for (const it of items) {
+    const m = catalog.items.find((x) => x.id === it.id);
+    if (!m) continue;
+    const cur = map.get(it.id) ?? { id: it.id, name: m.name, qty: 0, price: m.price, total: 0 };
+    cur.qty += it.qty;
+    cur.total = cur.qty * cur.price;
+    map.set(it.id, cur);
+  }
+  return Array.from(map.values());
+}, [items, catalog.items]);
+
+
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.total, 0), [lines]);
 
@@ -211,18 +228,24 @@ const invoice = invRes.data;
               <div className="rounded-xl border flex flex-col min-h-0">
                 <div className="flex items-center justify-between px-4 py-3">
                   <div className="font-medium">Khác</div>
-                  <Badge variant="secondary">{items.reduce((s, i) => s + i.qty, 0)} món</Badge>
+             <Badge variant="secondary">
+  {lines.length} món
+</Badge>
+
+
                 </div>
                 <Separator />
                 <div className="flex-1 overflow-auto p-4 space-y-3">
-                  {lines.map((l) => (
-                    <div key={l.id} className="grid grid-cols-12 items-center text-sm">
-                      <div className="col-span-6 truncate font-medium">{l.name}</div>
-                      <div className="col-span-2 text-center">x{l.qty}</div>
-                      <div className="col-span-2 text-right">{currency(l.price)}</div>
-                      <div className="col-span-2 text-right font-semibold">{currency(l.total)}</div>
-                    </div>
-                  ))}
+                 {lines.map((l) => (
+  <div key={l.id} className="grid grid-cols-12 items-center text-sm">
+    <div className="col-span-6 truncate font-medium">{l.name}</div>
+    <div className="col-span-2 text-center">x{l.qty}</div>
+    <div className="col-span-2 text-right">{currency(l.price)}</div>
+    <div className="col-span-2 text-right font-semibold">{currency(l.total)}</div>
+  </div>
+))}
+
+
                 </div>
               </div>
 

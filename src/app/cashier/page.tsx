@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, UtensilsCrossed, LayoutGrid, Grid3X3, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ensureSocketReady } from "@/lib/socket";
 import CancelItemsModal, { CancelTarget } from "@/components/cashier/modals/CancelModal";
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
@@ -29,24 +28,6 @@ import { calcOrderTotal, mapAreasToTables, selectMenuItems } from "@/lib/cashier
 import {ItemStatus} from "@/types/types";
 export default function POSPage() {
   const qc = useQueryClient();
-  const { data: session } = useSession();
-  const token = (session as any)?.accessToken as string | undefined;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   
   // ===== local UI state =====
   const [localOrderCreatedAt, setLocalOrderCreatedAt] = useState<Record<string, string>>({});
@@ -75,8 +56,8 @@ useEffect(() => {
 }, []);
 
   // ===== queries =====
-  const areasQuery = useAreas(token);
-  const menuQuery = useMenu({ page: menuPage, limit: menuLimit, search: menuSearch, categoryId, token });
+  const areasQuery = useAreas();
+  const menuQuery = useMenu({ page: menuPage, limit: menuLimit, search: menuSearch, categoryId });
 
   // ===== derive =====
   const baseTables: TableType[] = useMemo(() => mapAreasToTables(areasQuery.data ?? []), [areasQuery.data]);
@@ -92,7 +73,7 @@ useEffect(() => {
 
   // ===== orders hook (logic gọi API) =====
  const { activeOrdersQuery, orders, orderIds, addOne, changeQty, clear, confirm: confirmOrder, pay,cancel } =
-  useOrders({ token, menuItems });
+  useOrders();
 
 
 

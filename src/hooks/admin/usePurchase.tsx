@@ -1,5 +1,5 @@
 // src/hooks/purchase/usePurchaseReceipts.ts
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient,keepPreviousData } from "@tanstack/react-query";
 import api from "@/lib/axios";
 
 /** ===== Types theo swagger mới ===== */
@@ -32,12 +32,23 @@ export interface PRCreateResponse {
   id: string;
   code: string;
 }
-
+export type PRListResp = {
+  data: any[];
+  total: number;
+  page: number;       // 1-based
+  limit: number;
+  totalPages: number;
+};
 /** ===== Queries ===== */
-export function usePRList(params: { page?: number; limit?: number }) {
+export function usePRList(params: { page: number; limit: number }) {
   return useQuery({
-    queryKey: ["pr-list", params],
-    queryFn: async () => (await api.get("/purchasereceipt/list", { params })).data,
+    queryKey: ["pr-list", params.page, params.limit],
+    queryFn: async (): Promise<PRListResp> => {
+      const { data } = await api.get("/purchasereceipt/list", { params }); // BE đang nhận { page, limit }
+      return data as PRListResp;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }
 

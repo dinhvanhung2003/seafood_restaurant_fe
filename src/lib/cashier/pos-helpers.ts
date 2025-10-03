@@ -1,33 +1,35 @@
-// Helpers & lightweight types cho POS
+// src/lib/cashier/pos-helpers.ts
 import type { ItemStatus } from "@/types/types";
+
 export type UIOrderItem = {
   id: string;          // menuItemId
   qty: number;
   rowId?: string;      // orderItemId
-  status?: ItemStatus; // <-- thêm
-  createAt?: string; // <-- thêm
+  status?: ItemStatus;
+  createAt?: string;
 };
 
-
-export type OrdersByTable = Record<string, {
-  activeId: string;
-  orders: { id: string; label: string; items: UIOrderItem[] }[];
-}>;
+export type OrdersByTable = Record<
+  string,
+  { activeId: string; orders: { id: string; label: string; items: UIOrderItem[] }[] }
+>;
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
 import type { Table as TableType } from "@/types/types";
 
-export function mapAreasToTables(areas: { id:string; name:string; tables:{id:string; name:string; seats:number}[] }[]): TableType[] {
+export function mapAreasToTables(
+  areas: { id: string; name: string; tables?: { id: string; name: string; seats?: number }[] }[] = []
+): TableType[] {
   const acc: TableType[] = [];
   for (const a of areas ?? []) {
-    for (const t of a.tables ?? []) {
+    for (const t of a?.tables ?? []) {
       acc.push({
-        id: t.id,
-        name: t.name,
-        floor: String(a.name),
+        id: String(t.id),
+        name: String(t.name),
+        floor: String(a?.name ?? ""),
         status: "empty",
-        seats: t.seats,
+        seats: Number(t?.seats ?? 0),
         startedAt: undefined,
         currentAmount: 0,
       } as TableType);
@@ -36,19 +38,44 @@ export function mapAreasToTables(areas: { id:string; name:string; tables:{id:str
   return acc;
 }
 
+/**
+ * Chuẩn hoá danh sách món từ nhiều shape khác nhau của BE.
+ * Hỗ trợ:
+ * - { id, name, price, category: { id }, image }
+ * - { id, name, price, categoryId, imageUrl }
+ * - { ... , isAvailable } (nếu không có thì mặc định là true)
+ */
 export function selectMenuItems(rows?: any[]) {
-  const list = rows ?? [];
+  const list = Array.isArray(rows) ? rows : [];
+
   return list
-    .filter((r) => r.isAvailable)
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      price: Number(r.price),
-      categoryId: r.category.id,
-      image: r.image ?? undefined,
-    }));
+    // chỉ loại khi BE trả rõ ràng false
+    .filter((r) => r?.isAvailable !== false)
+    .map((r) => {
+      const id = String(r?.id ?? "");
+      const name = String(r?.name ?? "");
+      const price = Number(r?.price ?? r?.menuPrice ?? 0);
+
+      // an toàn khi category null/undefined
+      const categoryId =
+        r?.category?.id ??
+        r?.categoryId ??
+        r?.category?.ID ??
+        r?.category_id ??
+        null;
+
+      const image =
+        r?.image ??
+        r?.imageUrl ??
+        r?.thumbnail ??
+        undefined;
+
+      return { id, name, price, categoryId, image };
+    })
+    // lọc các item thiếu id/name tối thiểu để tránh crash ở nơi khác
+    .filter((x) => x.id && x.name);
 }
 
 export function calcOrderTotal(items: UIOrderItem[], priceDict: Map<string, number>) {
-  return items.reduce((s, it) => s + (priceDict.get(it.id) ?? 0) * it.qty, 0);
+  return (items ?? []).reduce((s, it) => s + (priceDict.get(it.id) ?? 0) * (it.qty ?? 0), 0);
 }
