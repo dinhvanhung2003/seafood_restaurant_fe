@@ -5,7 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Field } from "@/helper/purchase";
 import type { DiscountType, NumMaybeEmpty } from "@/types/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function FormBasics({
   receiptDate,
@@ -44,10 +50,18 @@ export default function FormBasics({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Ngày">
-            <Input type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+            <Input
+              type="date"
+              value={receiptDate}
+              onChange={(e) => setReceiptDate(e.target.value)}
+            />
           </Field>
           <Field label="Ghi chú phiếu" className="md:col-span-2">
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+            />
           </Field>
         </div>
 
@@ -56,7 +70,10 @@ export default function FormBasics({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Field label="Giảm giá toàn phiếu">
             <div className="flex gap-2">
-              <Select value={globalDiscountType} onValueChange={(v) => setGlobalDiscountType(v as DiscountType)}>
+              <Select
+                value={globalDiscountType}
+                onValueChange={(v) => setGlobalDiscountType(v as DiscountType)}
+              >
                 <SelectTrigger className="w-[120px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -67,8 +84,14 @@ export default function FormBasics({
               </Select>
               <Input
                 type="number"
-                value={globalDiscountValue === "" ? "" : String(globalDiscountValue)}
-                onChange={(e) => setGlobalDiscountValue(e.target.value === "" ? "" : Number(e.target.value))}
+                value={
+                  globalDiscountValue === "" ? "" : String(globalDiscountValue)
+                }
+                onChange={(e) =>
+                  setGlobalDiscountValue(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
               />
             </div>
           </Field>
@@ -77,7 +100,11 @@ export default function FormBasics({
             <Input
               type="number"
               value={shippingFee === "" ? "" : String(shippingFee)}
-              onChange={(e) => setShippingFee(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) =>
+                setShippingFee(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -85,7 +112,11 @@ export default function FormBasics({
             <Input
               type="number"
               value={amountPaid === "" ? "" : String(amountPaid)}
-              onChange={(e) => setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) =>
+                setAmountPaid(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
             />
           </Field>
 

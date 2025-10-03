@@ -64,7 +64,12 @@ export function usePRCreate() {
   const qc = useQueryClient();
   return useMutation<PRCreateResponse, unknown, PRCreatePayload>({
     mutationFn: async (payload) =>
-      (await api.post<PRCreateResponse>("/purchasereceipt/create-purreceipt-posted", payload)).data,
+      (
+        await api.post<PRCreateResponse>(
+          "/purchasereceipt/create-purreceipt-posted",
+          payload
+        )
+      ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-list"] });
     },
@@ -80,9 +85,38 @@ export function usePRCreateDraft() {
   const qc = useQueryClient();
   return useMutation<PRCreateResponse, unknown, PRCreatePayload>({
     mutationFn: async (payload) =>
-      (await api.post<PRCreateResponse>("/purchasereceipt/create-purreceipt-draft", payload)).data,
+      (
+        await api.post<PRCreateResponse>(
+          "/purchasereceipt/create-purreceipt-draft",
+          payload
+        )
+      ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-list"] });
+    },
+  });
+}
+
+// bổ sung type cho update (thực chất same create, chỉ thêm status/updatedBy optional)
+export interface PRUpdatePayload extends PRCreatePayload {}
+
+// ---- UPDATE Draft PUT /purchasereceipt/update/:id?postNow=... ----
+export function usePRUpdateDraftOrPost() {
+  const qc = useQueryClient();
+  return useMutation<
+    any,
+    unknown,
+    { id: string; postNow: boolean | string; payload: PRUpdatePayload }
+  >({
+    mutationFn: async ({ id, postNow, payload }) =>
+      (
+        await api.put(`/purchasereceipt/update-draft-or-post/${id}`, payload, {
+          params: { postNow },
+        })
+      ).data,
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["pr-list"] });
+      qc.invalidateQueries({ queryKey: ["pr-one", vars.id] });
     },
   });
 }
