@@ -62,13 +62,19 @@ useEffect(() => {
   // ===== derive =====
   const baseTables: TableType[] = useMemo(() => mapAreasToTables(areasQuery.data ?? []), [areasQuery.data]);
   const menuItems = useMemo(() => selectMenuItems(menuQuery.data?.data), [menuQuery.data]);
-  const menuCategories = useMemo(
-    () => [{ id: "all", name: "Tất cả" }, ...((menuQuery.data?.data ?? []).reduce((s:any[], r:any) => {
-      if (!s.find((x) => x.id === r.category.id)) s.push({ id: r.category.id, name: r.category.name });
-      return s;
-    }, []))],
-    [menuQuery.data],
-  );
+ const menuCategories = useMemo(() => {
+  const items = menuQuery.data?.data ?? [];
+
+  const map = new Map<string, { id: string; name: string }>();
+  for (const r of items) {
+    const id = r?.category?.id;
+    const name = r?.category?.name;
+    if (!id) continue; // bỏ qua nếu không có category
+    if (!map.has(id)) map.set(id, { id, name: name ?? "" });
+  }
+
+  return [{ id: "all", name: "Tất cả" }, ...map.values()];
+}, [menuQuery.data?.data]);
   const menuCatalog = useMemo(() => ({ categories: menuCategories, items: menuItems }) as unknown as CatalogType, [menuCategories, menuItems]);
 
   // ===== orders hook (logic gọi API) =====

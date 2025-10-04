@@ -43,6 +43,7 @@
     "react-confetti": "^6.4.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.62.0",
+    "react-qr-code": "^2.0.18",
     "recharts": "^3.2.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",

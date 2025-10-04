@@ -1,5 +1,5 @@
 "use client";
-
+ import QRCode from "react-qr-code";
 import { toast } from "sonner";
 import { useMemo, useState, useEffect } from "react";
 import {
@@ -14,12 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import type { Catalog, OrderItem, Table as TableType } from "@/types/types";
 import { currency } from "@/utils/money";
 import { printReceipt } from "@/lib/print";
-import api from "@/lib/axios"; // ✅ default import (QUAN TRỌNG)
+import QrPanel from "@/components/cashier/modals/QrPanel";
+import PaymentSlipPrint from "@/components/cashier/modals/PaymentSlipPrint";
+import api from "@/lib/axios"; 
 import {
   CircleDollarSign, CreditCard, Wallet, Banknote, Percent, ReceiptText,
 } from "lucide-react";
 import { useCashierStore } from "@/store/cashier";
-type PayMethod = "cash" | "card" | "vnpay";
+import PaymentQrSlip from "@/lib/print/vietqr";
+type PayMethod = "cash" | "card" | "vnpay" | "vietqr";
 
 type ReceiptLine = {
   id: string;        // menuItemId
@@ -36,6 +39,57 @@ export type Receipt = {
   items: ReceiptLine[]; subtotal: number; discount: number; total: number; paid: number; change: number; method: PayMethod;
   customerName?: string;
   guestCount?: number;
+};
+
+
+
+// === Types ===
+type VietQrResp = {
+  pngDataUrl?: string; qrBase64?: string; qrDataUrl?: string; image?: string;
+  bankName?: string; accountNo?: string; accountNumber?: string;
+  accountName?: string; amount?: number; addInfo?: string;
+};
+
+type PayOSQrState = {
+  kind: "payos";
+  invoiceId: string;
+  imgUrl?: string;        // ảnh PNG từ PayOS (nếu có)
+  qrPayload: string;      // chuỗi EMVCo hoặc fallback là checkoutUrl
+  checkoutUrl: string;
+  amount: number;
+  addInfo: string;
+};
+
+type VietQrState = {
+  kind: "vietqr";
+  invoiceId: string;
+  pngDataUrl: string;
+  bankName: string;
+  accountNo: string;
+  accountName: string;
+  amount: number;
+  addInfo: string;
+};
+
+type QRState = PayOSQrState | VietQrState;
+
+const toImgSrc = (s?: string) =>
+  s?.startsWith("data:") ? s : `data:image/png;base64,${s ?? ""}`;
+
+const normalizeQr = (raw: VietQrResp) => {
+  const src =
+    raw.pngDataUrl ??
+    raw.qrDataUrl ??
+    raw.image ??
+    (raw.qrBase64 ? `data:image/png;base64,${raw.qrBase64}` : "");
+  return {
+    pngDataUrl: src,
+    bankName: raw.bankName ?? "",
+    accountNo: raw.accountNo ?? raw.accountNumber ?? "",
+    accountName: raw.accountName ?? "",
+    amount: Number(raw.amount ?? 0),
+    addInfo: raw.addInfo ?? "",
+  };
 };
 
 
@@ -68,6 +122,14 @@ const selectedCus = useCashierStore(s => s.selectedCustomer);
   }
   return Array.from(map.values());
 }, [items, catalog.items]);
+
+
+const [qr, setQr] = useState<QRState | null>(null);
+
+const toImgSrc = (s?: string) =>
+  s?.startsWith("data:") ? s : `data:image/png;base64,${s ?? ""}`;
+
+
 
 
 
@@ -150,6 +212,117 @@ const invoice = invRes.data;
       toast.success("Thanh toán tiền mặt thành công");
       return;
     }
+if (method === "vietqr") {
+  // 1) Gọi BE tạo link PayOS (BE đã addPayment PENDING + map orderCode)
+// khi chọn "VietQR (PayOS)"
+const link = await api.post('/payments/payos/create-link', {
+  invoiceId: invoice.id,
+  amount: amountToPay,
+  buyerName: table.name,
+}).then(r => r.data); // { checkoutUrl, qrCode, ... }
+
+const isImg = typeof link.qrCode === "string" && /^(https?:|data:)/i.test(link.qrCode);
+
+setQr({
+  kind: "payos",
+  invoiceId: invoice.id,
+  imgUrl: isImg ? link.qrCode : undefined,
+  qrPayload: isImg ? link.checkoutUrl : link.qrCode, // nếu không phải ảnh → dùng chuỗi EMV; nếu là ảnh → dùng checkoutUrl để vẽ fallback
+  checkoutUrl: link.checkoutUrl,
+  amount: amountToPay,
+  addInfo: `INV:${invoice.id.slice(0, 12)}`,
+});
+
+
+await waitUntilPaid(invoice.id);
+
+  // // 3) Chờ kết quả: ưu tiên socket -> fallback polling
+  // let resolved = false;
+  // let paidAmount = 0;
+
+  // // ===== Socket (nếu bạn đã gắn sẵn socket ở window.posSocket) =====
+  // const sock: any = (globalThis as any).posSocket; // socket.io-client | undefined
+  // const onPaid = (payload: any) => {
+  //   // payload: { invoiceId, amount, method }
+  //   if (payload?.invoiceId === invoice.id) {
+  //     resolved = true;
+  //     paidAmount = Number(payload.amount || amountToPay) || amountToPay;
+  //   }
+  // };
+  // const onPartial = (payload: any) => {
+  //   // cần thì hiển thị "đã nhận X, còn Y"
+  //   // console.log('partial', payload);
+  // };
+
+  // try {
+  //   if (sock) {
+  //     if (!sock.connected) sock.connect();
+  //     sock.emit("join_invoice", { invoiceId: invoice.id });
+  //     sock.on("invoice.paid", onPaid);
+  //     sock.on("invoice.partial", onPartial);
+  //   }
+
+  //   // ===== Polling fallback (10 phút) =====
+  //   const timeoutAt = Date.now() + 10 * 60 * 1000;
+  //   while (!resolved && Date.now() < timeoutAt) {
+  //     const s = await api
+  //       .get(`/payments/status`, { params: { invoiceId: invoice.id } })
+  //       .then((r) => r.data); // { status, total, paid, remaining }
+
+  //     if (s?.status === "PAID") {
+  //       resolved = true;
+  //       paidAmount = Number(s?.paid || amountToPay) || amountToPay;
+  //       break;
+  //     }
+  //     await new Promise((r) => setTimeout(r, 2000));
+  //   }
+  // } finally {
+  //   // dọn socket listeners/room
+  //   if (sock) {
+  //     sock.emit("leave_invoice", { invoiceId: invoice.id });
+  //     sock.off("invoice.paid", onPaid);
+  //     sock.off("invoice.partial", onPartial);
+  //   }
+  // }
+
+  // // 4) Xử lý kết quả
+  // if (!resolved) {
+  //   toast.error("Không nhận được kết quả thanh toán (timeout)");
+  //   return;
+  // }
+
+  // // 5) In hoá đơn sau khi đã PAID
+  // const receipt: Receipt = {
+  //   id: invoice.id,
+  //   tableId: table.id,
+  //   tableName: `${table.name} / ${table.floor}`,
+  //   createdAt: new Date().toLocaleString(),
+  //   cashier: "Thu ngân",
+  //   items: lines,
+  //   subtotal,
+  //   discount,
+  //   total: Math.max(0, subtotal - discount),
+  //   paid: paidAmount,
+  //   change: 0,
+  //   method: "vietqr",
+  //   customerName: selectedCus?.name ?? invoice?.customer?.name ?? "Khách lẻ",
+  //   guestCount,
+  // };
+
+  // printReceipt(receipt);
+  // onSuccess(receipt);
+  // clearSelectedCus();
+  // resetGuest();
+  // onClose();
+  // toast.success("Đã nhận tiền qua VietQR");
+  // return;
+
+
+
+
+  
+}
+
 
     // === VNPAY: KHÔNG set PAID ở đây; chờ BE xác nhận IPN ===
     if (method === "vnpay") {
@@ -286,6 +459,11 @@ const invoice = invRes.data;
     <RadioGroupItem id="m4" value="vnpay" />
     <Label htmlFor="m4" className="flex items-center gap-1">VNPay</Label>
   </div>
+  <div className="flex items-center space-x-2">
+  <RadioGroupItem id="m2" value="vietqr" />
+  <Label htmlFor="m2" className="flex items-center gap-1">VietQR</Label>
+</div>
+
 </RadioGroup>
 
                     <div className="flex items-center gap-2">
@@ -308,6 +486,51 @@ const invoice = invRes.data;
             </div>
           </div>
 
+
+{qr && qr.kind === "payos" && (
+  <>
+    {/* Panel QR cho THU NGÂN xem trên màn hình */}
+    <div className="screen-only">
+      <QrPanel
+        provider="payos"
+        imgUrl={qr.imgUrl}
+        qrPayload={qr.qrPayload}
+        checkoutUrl={qr.checkoutUrl}
+        amount={qr.amount}
+        addInfo={qr.addInfo}
+        onToggle={() => setQr(null)}
+        onPrint={() => window.print()}
+      />
+    </div>
+
+    {/* MẪU PHIẾU ẨN – chỉ hiện khi in */}
+    <div id="print-slip" className="print-only">
+  <PaymentSlipPrint
+    shopName="SEAFOOD RESTAURANT"
+    shopAddress="123 Lê Lợi, Q.1, TP.HCM"
+    invoiceId={qr?.invoiceId ?? ""}
+    cashier="Thu ngân"
+    tableName={`${table.name} / ${table.floor}`}
+    customerName={selectedCus?.name ?? "Khách lẻ"}
+    checkInTime={new Date().toLocaleString("vi-VN")}
+    checkOutTime={new Date().toLocaleString("vi-VN")}
+    items={lines.map(l => ({ name: l.name, qty: l.qty, total: l.total }))}
+    subtotal={lines.reduce((s, l) => s + l.total, 0)}
+    discount={discount}
+    vatRate={10}
+    amount={qr?.amount ?? totalUI}
+    addInfo={qr?.addInfo ?? `INV:).slice(0,12)}`}
+    imgUrl={qr?.imgUrl}
+    qrPayload={qr?.qrPayload ?? qr?.checkoutUrl ?? ""}
+  />
+</div>
+  </>
+)}
+
+
+
+
+
           <DialogFooter className="p-4 border-t bg-background">
             <Button variant="secondary" onClick={onClose}>Đóng</Button>
             <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={!canConfirm} onClick={handleConfirm}>
@@ -317,9 +540,68 @@ const invoice = invRes.data;
         </div>
       </DialogContent>
     </Dialog>
+
+
+
   );
 }
 
 function receiptShortId() {
   return (Date.now() + "").slice(-4);
+}
+async function waitUntilPaid(invoiceId: string, timeoutMs = 10 * 60 * 1000) {
+  return new Promise<{ paidAmount: number }>(async (resolve, reject) => {
+    let resolved = false;
+    let paidAmount = 0;
+
+    const sock: any = (globalThis as any).posSocket;
+    const onPaid = (p: any) => {
+      if (p?.invoiceId === invoiceId) {
+        resolved = true;
+        paidAmount = Number(p?.amount || 0) || 0;
+        cleanup();
+        resolve({ paidAmount });
+      }
+    };
+    const onPartial = (_p: any) => {};
+
+    const cleanup = () => {
+      if (sock) {
+        try {
+          sock.emit('leave_invoice', { invoiceId });
+          sock.off('invoice.paid', onPaid);
+          sock.off('invoice.partial', onPartial);
+        } catch {}
+      }
+    };
+
+    try {
+      if (sock) {
+        if (!sock.connected) sock.connect();
+        sock.emit('join_invoice', { invoiceId });
+        sock.on('invoice.paid', onPaid);
+        sock.on('invoice.partial', onPartial);
+      }
+
+      const endAt = Date.now() + timeoutMs;
+      while (!resolved && Date.now() < endAt) {
+        const s = await api
+          .get('/payments/status', { params: { invoiceId } })
+          .then(r => r.data); // { status, paid, ... }
+        if (s?.status === 'PAID') {
+          resolved = true;
+          paidAmount = Number(s?.paid || 0) || 0;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    } catch (e) {
+      cleanup();
+      return reject(e);
+    }
+
+    cleanup();
+    if (!resolved) return reject(new Error('TIMEOUT'));
+    resolve({ paidAmount });
+  });
 }

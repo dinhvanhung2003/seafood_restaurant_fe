@@ -1,5 +1,26 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
+/* Mặc định: slip ẩn trên màn hình, chỉ để in */
+.print-only { display: none; }
+
+/* Khi in: ẩn mọi thứ, chỉ cho #print-slip hiện */
+@media print {
+  body * { visibility: hidden !important; }
+  #print-slip, #print-slip * { visibility: visible !important; }
+
+  /* Cố định slip lên góc để in tròn khổ 80mm */
+  #print-slip {
+    display: block !important;
+    position: fixed;
+    left: 0; top: 0;
+    width: 80mm;   /* đổi nếu bạn dùng giấy khác */
+    margin: 0; padding: 0;
+    background: #fff;
+  }
+
+  /* Giữ màu viền/QR */
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 
 /* ĐĂNG KÝ TOKEN CHO V4 */
 @theme {
