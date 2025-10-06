@@ -215,3 +215,11 @@ export const ReceiptStatusColor: Record<ReceiptStatus, string> = {
   [ReceiptStatus.CANCELLED]: "bg-red-100 text-red-700",
   [ReceiptStatus.OWING]: "bg-yellow-100 text-yellow-700",
 };
+
+
+//Phần Admin - Quản lý thực đơn
+
+
+
+
+
