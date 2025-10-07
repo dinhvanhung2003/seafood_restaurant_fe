@@ -106,6 +106,12 @@ export default function CheckoutModal({
  
 }: Props) {
 
+// thêm state:
+const [waiting, setWaiting] = useState(false);
+const [readyToFinish, setReadyToFinish] = useState<{invoiceId:string; paidAmount:number} | null>(null);
+
+
+
 const selectedCus = useCashierStore(s => s.selectedCustomer);
   const clearSelectedCus = useCashierStore(s => s.clearSelectedCustomer);
  const guestCount = useCashierStore((s) => s.guestCount);
@@ -213,113 +219,40 @@ const invoice = invRes.data;
       return;
     }
 if (method === "vietqr") {
-  // 1) Gọi BE tạo link PayOS (BE đã addPayment PENDING + map orderCode)
-// khi chọn "VietQR (PayOS)"
-const link = await api.post('/payments/payos/create-link', {
-  invoiceId: invoice.id,
-  amount: amountToPay,
-  buyerName: table.name,
-}).then(r => r.data); // { checkoutUrl, qrCode, ... }
+ const link = await api.post('/payments/payos/create-link', {
+    invoiceId: invoice.id,
+    amount: amountToPay,
+    buyerName: table.name,
+  }).then(r => r.data);
 
-const isImg = typeof link.qrCode === "string" && /^(https?:|data:)/i.test(link.qrCode);
+  const isImg = typeof link.qrCode === "string" && /^(https?:|data:)/i.test(link.qrCode);
 
-setQr({
-  kind: "payos",
-  invoiceId: invoice.id,
-  imgUrl: isImg ? link.qrCode : undefined,
-  qrPayload: isImg ? link.checkoutUrl : link.qrCode, // nếu không phải ảnh → dùng chuỗi EMV; nếu là ảnh → dùng checkoutUrl để vẽ fallback
-  checkoutUrl: link.checkoutUrl,
-  amount: amountToPay,
-  addInfo: `INV:${invoice.id.slice(0, 12)}`,
-});
+  setQr({
+    kind: "payos",
+    invoiceId: invoice.id,
+    imgUrl: isImg ? link.qrCode : undefined,
+    qrPayload: isImg ? link.checkoutUrl : link.qrCode, // fallback
+    checkoutUrl: link.checkoutUrl,
+    amount: amountToPay,
+    addInfo: `INV:${invoice.id.slice(0,12)}`,
+  });
 
 
-await waitUntilPaid(invoice.id);
+setWaiting(true);
+  setReadyToFinish(null);
 
-  // // 3) Chờ kết quả: ưu tiên socket -> fallback polling
-  // let resolved = false;
-  // let paidAmount = 0;
-
-  // // ===== Socket (nếu bạn đã gắn sẵn socket ở window.posSocket) =====
-  // const sock: any = (globalThis as any).posSocket; // socket.io-client | undefined
-  // const onPaid = (payload: any) => {
-  //   // payload: { invoiceId, amount, method }
-  //   if (payload?.invoiceId === invoice.id) {
-  //     resolved = true;
-  //     paidAmount = Number(payload.amount || amountToPay) || amountToPay;
-  //   }
-  // };
-  // const onPartial = (payload: any) => {
-  //   // cần thì hiển thị "đã nhận X, còn Y"
-  //   // console.log('partial', payload);
-  // };
-
-  // try {
-  //   if (sock) {
-  //     if (!sock.connected) sock.connect();
-  //     sock.emit("join_invoice", { invoiceId: invoice.id });
-  //     sock.on("invoice.paid", onPaid);
-  //     sock.on("invoice.partial", onPartial);
-  //   }
-
-  //   // ===== Polling fallback (10 phút) =====
-  //   const timeoutAt = Date.now() + 10 * 60 * 1000;
-  //   while (!resolved && Date.now() < timeoutAt) {
-  //     const s = await api
-  //       .get(`/payments/status`, { params: { invoiceId: invoice.id } })
-  //       .then((r) => r.data); // { status, total, paid, remaining }
-
-  //     if (s?.status === "PAID") {
-  //       resolved = true;
-  //       paidAmount = Number(s?.paid || amountToPay) || amountToPay;
-  //       break;
-  //     }
-  //     await new Promise((r) => setTimeout(r, 2000));
-  //   }
-  // } finally {
-  //   // dọn socket listeners/room
-  //   if (sock) {
-  //     sock.emit("leave_invoice", { invoiceId: invoice.id });
-  //     sock.off("invoice.paid", onPaid);
-  //     sock.off("invoice.partial", onPartial);
-  //   }
-  // }
-
-  // // 4) Xử lý kết quả
-  // if (!resolved) {
-  //   toast.error("Không nhận được kết quả thanh toán (timeout)");
-  //   return;
-  // }
-
-  // // 5) In hoá đơn sau khi đã PAID
-  // const receipt: Receipt = {
-  //   id: invoice.id,
-  //   tableId: table.id,
-  //   tableName: `${table.name} / ${table.floor}`,
-  //   createdAt: new Date().toLocaleString(),
-  //   cashier: "Thu ngân",
-  //   items: lines,
-  //   subtotal,
-  //   discount,
-  //   total: Math.max(0, subtotal - discount),
-  //   paid: paidAmount,
-  //   change: 0,
-  //   method: "vietqr",
-  //   customerName: selectedCus?.name ?? invoice?.customer?.name ?? "Khách lẻ",
-  //   guestCount,
-  // };
-
-  // printReceipt(receipt);
-  // onSuccess(receipt);
-  // clearSelectedCus();
-  // resetGuest();
-  // onClose();
-  // toast.success("Đã nhận tiền qua VietQR");
-  // return;
-
-
-
-
+  try {
+    const { waitUntilPaid } = await import('@/lib/paysocket');
+    const r = await waitUntilPaid(invoice.id, 10*60*1000);
+    // ĐÃ NHẬN TIỀN TỪ WEBHOOK -> Cho phép HOÀN TẤT
+    setReadyToFinish({ invoiceId: invoice.id, paidAmount: r.paidAmount });
+    toast.success("Đã nhận tiền qua VietQR");
+  } catch (e:any) {
+    toast.error(e?.message === "TIMEOUT" ? "Quá thời gian chờ thanh toán" : "Lỗi khi chờ thanh toán");
+  } finally {
+    setWaiting(false);
+  }
+  return;
   
 }
 
@@ -382,226 +315,234 @@ await waitUntilPaid(invoice.id);
   }
 };
 
+const finalize = () => {
+  if (!readyToFinish) return;
+  const paidAmount = readyToFinish.paidAmount;
+
+  const receipt: Receipt = {
+    id: readyToFinish.invoiceId,
+    tableId: table.id,
+    tableName: `${table.name} / ${table.floor}`,
+    createdAt: new Date().toLocaleString(),
+    cashier: "Thu ngân",
+    items: lines,
+    subtotal,
+    discount,
+    total: Math.max(0, subtotal - discount),
+    paid: paidAmount,
+    change: 0,
+    method: "vietqr",
+    customerName: selectedCus?.name ?? "Khách lẻ",
+    guestCount,
+  };
+
+  printReceipt(receipt);
+  onSuccess(receipt);
+  clearSelectedCus();
+  resetGuest();
+  onClose();
+};
 
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="!w-[90vw] !max-w-[90vw] !h-[90vh] !max-h-[90vh] p-0 overflow-hidden rounded-2xl">
-        <div className="flex h-full flex-col">
-          <DialogHeader className="p-4 pb-2">
-            <DialogTitle className="flex items-center gap-2">
-              <ReceiptText className="h-5 w-5 text-slate-700" />
-              Phiếu thanh toán #{receiptShortId()}
-              <span className="ml-2 text-sm font-normal text-slate-500">{table.name} / {table.floor}</span>
-            </DialogTitle>
-          </DialogHeader>
+  const gridCols = qr
+  ? "lg:grid-cols-[2fr_1fr_380px]" // có QR -> 3 cột (cột 3 rộng ~380px)
+  : "lg:grid-cols-[2fr_1fr]";      // không QR -> 2 cột như cũ
 
-          <div className="flex-1 overflow-hidden px-4 pb-4">
-            <div className="grid h-full gap-6 lg:grid-cols-[2fr_1fr]">
-              <div className="rounded-xl border flex flex-col min-h-0">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="font-medium">Khác</div>
-             <Badge variant="secondary">
-  {lines.length} món
-</Badge>
+return (
+  <Dialog open={open} onOpenChange={onClose}>
+   <DialogContent
+  className="
+    fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+    z-[100]
+    !w-[90vw] !max-w-[90vw] !h-[90vh] !max-h-[90vh]
+    p-0 overflow-visible rounded-2xl
+  "
+>
 
+      <div className="flex h-full flex-col">
+        <DialogHeader className="p-4 pb-2">
+          <DialogTitle className="flex items-center gap-2">
+            <ReceiptText className="h-5 w-5 text-slate-700" />
+            Phiếu thanh toán #{receiptShortId()}
+            <span className="ml-2 text-sm font-normal text-slate-500">
+              {table.name} / {table.floor}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
 
-                </div>
-                <Separator />
-                <div className="flex-1 overflow-auto p-4 space-y-3">
-                 {lines.map((l) => (
-  <div key={l.id} className="grid grid-cols-12 items-center text-sm">
-    <div className="col-span-6 truncate font-medium">{l.name}</div>
-    <div className="col-span-2 text-center">x{l.qty}</div>
-    <div className="col-span-2 text-right">{currency(l.price)}</div>
-    <div className="col-span-2 text-right font-semibold">{currency(l.total)}</div>
-  </div>
-))}
-
-
-                </div>
+        {/* BODY */}
+        <div className="flex-1 overflow-hidden px-4 pb-4">
+          <div className={`grid h-full gap-6 ${gridCols}`}>
+            {/* Cột trái: danh sách món */}
+            <div className="rounded-xl border flex flex-col min-h-0">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="font-medium">Khác</div>
+                <Badge variant="secondary">{lines.length} món</Badge>
               </div>
-
-              <div className="rounded-xl border p-4 overflow-auto min-h-0">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Tổng tiền hàng</span>
-                    <span className="font-semibold">{currency(subtotal)}</span>
+              <Separator />
+              <div className="flex-1 overflow-auto p-4 space-y-3">
+                {lines.map((l) => (
+                  <div key={l.id} className="grid grid-cols-12 items-center text-sm">
+                    <div className="col-span-6 truncate font-medium">{l.name}</div>
+                    <div className="col-span-2 text-center">x{l.qty}</div>
+                    <div className="col-span-2 text-right">{currency(l.price)}</div>
+                    <div className="col-span-2 text-right font-semibold">{currency(l.total)}</div>
                   </div>
+                ))}
+              </div>
+            </div>
 
-                  {/* ⚠️ Discount hiện chỉ hiển thị/in bill, chưa áp dụng BE */}
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-2 text-slate-600">
-                      <Percent className="h-4 w-4" /> Giảm giá
-                    </Label>
+            {/* Cột phải: khu tính tiền */}
+            <div className="rounded-xl border p-4 overflow-auto min-h-0">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Tổng tiền hàng</span>
+                  <span className="font-semibold">{currency(subtotal)}</span>
+                </div>
+
+                {/* Discount chỉ hiển thị, chưa áp dụng BE */}
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2 text-slate-600">
+                    <Percent className="h-4 w-4" /> Giảm giá
+                  </Label>
+                  <Input
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                    className="w-40 text-right"
+                    type="number"
+                    min={0}
+                    max={subtotal}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Khách cần trả</span>
+                  <span className="text-lg font-bold text-[#0B63E5]">
+                    {currency(totalUI)}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-500">Khách thanh toán</Label>
+                  <RadioGroup
+                    value={method}
+                    onValueChange={(v) => setMethod(v as PayMethod)}
+                    className="flex flex-wrap gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem id="m1" value="cash" />
+                      <Label htmlFor="m1" className="flex items-center gap-1">Tiền mặt</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem id="m4" value="vnpay" />
+                      <Label htmlFor="m4" className="flex items-center gap-1">VNPay</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem id="m2" value="vietqr" />
+                      <Label htmlFor="m2" className="flex items-center gap-1">VietQR</Label>
+                    </div>
+                  </RadioGroup>
+
+                  <div className="flex items-center gap-2">
                     <Input
-                      value={discount}
-                      onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-                      className="w-40 text-right" type="number" min={0} max={subtotal}
+                      type="number"
+                      className="text-right"
+                      value={paid}
+                      min={0}
+                      onChange={(e) => setPaid(Number(e.target.value) || 0)}
                     />
                   </div>
 
-                  <Separator />
-
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Khách cần trả</span>
-                    <span className="text-lg font-bold text-[#0B63E5]">{currency(totalUI)}</span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {[90000, 100000, 200000, 500000].map((v) => (
+                      <Button key={v} variant="secondary" size="sm" onClick={() => setPaid(v)}>
+                        {currency(v)}
+                      </Button>
+                    ))}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-slate-500">Khách thanh toán</Label>
-                   <RadioGroup value={method} onValueChange={(v) => setMethod(v as PayMethod)} className="flex flex-wrap gap-4">
-  <div className="flex items-center space-x-2">
-    <RadioGroupItem id="m1" value="cash" />
-    <Label htmlFor="m1" className="flex items-center gap-1">Tiền mặt</Label>
-  </div>
-  <div className="flex items-center space-x-2">
-    <RadioGroupItem id="m4" value="vnpay" />
-    <Label htmlFor="m4" className="flex items-center gap-1">VNPay</Label>
-  </div>
-  <div className="flex items-center space-x-2">
-  <RadioGroupItem id="m2" value="vietqr" />
-  <Label htmlFor="m2" className="flex items-center gap-1">VietQR</Label>
-</div>
-
-</RadioGroup>
-
-                    <div className="flex items-center gap-2">
-                      <Input type="number" className="text-right" value={paid} min={0} onChange={(e) => setPaid(Number(e.target.value) || 0)} />
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {[90000, 100000, 200000, 500000].map((v) => (
-                        <Button key={v} variant="secondary" size="sm" onClick={() => setPaid(v)}>{currency(v)}</Button>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Tiền thừa trả khách</span>
-                      <span className="font-semibold">{currency(Math.max(0, paid - totalUI))}</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">Tiền thừa trả khách</span>
+                    <span className="font-semibold">{currency(Math.max(0, paid - totalUI))}</span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Cột 3: QR (chỉ render khi có qr) */}
+            {qr && qr.kind === "payos" && (
+              <div className="rounded-xl border p-3 bg-white overflow-auto hidden lg:block">
+                <QrPanel
+                  provider="payos"
+                  imgUrl={qr.imgUrl}
+                  qrPayload={qr.qrPayload}
+                  checkoutUrl={qr.checkoutUrl}
+                  amount={qr.amount}
+                  addInfo={qr.addInfo}
+                  onToggle={() => setQr(null)}
+                  onPrint={() => window.print()}
+                />
+              </div>
+            )}
           </div>
-
-
-{qr && qr.kind === "payos" && (
-  <>
-    {/* Panel QR cho THU NGÂN xem trên màn hình */}
-    <div className="screen-only">
-      <QrPanel
-        provider="payos"
-        imgUrl={qr.imgUrl}
-        qrPayload={qr.qrPayload}
-        checkoutUrl={qr.checkoutUrl}
-        amount={qr.amount}
-        addInfo={qr.addInfo}
-        onToggle={() => setQr(null)}
-        onPrint={() => window.print()}
-      />
-    </div>
-
-    {/* MẪU PHIẾU ẨN – chỉ hiện khi in */}
-    <div id="print-slip" className="print-only">
-  <PaymentSlipPrint
-    shopName="SEAFOOD RESTAURANT"
-    shopAddress="123 Lê Lợi, Q.1, TP.HCM"
-    invoiceId={qr?.invoiceId ?? ""}
-    cashier="Thu ngân"
-    tableName={`${table.name} / ${table.floor}`}
-    customerName={selectedCus?.name ?? "Khách lẻ"}
-    checkInTime={new Date().toLocaleString("vi-VN")}
-    checkOutTime={new Date().toLocaleString("vi-VN")}
-    items={lines.map(l => ({ name: l.name, qty: l.qty, total: l.total }))}
-    subtotal={lines.reduce((s, l) => s + l.total, 0)}
-    discount={discount}
-    vatRate={10}
-    amount={qr?.amount ?? totalUI}
-    addInfo={qr?.addInfo ?? `INV:).slice(0,12)}`}
-    imgUrl={qr?.imgUrl}
-    qrPayload={qr?.qrPayload ?? qr?.checkoutUrl ?? ""}
-  />
-</div>
-  </>
-)}
-
-
-
-
-
-          <DialogFooter className="p-4 border-t bg-background">
-            <Button variant="secondary" onClick={onClose}>Đóng</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={!canConfirm} onClick={handleConfirm}>
-              <CircleDollarSign className="mr-2 h-5 w-5" /> Thanh toán
-            </Button>
-          </DialogFooter>
         </div>
-      </DialogContent>
-    </Dialog>
 
+        {/* PRINT-ONLY (ẩn trên màn hình, chỉ dùng khi in) */}
+        {qr && qr.kind === "payos" && (
+          <div id="print-slip" className="print-only">
+            <PaymentSlipPrint
+              shopName="SEAFOOD RESTAURANT"
+              shopAddress="123 Lê Lợi, Q.1, TP.HCM"
+              invoiceId={qr.invoiceId}
+              cashier="Thu ngân"
+              tableName={`${table.name} / ${table.floor}`}
+              customerName={selectedCus?.name ?? "Khách lẻ"}
+              checkInTime={new Date().toLocaleString("vi-VN")}
+              checkOutTime={new Date().toLocaleString("vi-VN")}
+              items={lines.map((l) => ({ name: l.name, qty: l.qty, total: l.total }))}
+              subtotal={lines.reduce((s, l) => s + l.total, 0)}
+              discount={discount}
+              vatRate={10}
+              amount={qr.amount}
+              addInfo={qr.addInfo}
+              imgUrl={qr.imgUrl}
+              qrPayload={qr.qrPayload ?? qr.checkoutUrl ?? ""}
+            />
+          </div>
+        )}
 
+        {/* FOOTER */}
+        <DialogFooter className="p-4 border-t bg-background">
+          <Button variant="secondary" onClick={onClose}>Đóng</Button>
 
-  );
+          {method === "vietqr" ? (
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={readyToFinish ? finalize : handleConfirm}
+              disabled={waiting || (!!qr && !readyToFinish)}
+            >
+              {waiting && !readyToFinish
+                ? "Đang chờ thanh toán…"
+                : (readyToFinish ? "Hoàn tất & in hoá đơn" : "Tạo QR & chờ thanh toán")}
+            </Button>
+          ) : (
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={!canConfirm}
+              onClick={handleConfirm}
+            >
+              Thanh toán
+            </Button>
+          )}
+        </DialogFooter>
+      </div>
+    </DialogContent>
+  </Dialog>
+);
 }
 
 function receiptShortId() {
   return (Date.now() + "").slice(-4);
-}
-async function waitUntilPaid(invoiceId: string, timeoutMs = 10 * 60 * 1000) {
-  return new Promise<{ paidAmount: number }>(async (resolve, reject) => {
-    let resolved = false;
-    let paidAmount = 0;
-
-    const sock: any = (globalThis as any).posSocket;
-    const onPaid = (p: any) => {
-      if (p?.invoiceId === invoiceId) {
-        resolved = true;
-        paidAmount = Number(p?.amount || 0) || 0;
-        cleanup();
-        resolve({ paidAmount });
-      }
-    };
-    const onPartial = (_p: any) => {};
-
-    const cleanup = () => {
-      if (sock) {
-        try {
-          sock.emit('leave_invoice', { invoiceId });
-          sock.off('invoice.paid', onPaid);
-          sock.off('invoice.partial', onPartial);
-        } catch {}
-      }
-    };
-
-    try {
-      if (sock) {
-        if (!sock.connected) sock.connect();
-        sock.emit('join_invoice', { invoiceId });
-        sock.on('invoice.paid', onPaid);
-        sock.on('invoice.partial', onPartial);
-      }
-
-      const endAt = Date.now() + timeoutMs;
-      while (!resolved && Date.now() < endAt) {
-        const s = await api
-          .get('/payments/status', { params: { invoiceId } })
-          .then(r => r.data); // { status, paid, ... }
-        if (s?.status === 'PAID') {
-          resolved = true;
-          paidAmount = Number(s?.paid || 0) || 0;
-          break;
-        }
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    } catch (e) {
-      cleanup();
-      return reject(e);
-    }
-
-    cleanup();
-    if (!resolved) return reject(new Error('TIMEOUT'));
-    resolve({ paidAmount });
-  });
 }

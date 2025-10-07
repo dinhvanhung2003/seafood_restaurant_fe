@@ -1,15 +1,13 @@
-// src/lib/socket.ts: giữ nguyên getSocket()
-
 import api from "@/lib/axios";
-import { getSocket } from "@/lib/mainsocket";
+import { getSocket } from "@/lib/socket";
 
-export async function waitUntilPaid(invoiceId: string, timeoutMs = 10 * 60 * 1000) {
-  return new Promise<{ paidAmount: number }>(async (resolve, reject) => {
+export async function waitUntilPaid(invoiceId: string, timeoutMs = 10*60*1000) {
+  return new Promise<{ paidAmount:number }>(async (resolve, reject) => {
     const sock = getSocket();
-    let finished = false;
+    let done = false;
     let paidAmount = 0;
 
-    const clear = () => {
+    const cleanup = () => {
       try {
         sock.emit("leave_invoice", { invoiceId });
         sock.off("connect", onConnect);
@@ -18,57 +16,43 @@ export async function waitUntilPaid(invoiceId: string, timeoutMs = 10 * 60 * 100
       } catch {}
     };
 
-    const onPaid = (p: any) => {
+    const onPaid = (p:any) => {
       if (p?.invoiceId !== invoiceId) return;
-      finished = true;
-      paidAmount = Number(p?.amount || 0) || 0;
-      clear();
-      resolve({ paidAmount });
+      done = true; paidAmount = Number(p?.amount||0)||0;
+      cleanup(); resolve({ paidAmount });
     };
-    const onPartial = (_p: any) => { /* tùy bạn: cập nhật UI còn thiếu bao nhiêu */ };
+    const onPartial = (_p:any) => {};
 
     const onConnect = async () => {
-      // Sau khi thật sự connected mới join để chắc chắn
       sock.emit("join_invoice", { invoiceId });
-
-      // ⚡ BẮT KỊP SỰ KIỆN ĐÃ PHÁT TRƯỚC ĐÓ:
       try {
-        const s = await api.get("/payments/status", { params: { invoiceId } }).then(r => r.data);
+        const s = await api.get("/payments/status", { params: { invoiceId } }).then(r=>r.data);
         if (s?.status === "PAID") {
-          finished = true;
-          paidAmount = Number(s?.paid || 0) || 0;
-          clear();
-          return resolve({ paidAmount });
+          done = true; paidAmount = Number(s?.paid||0)||0;
+          cleanup(); resolve({ paidAmount });
         }
       } catch {}
     };
 
     try {
-      // Lắng nghe trước rồi mới connect
       sock.on("connect", onConnect);
       sock.on("invoice.paid", onPaid);
       sock.on("invoice.partial", onPartial);
-      if (!sock.connected) sock.connect();
-      else onConnect(); // đã connected thì xử lý ngay
+      if (!sock.connected) sock.connect(); else onConnect();
 
-      // Fallback polling 2s/lần
-      const endAt = Date.now() + timeoutMs;
-      while (!finished && Date.now() < endAt) {
-        const s = await api.get("/payments/status", { params: { invoiceId } }).then(r => r.data);
-        if (s?.status === "PAID") {
-          finished = true;
-          paidAmount = Number(s?.paid || 0) || 0;
-          break;
-        }
-        await new Promise(r => setTimeout(r, 2000));
+      // fallback polling
+      const end = Date.now()+timeoutMs;
+      while(!done && Date.now()<end){
+        const s = await api.get("/payments/status", { params: { invoiceId } }).then(r=>r.data);
+        if (s?.status === "PAID") { done = true; paidAmount = Number(s?.paid||0)||0; break; }
+        await new Promise(r=>setTimeout(r,2000));
       }
-    } catch (e) {
-      clear();
-      return reject(e);
+    } catch(e){
+      cleanup(); return reject(e);
     }
 
-    clear();
-    if (!finished) return reject(new Error("TIMEOUT"));
+    cleanup();
+    if (!done) return reject(new Error("TIMEOUT"));
     resolve({ paidAmount });
   });
 }
