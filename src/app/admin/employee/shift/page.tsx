@@ -66,72 +66,126 @@ export default function WorkSchedulePage() {
       </div>
 
       {/* grid */}
-      <Card className="overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead className="w-[220px]">Nhân viên</TableHead>
-              {weekDays.map((d, i) => (
-                <TableHead key={i} className="min-w-[200px] text-center">
-                  <div className="font-medium">{viDayLabel(i)}</div>
-                  <div className="text-xs text-muted-foreground">{d.toLocaleDateString("vi-VN")}</div>
-                </TableHead>
-              ))}
-              <TableHead className="w-[140px] text-right">Lương dự kiến</TableHead>
-            </TableRow>
-          </TableHeader>
+      <Card className="hidden lg:block">
+  <Table>
+    <TableHeader>
+      <TableRow className="bg-slate-50">
+        <TableHead className="w-[220px]">Nhân viên</TableHead>
+        {weekDays.map((d, i) => (
+          <TableHead key={i} className="text-center">
+            <div className="font-medium">{viDayLabel(i)}</div>
+            <div className="text-xs text-muted-foreground">
+              {d.toLocaleDateString("vi-VN")}
+            </div>
+          </TableHead>
+        ))}
+        <TableHead className="w-[140px] text-right">Lương dự kiến</TableHead>
+      </TableRow>
+    </TableHeader>
 
-          <TableBody>
-            {empLoading ? (
-              <TableRow><TableCell colSpan={9} className="py-10 text-center">Đang tải nhân viên…</TableCell></TableRow>
-            ) : employees.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">Chưa có nhân viên</TableCell></TableRow>
-            ) : (
-              employees.map((emp) => (
-                <TableRow key={emp.id} className="align-top">
-                  <TableCell>
-                    <div className="font-medium">{emp.fullName || emp.username || emp.email}</div>
-                    <div className="text-xs text-muted-foreground">{emp.id.slice(0,8).toUpperCase()}</div>
-                  </TableCell>
+    <TableBody>
+      {empLoading ? (
+        <TableRow>
+          <TableCell colSpan={9} className="py-10 text-center">
+            Đang tải nhân viên…
+          </TableCell>
+        </TableRow>
+      ) : employees.length === 0 ? (
+        <TableRow>
+          <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+            Chưa có nhân viên
+          </TableCell>
+        </TableRow>
+      ) : (
+        employees.map((emp) => (
+          <TableRow key={emp.id} className="align-top">
+            <TableCell>
+              <div className="font-medium">{emp.fullName || emp.username || emp.email}</div>
+              <div className="text-xs text-muted-foreground">{emp.id.slice(0,8).toUpperCase()}</div>
+            </TableCell>
 
-                  {weekDays.map((d, idx) => {
-                    const iso = formatISO(d);
-                    const cells = items.filter(x => x.user.id === emp.id && x.date === iso);
-                    // map sang chip cho ScheduleCell
-                    const chips = cells.map(it => ({
-                      id: it.id,
-                      name: it.shift.name,
-                      color: it.shift.color,
-                      startTime: it.shift.startTime,
-                      endTime: it.shift.endTime,
-                    }));
-                    return (
-                      <TableCell key={idx} className="p-0"> {/* bỏ padding để ô full edge */}
-                        {isLoading && chips.length === 0 ? (
-                          <div className="min-h-[84px] grid place-items-center text-xs text-muted-foreground border-l border-b">
-                            Đang tải…
-                          </div>
-                        ) : (
-                          <ScheduleCell
-                            userId={emp.id}
-                            dateISO={iso}
-                            shifts={chips}
-                          />
-                        )}
-                      </TableCell>
-                    );
-                  })}
+            {weekDays.map((d, idx) => {
+              const iso = formatISO(d);
+              const cells = items.filter(x => x.user.id === emp.id && x.date === iso);
+              const chips = cells.map(it => ({
+                id: it.id, name: it.shift.name, color: it.shift.color,
+                startTime: it.shift.startTime, endTime: it.shift.endTime,
+              }));
+              return (
+                <TableCell key={idx} className="p-0">
+                  {isLoading && chips.length === 0 ? (
+                    <div className="min-h-[72px] grid place-items-center text-xs text-muted-foreground">
+                      Đang tải…
+                    </div>
+                  ) : (
+                    <ScheduleCell userId={emp.id} dateISO={iso} shifts={chips} />
+                  )}
+                </TableCell>
+              );
+            })}
 
-                  <TableCell className="text-right align-top">
-                    <div className="font-medium">—</div>
-                    <div className="text-xs text-muted-foreground">chưa tính</div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+            <TableCell className="text-right align-top">
+              <div className="font-medium">—</div>
+              <div className="text-xs text-muted-foreground">chưa tính</div>
+            </TableCell>
+          </TableRow>
+        ))
+      )}
+    </TableBody>
+  </Table>
+</Card>
+
+{/* MOBILE/TABLET (< lg): thẻ theo nhân viên, 7 ngày xếp dạng grid 2 cột */}
+<div className="space-y-3 lg:hidden">
+  {empLoading ? (
+    <Card className="p-6 text-center">Đang tải nhân viên…</Card>
+  ) : employees.length === 0 ? (
+    <Card className="p-6 text-center text-muted-foreground">Chưa có nhân viên</Card>
+  ) : (
+    employees.map((emp) => (
+      <Card key={emp.id} className="p-4">
+        <div className="mb-3">
+          <div className="font-medium">{emp.fullName || emp.username || emp.email}</div>
+          <div className="text-xs text-muted-foreground">
+            {emp.id.slice(0,8).toUpperCase()}
+          </div>
+        </div>
+
+        {/* 7 ngày – responsive grid: 1 cột trên xs, 2 cột trên sm */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {weekDays.map((d, i) => {
+            const iso = formatISO(d);
+            const cells = items.filter(x => x.user.id === emp.id && x.date === iso);
+            const chips = cells.map(it => ({
+              id: it.id, name: it.shift.name, color: it.shift.color,
+              startTime: it.shift.startTime, endTime: it.shift.endTime,
+            }));
+
+            return (
+              <div key={i} className="rounded-lg border p-3">
+                <div className="mb-2">
+                  <div className="text-sm font-medium">{viDayLabel(i)}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {d.toLocaleDateString("vi-VN")}
+                  </div>
+                </div>
+
+                {isLoading && chips.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">Đang tải…</div>
+                ) : (
+                  <ScheduleCell userId={emp.id} dateISO={iso} shifts={chips} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* lương dự kiến (nếu muốn) */}
+        <div className="mt-3 text-right text-sm text-muted-foreground">Lương dự kiến: —</div>
       </Card>
+    ))
+  )}
+</div>
     </div>
   );
 }

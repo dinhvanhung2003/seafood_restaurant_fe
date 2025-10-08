@@ -52,9 +52,8 @@ children: [
      children: [
       { label: "Danh sách nhân viên", href: "/admin/employee/list" },
       { label: "Lịch làm việc", href: "/admin/employee/shift" },
-      { label: "Bảng chấm công", href: "/admin/kho-hang/xuat-kho" },
-      { label: "Bảng lương", href: "/admin/kho-hang/kiem-ke" },
-      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
+      { label: "Bảng chấm công", href: "/admin/employee/attendance" },
+      { label: "Thiết lập chấm công", href: "/admin/employee/attendance-setting" },
     ],
    },
   { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
