@@ -1,80 +1,26 @@
+// app/(admin)/categories/page.tsx (ví dụ đường dẫn trang của bạn)
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
+  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import CreateCategoryDialog from "@/components/admin/product/category/modal/CreateCategory";
-// ===== Types =====
-export type Category = {
-  id: string;
-  name: string;
-  description: string | null;
-  type: string; // ví dụ: "MENU"
-  isActive: boolean;
-  sortOrder: number;
-  createdAt: string; // ISO
-  updatedAt: string; // ISO
-};
 
-export type CategoryListResponse = {
-  data: Category[];
-  meta: { total: number; page: number; limit: number; pages: number };
-};
+import { useCategories } from "@/hooks/admin/useCategory";
+import type { CategoryQuery } from "@/types/admin/category";
 
-export type CategoryQuery = {
-  type?: string; // e.g. MENU
-  isActive?: string; // "true" | "false"
-  q?: string;
-  page?: number;
-  limit?: number;
-  sort?: string; // e.g. createdAt:DESC
-};
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-async function fetchCategories(params: CategoryQuery): Promise<CategoryListResponse> {
-  const url = new URL(`${API_BASE}/category/list-category`);
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && `${v}` !== "") url.searchParams.set(k, String(v));
-  });
-
-  const res = await fetch(url.toString(), { cache: "no-store" });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(t || `Fetch failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-function useCategoriesQuery(params: CategoryQuery) {
-  return useQuery<CategoryListResponse, Error>({
-    queryKey: ["categories", params],
-    queryFn: () => fetchCategories(params),
-    placeholderData: keepPreviousData, 
-    staleTime: 30_000,
-  });
-}
 export default function CategoryListPage() {
   // UI state
   const [type, setType] = useState<string | "all">("all");
@@ -95,32 +41,28 @@ export default function CategoryListPage() {
     sort,
   }), [type, isActive, debouncedQ, page, limit, sort]);
 
-  const { data, isLoading, isFetching, refetch, error } = useCategoriesQuery(apiParams);
+  const { data, isLoading, isFetching, refetch, error } = useCategories(apiParams);
 
   const pages = data?.meta.pages ?? 1;
   const total = data?.meta.total ?? 0;
 
   return (
     <div className="space-y-4">
-    <div className="flex items-center justify-between">
-  <h1 className="text-2xl font-semibold">Danh mục</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Danh mục</h1>
 
-  <div className="flex items-center gap-2">
-    {/* Nút mở modal tạo mới */}
-    <CreateCategoryDialog
-      triggerLabel="Thêm danh mục"
-      defaultType="MENU"
-      onCreated={() => refetch()} // sau khi tạo xong thì refetch list hiện tại
-    />
-
-    {/* Nút làm mới */}
-    <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-      <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-      Làm mới
-    </Button>
-  </div>
-</div>
-
+        <div className="flex items-center gap-2">
+          <CreateCategoryDialog
+            triggerLabel="Thêm danh mục"
+            defaultType="MENU"
+            onCreated={() => refetch()}
+          />
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            Làm mới
+          </Button>
+        </div>
+      </div>
 
       {/* Filters */}
       <Card className="p-4 grid gap-4 md:grid-cols-5">
@@ -132,9 +74,7 @@ export default function CategoryListPage() {
         <div>
           <Label>Loại</Label>
           <Select value={type} onValueChange={(v) => { setPage(1); setType(v as any); }}>
-            <SelectTrigger>
-              <SelectValue placeholder="--" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="--" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="MENU">MENU</SelectItem>
@@ -146,9 +86,7 @@ export default function CategoryListPage() {
         <div>
           <Label>Trạng thái</Label>
           <Select value={isActive} onValueChange={(v) => { setPage(1); setIsActive(v as any); }}>
-            <SelectTrigger>
-              <SelectValue placeholder="Tất cả" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Tất cả" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="true">Đang dùng</SelectItem>
@@ -160,9 +98,7 @@ export default function CategoryListPage() {
         <div>
           <Label>Sắp xếp</Label>
           <Select value={sort} onValueChange={(v) => { setPage(1); setSort(v); }}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="createdAt:DESC">Mới nhất</SelectItem>
               <SelectItem value="createdAt:ASC">Cũ nhất</SelectItem>
@@ -177,9 +113,7 @@ export default function CategoryListPage() {
         <div>
           <Label>Hiển thị</Label>
           <Select value={String(limit)} onValueChange={(v) => { setPage(1); setLimit(Number(v)); }}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {[5, 10, 20, 50].map((n) => (
                 <SelectItem key={n} value={String(n)}>{n}/trang</SelectItem>
@@ -214,7 +148,9 @@ export default function CategoryListPage() {
               </TableRow>
             ) : (data?.data?.length ?? 0) === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">Không có dữ liệu</TableCell>
+                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                  Không có dữ liệu
+                </TableCell>
               </TableRow>
             ) : (
               data!.data.map((c) => (
@@ -222,7 +158,9 @@ export default function CategoryListPage() {
                   <TableCell>
                     <div className="font-medium">{c.name}</div>
                     {c.description && (
-                      <div className="text-sm text-muted-foreground line-clamp-1">{c.description}</div>
+                      <div className="text-sm text-muted-foreground line-clamp-1">
+                        {c.description}
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="uppercase">{c.type}</TableCell>
@@ -230,7 +168,9 @@ export default function CategoryListPage() {
                     {c.isActive ? (
                       <Badge className="bg-emerald-600 hover:bg-emerald-700">Đang dùng</Badge>
                     ) : (
-                      <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-200">Ẩn</Badge>
+                      <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-200">
+                        Ẩn
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell>{c.sortOrder}</TableCell>
@@ -272,7 +212,8 @@ export default function CategoryListPage() {
 
 /*
 Ghi chú:
-- Trang này giả định bạn đã wrap app bằng <QueryClientProvider> ở layout gốc.
-- Nếu API cần Authorization, thêm header ở fetchCategories (Bearer token...).
-- Nếu field "type" có nhiều giá trị hơn, thêm vào <SelectContent> ở phần Lọc.
+- Trang/hook có "use client" vì dùng state/hook browser.
+- React Query: đảm bảo bạn đã bọc <QueryClientProvider> ở layout gốc.
+- Khi tạo mới category thành công, gọi onCreated -> refetch() để reload list.
+- Nếu BE yêu cầu Authorization, bật interceptor ở lib/axios.ts.
 */
