@@ -1,8 +1,9 @@
+// components/admin/product/category/modal/CreateCategory.tsx
 "use client";
 
 import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
@@ -10,50 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
+  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 
-// ===== Types =====
-export type CreateCategoryPayload = {
-  name: string;
-  description?: string | null;
-  type: "MENU" | "INGREDIENT";
-  sortOrder?: number; // default 0
-};
+import { useCreateCategory } from "@/hooks/admin/useCategory";
+import type { CreateCategoryPayload } from "@/types/admin/category";
 
 const TYPE_OPTIONS: CreateCategoryPayload["type"][] = ["MENU", "INGREDIENT"];
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-async function createCategory(payload: CreateCategoryPayload, accessToken?: string) {
-  const res = await fetch(`${API_BASE}/category/create-category`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(t || "Tạo danh mục thất bại");
-  }
-  return res.json();
-}
 
 export default function CreateCategoryDialog({
   triggerLabel = "Thêm danh mục",
@@ -62,7 +30,7 @@ export default function CreateCategoryDialog({
 }: {
   triggerLabel?: string;
   defaultType?: CreateCategoryPayload["type"];
-  onCreated?: () => void; // parent có thể refetch/invalidate
+  onCreated?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -81,19 +49,23 @@ export default function CreateCategoryDialog({
     mode: "onTouched",
   });
 
-  const { mutate, isPending, error } = useMutation({
-    mutationFn: (values: FormValues) =>
-      createCategory({ ...values, sortOrder: Number(values.sortOrder ?? 0) }, (session as any)?.accessToken),
-    onSuccess: () => {
-      setOpen(false);
-      reset();
-      // Invalidate mọi query danh mục
-      queryClient.invalidateQueries({ queryKey: ["categories"], exact: false });
-      onCreated?.();
-    },
-  });
+  const {
+    mutate,
+    isPending,
+    error,
+  } = useCreateCategory({ accessToken: (session as any)?.accessToken });
 
-  const onSubmit = handleSubmit((values) => mutate(values));
+  const onSubmit = handleSubmit((values) =>
+    mutate(values, {
+      onSuccess: () => {
+        setOpen(false);
+        reset();
+        // Invalidate toàn bộ list categories
+        queryClient.invalidateQueries({ queryKey: ["categories"], exact: false });
+        onCreated?.();
+      },
+    })
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -113,7 +85,10 @@ export default function CreateCategoryDialog({
             <Label>Tên *</Label>
             <Input
               placeholder="Hải sản"
-              {...register("name", { required: "Vui lòng nhập tên danh mục", minLength: { value: 2, message: "Tên quá ngắn" } })}
+              {...register("name", {
+                required: "Vui lòng nhập tên danh mục",
+                minLength: { value: 2, message: "Tên quá ngắn" },
+              })}
             />
             {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
           </div>
@@ -137,9 +112,7 @@ export default function CreateCategoryDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {TYPE_OPTIONS.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -150,14 +123,15 @@ export default function CreateCategoryDialog({
 
             <div>
               <Label>Thứ tự</Label>
-              <Input type="number" {...register("sortOrder", { valueAsNumber: true, min: { value: 0, message: ">= 0" } })} />
+              <Input
+                type="number"
+                {...register("sortOrder", { valueAsNumber: true, min: { value: 0, message: ">= 0" } })}
+              />
               {errors.sortOrder && <p className="text-sm text-red-500 mt-1">{errors.sortOrder.message}</p>}
             </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500">{(error as Error).message || "Có lỗi xảy ra"}</p>
-          )}
+          {error && <p className="text-sm text-red-500">{(error as Error).message || "Có lỗi xảy ra"}</p>}
 
           <DialogFooter className="mt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

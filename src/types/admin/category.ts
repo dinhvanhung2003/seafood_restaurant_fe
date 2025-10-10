@@ -23,3 +23,9 @@ export type CategoryQuery = {
   limit?: number;
   sort?: string;       // e.g. createdAt:DESC
 };
+export type CreateCategoryPayload = {
+  name: string;
+  description?: string | null;
+  type: "MENU" | "INGREDIENT";
+  sortOrder?: number; // default 0
+};

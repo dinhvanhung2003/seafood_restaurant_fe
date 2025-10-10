@@ -209,11 +209,3 @@ export default function CategoryListPage() {
     </div>
   );
 }
-
-/*
-Ghi chú:
-- Trang/hook có "use client" vì dùng state/hook browser.
-- React Query: đảm bảo bạn đã bọc <QueryClientProvider> ở layout gốc.
-- Khi tạo mới category thành công, gọi onCreated -> refetch() để reload list.
-- Nếu BE yêu cầu Authorization, bật interceptor ở lib/axios.ts.
-*/
