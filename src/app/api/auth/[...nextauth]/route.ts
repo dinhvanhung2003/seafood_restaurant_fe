@@ -2,7 +2,7 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
-const API = process.env.AUTH_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL!;
+const API = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
 const decodeJwt = <T = any>(t?: string): T | null => {
   try { if (!t) return null; return JSON.parse(Buffer.from(t.split(".")[1], "base64").toString("utf8")); }

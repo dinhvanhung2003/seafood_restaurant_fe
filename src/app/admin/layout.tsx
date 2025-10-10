@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
       { label: "Thực đơn", href: "/admin/product/menu" },
       { label: "Danh mục", href: "/admin/product/category" },
       { label: "Combo", href: "/admin/product/combo" },
+      { label: "Khuyến mãi", href: "/admin/product/promotion" }
     ],
   
 

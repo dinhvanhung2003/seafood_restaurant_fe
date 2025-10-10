@@ -18,22 +18,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 
-/* ───────── helpers ───────── */
+/* ───────── helpers (LOCAL time, không UTC) ───────── */
 function startOfWeek(d: Date) {
   const x = new Date(d);
-  const dow = x.getDay(); // 0=CN
-  const delta = (dow + 6) % 7; // về thứ 2
+  const dow = x.getDay();                // 0=CN
+  const delta = (dow + 6) % 7;           // về Thứ 2
   x.setDate(x.getDate() - delta);
   x.setHours(0, 0, 0, 0);
   return x;
@@ -43,8 +37,12 @@ function addDays(d: Date, n: number) {
   x.setDate(x.getDate() + n);
   return x;
 }
-function fmtISO(d: Date) {
-  return d.toISOString().slice(0, 10);
+// YYYY-MM-DD theo local
+function formatYMD(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 const viDay = ["Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy", "Chủ nhật"];
 
@@ -60,26 +58,22 @@ function AttendanceModal({
   payload: {
     dateISO: string;
     shift: Shift;
-    employees: Employee[];           // chỉ NV đã phân ca
-    existing?: Attendance[];         // các bản ghi đã có (tuỳ hiển thị)
-    presetEmpId?: string;            // NV được chọn sẵn khi mở modal
+    employees: Employee[];
+    existing?: Attendance[];
+    presetEmpId?: string;
   };
   onSaved: () => void;
 }) {
-  const [empId, setEmpId] = useState<string>(
-    payload.presetEmpId ?? payload.employees[0]?.id ?? ""
-  );
+  const [empId, setEmpId] = useState<string>(payload.presetEmpId ?? payload.employees[0]?.id ?? "");
   const [mode, setMode] = useState<"WORK" | "LEAVE" | "ABSENT">("WORK");
   const [checkIn, setCheckIn] = useState(payload.shift.startTime);
   const [checkOut, setCheckOut] = useState(payload.shift.endTime);
   const [note, setNote] = useState("");
 
-  // khi danh sách NV/preset thay đổi, set lại mặc định
   useEffect(() => {
     setEmpId(payload.presetEmpId ?? payload.employees[0]?.id ?? "");
   }, [payload.employees, payload.presetEmpId]);
 
-  // invalidate theo ngày là đủ; parent còn gọi onSaved() để refetch tuần
   const m = useUpsertAttendanceMutation(payload.dateISO, payload.dateISO);
 
   const save = async () => {
@@ -90,9 +84,8 @@ function AttendanceModal({
       shiftId: payload.shift.id,
       note: note || null,
     };
-    if (mode === "LEAVE" || mode === "ABSENT") {
-      body.status = mode;
-    } else {
+    if (mode === "LEAVE" || mode === "ABSENT") body.status = mode;
+    else {
       body.checkIn = checkIn;
       body.checkOut = checkOut;
     }
@@ -105,9 +98,7 @@ function AttendanceModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>
-            Chấm công • {payload.shift.name} • {payload.dateISO}
-          </DialogTitle>
+          <DialogTitle>Chấm công • {payload.shift.name} • {payload.dateISO}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -119,67 +110,36 @@ function AttendanceModal({
               className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
             >
               {payload.employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.fullName}
-                </option>
+                <option key={e.id} value={e.id}>{e.fullName}</option>
               ))}
             </select>
             {payload.employees.length === 0 && (
-              <p className="mt-1 text-xs text-rose-600">
-                Chưa có nhân viên nào được phân ca này.
-              </p>
+              <p className="mt-1 text-xs text-rose-600">Chưa có nhân viên nào được phân ca này.</p>
             )}
           </div>
 
-          <RadioGroup
-            value={mode}
-            onValueChange={(v) => setMode(v as any)}
-            className="flex flex-wrap gap-4"
-          >
-            <div className="flex items-center gap-2">
-              <RadioGroupItem id="work" value="WORK" />
-              <Label htmlFor="work">Đi làm</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem id="leave" value="LEAVE" />
-              <Label htmlFor="leave">Nghỉ có phép</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem id="abs" value="ABSENT" />
-              <Label htmlFor="abs">Nghỉ không phép</Label>
-            </div>
+          <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)} className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2"><RadioGroupItem id="work" value="WORK" /><Label htmlFor="work">Đi làm</Label></div>
+            <div className="flex items-center gap-2"><RadioGroupItem id="leave" value="LEAVE" /><Label htmlFor="leave">Nghỉ có phép</Label></div>
+            <div className="flex items-center gap-2"><RadioGroupItem id="abs" value="ABSENT" /><Label htmlFor="abs">Nghỉ không phép</Label></div>
           </RadioGroup>
 
           {mode === "WORK" && (
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Giờ vào</Label>
-                <Input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
-              </div>
-              <div>
-                <Label>Giờ ra</Label>
-                <Input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
-              </div>
+              <div><Label>Giờ vào</Label><Input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></div>
+              <div><Label>Giờ ra</Label><Input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></div>
             </div>
           )}
 
           <div>
             <Label>Ghi chú</Label>
-            <Input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ghi chú (không bắt buộc)"
-            />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (không bắt buộc)" />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={onClose}>
-            Bỏ qua
-          </Button>
-          <Button onClick={save} disabled={!empId || m.isPending}>
-            {m.isPending ? "Đang lưu…" : "Lưu"}
-          </Button>
+          <Button variant="secondary" onClick={onClose}>Bỏ qua</Button>
+          <Button onClick={save} disabled={!empId || m.isPending}>{m.isPending ? "Đang lưu…" : "Lưu"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -203,16 +163,13 @@ function Cell({
   const key = `${dateISO}::${shift.id}`;
   const list = cellMap.get(key) || [];
 
-  // Map userId -> attendance (nếu đã chấm)
   const byUser = new Map<string, Attendance>();
   for (const a of list) byUser.set(a.userId, a);
 
   if (assignedEmployees.length === 0) {
     return (
       <div className="border-b border-l p-2 min-h-[92px]">
-        <Badge variant="secondary" className="text-xs">
-          Chưa phân ca
-        </Badge>
+        <Badge variant="secondary" className="text-xs">Chưa phân ca</Badge>
       </div>
     );
   }
@@ -226,30 +183,26 @@ function Cell({
             ? STATUS_UI[a.status].className
             : "bg-slate-100 text-slate-700 border-slate-200";
 
-        return (
-          <button
-            key={e.id}
-            onClick={() => onNew(dateISO, shift, e.id)}
-            className={cn(
-              "px-2 py-1 rounded border text-xs transition hover:opacity-90",
-              className
-            )}
-            title={a?.note || ""}
-          >
-            <span className="font-medium">{e.fullName}</span>
-            {a && (a.status === "ON_TIME" || a.status === "LATE") ? (
-              <span className="ml-1 opacity-80">
-                ({a.checkIn ?? "--"}–{a.checkOut ?? "--"})
-              </span>
-            ) : null}
-          </button>
-        );})}
+          return (
+            <button
+              key={e.id}
+              onClick={() => onNew(dateISO, shift, e.id)}
+              className={cn("px-2 py-1 rounded border text-xs transition hover:opacity-90", className)}
+              title={a?.note || ""}
+            >
+              <span className="font-medium">{e.fullName}</span>
+              {a && (a.status === "ON_TIME" || a.status === "LATE") ? (
+                <span className="ml-1 opacity-80">({a.checkIn ?? "--"}–{a.checkOut ?? "--"})</span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/* ───────── FragmentRow (một hàng = một ca) ───────── */
+/* ───────── FragmentRow ───────── */
 function FragmentRow({
   shift,
   days,
@@ -267,12 +220,10 @@ function FragmentRow({
     <>
       <div className="p-3 border-b font-medium">
         {shift.name}
-        <div className="text-xs text-muted-foreground">
-          {shift.startTime} – {shift.endTime}
-        </div>
+        <div className="text-xs text-muted-foreground">{shift.startTime} – {shift.endTime}</div>
       </div>
       {days.map((d, i) => {
-        const dateISO = fmtISO(d);
+        const dateISO = formatYMD(d);                {/* <--- dùng local */}
         const key = `${dateISO}::${shift.id}`;
         const assigned = assignedMap.get(key) || [];
         return (
@@ -292,15 +243,15 @@ function FragmentRow({
 
 /* ───────── Page ───────── */
 export default function AttendanceBoardPage() {
-  // tuần hiện tại
   const [anchor, setAnchor] = useState<Date>(startOfWeek(new Date()));
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(anchor, i)), [anchor]);
-  const fromISO = fmtISO(days[0]);
-  const toISO = fmtISO(days[6]);
 
-  // queries
+  // range LOCAL YYYY-MM-DD
+  const fromISO = formatYMD(days[0]);
+  const toISO   = formatYMD(days[6]);
+
   const { data: shifts = [] } = useShiftsQuery();
-  const { data: employees = [] } = useEmployeesQuery(); // (chưa dùng, để mở rộng)
+  const { data: employees = [] } = useEmployeesQuery();
   const { data: attends = [], refetch } = useAttendanceRangeQuery(fromISO, toISO);
   const { data: schedules = [] } = useWeekSchedulesQuery(fromISO, toISO);
 
@@ -328,7 +279,6 @@ export default function AttendanceBoardPage() {
     return m;
   }, [schedules]);
 
-  // modal
   const [modal, setModal] = useState<null | { dateISO: string; shift: Shift; presetEmpId?: string }>(null);
 
   return (
@@ -337,29 +287,19 @@ export default function AttendanceBoardPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">Bảng chấm công</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, -7))}>
-            ◀ Tuần trước
-          </Button>
-          <Button variant="outline" onClick={() => setAnchor(startOfWeek(new Date()))}>
-            Tuần này
-          </Button>
-          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, 7))}>
-            Tuần sau ▶
-          </Button>
+          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, -7))}>◀ Tuần trước</Button>
+          <Button variant="outline" onClick={() => setAnchor(startOfWeek(new Date()))}>Tuần này</Button>
+          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, 7))}>Tuần sau ▶</Button>
         </div>
       </div>
 
-      {/* legend + search (tuỳ mở rộng) */}
+      {/* legend + search */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="w-full sm:w-[320px]">
           <Input placeholder="Tìm nhân viên (hiển thị sau)" disabled />
         </div>
         <div className="flex items-center flex-wrap gap-2 text-sm">
-          {(
-            ["ON_TIME", "LATE", "MISSING", "LEAVE", "ABSENT"] as Array<
-              keyof typeof STATUS_UI
-            >
-          ).map((k) => (
+          {(["ON_TIME", "LATE", "MISSING", "LEAVE", "ABSENT"] as Array<keyof typeof STATUS_UI>).map((k) => (
             <span key={k} className={cn("px-2 py-1 rounded border", STATUS_UI[k].className)}>
               {STATUS_UI[k].text}
             </span>
@@ -368,20 +308,16 @@ export default function AttendanceBoardPage() {
       </div>
 
       {/* desktop grid */}
-    <Card className="hidden xl:block overflow-hidden">
-   <div className="grid" style={{ gridTemplateColumns: `220px repeat(7, minmax(140px, 1fr))` }}>
-          {/* header row */}
+      <Card className="hidden xl:block overflow-hidden">
+        <div className="grid" style={{ gridTemplateColumns: `220px repeat(7, minmax(140px, 1fr))` }}>
           <div className="bg-slate-50 p-3 font-medium border-b">Ca làm việc</div>
           {days.map((d, i) => (
             <div key={i} className="bg-slate-50 p-3 font-medium text-center border-b">
               <div>{viDay[i]}</div>
-              <div className="text-xs text-muted-foreground">
-                {d.toLocaleDateString("vi-VN")}
-              </div>
+              <div className="text-xs text-muted-foreground">{d.toLocaleDateString("vi-VN")}</div>
             </div>
           ))}
 
-          {/* rows = shifts */}
           {shifts.map((shift) => (
             <FragmentRow
               key={shift.id}
@@ -389,15 +325,13 @@ export default function AttendanceBoardPage() {
               days={days}
               cellMap={cellMap}
               assignedMap={assignedMap}
-              onNew={(dateISO, s, presetEmpId) =>
-                setModal({ dateISO, shift: s, presetEmpId })
-              }
+              onNew={(dateISO, s, presetEmpId) => setModal({ dateISO, shift: s, presetEmpId })}
             />
           ))}
         </div>
       </Card>
 
-      {/* mobile: theo ngày */}
+      {/* mobile per-day */}
       <div className="md:hidden space-y-4">
         {days.map((d, idx) => (
           <Card key={idx} className="p-3">
@@ -408,25 +342,21 @@ export default function AttendanceBoardPage() {
             <Separator />
             <div className="mt-3 space-y-3">
               {shifts.map((s) => {
-                const dateISO = fmtISO(d);
+                const dateISO = formatYMD(d);             {/* <--- dùng local */}
                 const key = `${dateISO}::${s.id}`;
                 const assigned = assignedMap.get(key) || [];
                 return (
                   <div key={s.id}>
                     <div className="mb-2 font-medium">
                       {s.name}
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {s.startTime}–{s.endTime}
-                      </span>
+                      <span className="ml-2 text-xs text-muted-foreground">{s.startTime}–{s.endTime}</span>
                     </div>
                     <Cell
                       dateISO={dateISO}
                       shift={s}
                       cellMap={cellMap}
                       assignedEmployees={assigned}
-                      onNew={(iso, sh, uid) =>
-                        setModal({ dateISO: iso, shift: sh, presetEmpId: uid })
-                      }
+                      onNew={(iso, sh, uid) => setModal({ dateISO: iso, shift: sh, presetEmpId: uid })}
                     />
                   </div>
                 );
