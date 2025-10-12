@@ -18,8 +18,8 @@ import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import CreateCategoryDialog from "@/components/admin/product/category/modal/CreateCategory";
 
-import { useCategories } from "@/hooks/admin/useCategory";
-import type { CategoryQuery } from "@/types/admin/category";
+import { useCategoriesQuery } from "@/hooks/admin/useCategory";
+import type { CategoryQuery } from "@/types/admin/product/category";
 
 export default function CategoryListPage() {
   // UI state
@@ -41,7 +41,7 @@ export default function CategoryListPage() {
     sort,
   }), [type, isActive, debouncedQ, page, limit, sort]);
 
-  const { data, isLoading, isFetching, refetch, error } = useCategories(apiParams);
+  const { data, isLoading, isFetching, refetch, error } = useCategoriesQuery(apiParams);
 
   const pages = data?.meta.pages ?? 1;
   const total = data?.meta.total ?? 0;

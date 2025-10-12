@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useIngredients } from "@/features/admin/inventory/api";
+import { useIngredients } from "@/hooks/admin/useIngredients";
 
 export default function IngredientPicker({ onAdd, onOpenAddIngredient }: {
   onAdd: (id: string, name: string, unit?: string) => void;

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useIngredients, useStockInIngredient, IngredientDTO } from "@/features/admin/inventory/api";
+import { useIngredients } from "@/hooks/admin/useIngredients";
+import {useStockInIngredient} from "@/hooks/admin/useIngredients";
+import type { IngredientDTO } from "@/types/admin/product/ingredient";
 import { useAppToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

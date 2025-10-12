@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 
-import { useCreateCategory } from "@/hooks/admin/useCategory";
-import type { CreateCategoryPayload } from "@/types/admin/category";
+import { useCreateCategoryMutation } from "@/hooks/admin/useCategory";
+import type { CreateCategoryPayload } from "@/types/admin/product/category";
 
 const TYPE_OPTIONS: CreateCategoryPayload["type"][] = ["MENU", "INGREDIENT"];
 
@@ -53,7 +53,7 @@ export default function CreateCategoryDialog({
     mutate,
     isPending,
     error,
-  } = useCreateCategory({ accessToken: (session as any)?.accessToken });
+  } = useCreateCategoryMutation();
 
   const onSubmit = handleSubmit((values) =>
     mutate(values, {

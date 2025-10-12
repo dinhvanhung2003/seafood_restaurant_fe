@@ -1,134 +1,96 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAreas,
   useCreateArea,
+  useTablesQuery,
   useCreateTable,
   useUpdateTable,
   useDeleteTable,
-  AreaDTO,
-  DiningTableDTO,
-  TableStatusApi,
-} from "@/features/admin/table/api";
+} from "@/hooks/admin/useTable";
 import AreaFormModal from "@/components/admin/table/modal/AreaFormModal";
-import TableFormModal, {
-  TableFormState,
-  Area as TableArea,
-} from "@/components/admin/table/modal/TableFormModal";
+import TableFormModal, { TableFormState, Area as TableArea } from "@/components/admin/table/modal/TableFormModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppToast } from "@/lib/toast";
-/* ===== Helpers: map status giữa Modal <-> API ===== */
-const toApiStatus = (s: "active" | "inactive"): TableStatusApi =>
+import type { DiningTableDTO } from "@/types/admin/table/table";
+
+type ModalStatus = "active" | "inactive";
+type ApiStatus = "ACTIVE" | "INACTIVE";
+
+export const toApiStatus = (s: ModalStatus): ApiStatus =>
   s === "active" ? "ACTIVE" : "INACTIVE";
-const toModalStatus = (s: TableStatusApi): "active" | "inactive" =>
+
+export const toModalStatus = (s: ApiStatus): ModalStatus =>
   s === "ACTIVE" ? "active" : "inactive";
 
 export default function TablesPage() {
-  console.log("Render TablesPage");
- const toast = useAppToast();
+  const toast = useAppToast();
 
-  const [selectedAreaId, setSelectedAreaId] = useState<string>("");
+  // filters + paging
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [areaName, setAreaName] = useState<string>(""); // lọc theo tên khu
   const [search, setSearch] = useState("");
-  const [pageSize] = useState(200);
-
-  // ===== Queries
-  const {
-    data: areasData,
-    isLoading: areasLoading,
-    error: areasError,
-  } = useAreas();
-
-  const areas = (areasData ?? []) as AreaDTO[];
-
-  // Chuẩn hoá bảng: backend có thể không set areaId cho từng bàn, ta gán fallback = id khu vực
-  const normalizedAreas = useMemo(
-    () =>
-      areas.map((a) => ({
-        ...a,
-        tables: (a.tables ?? []).map((t) => ({
-          ...t,
-          areaId: t.areaId || a.id,
-        })),
-      })),
-    [areas]
+  const [status, setStatus] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ALL");
+  // fetch areas (để hiện select trong modal và filter "theo tên khu")
+  const { data: areasData = [] } = useAreas();
+  const areaOptions: TableArea[] = useMemo(
+    () => areasData.map((a) => ({ id: a.id, name: a.name })),
+    [areasData]
   );
 
-  // Danh sách khu vực cho modal tạo/sửa bàn
-  const tableAreas: TableArea[] = normalizedAreas.map((a) => ({
-    id: a.id,
-    name: a.name,
-  }));
+  // fetch tables (server paging)
+  const { data: tableResp, isFetching, error } = useTablesQuery(
+    {
+      page, 
+      limit, 
+      area: areaName || undefined, 
+      search: search || undefined,
+      status: status === "ALL" ? undefined : status,
+    });
+  const tables = tableResp?.items ?? [];
+  const meta = tableResp?.meta ?? { total: 0, page, limit, pages: 1 };
 
-  // Lọc theo khu vực + ô tìm kiếm, và cắt trang
-  const filteredAreas = useMemo(() => {
-    const matchName = (t: DiningTableDTO) =>
-      !search ||
-      t.name.toLowerCase().includes(search.trim().toLowerCase());
-
-    const matchArea = (a: AreaDTO) =>
-      !selectedAreaId || a.id === selectedAreaId;
-
-    return normalizedAreas
-      .filter(matchArea)
-      .map((a) => ({
-        ...a,
-        tables: a.tables.filter(matchName).slice(0, pageSize),
-      }))
-      .filter((a) => a.tables.length > 0 || selectedAreaId === a.id);
-  }, [normalizedAreas, selectedAreaId, search, pageSize]);
-
-  // ===== Mutations
+  // mutations
   const createArea = useCreateArea();
   const createTable = useCreateTable();
   const updateTable = useUpdateTable();
   const deleteTable = useDeleteTable();
 
-  // ===== Modals state
+  // modals state
   const [openAreaModal, setOpenAreaModal] = useState(false);
   const [openTableModal, setOpenTableModal] = useState(false);
-
-  // Area modal fields
-  const [areaName, setAreaName] = useState("");
-  const [areaNote, setAreaNote] = useState("");
-
-  // Table modal fields (tạo + sửa)
   const [tableEditing, setTableEditing] = useState(false);
-  const [tableForm, setTableForm] = useState<TableFormState>({
-    name: "",
-    areaId: "",
-    seats: 2,
-    note: "",
-    status: "active",
-    order: 0,
+  const [form, setForm] = useState<TableFormState>({
+    name: "", areaId: "", seats: 2, note: "", status: "active", order: 0,
   });
 
-  // ===== Handlers mở modal
-  const onOpenCreateArea = () => {
-    setAreaName("");
-    setAreaNote("");
-    setOpenAreaModal(true);
-  };
+  // reset page khi filter đổi
+  useEffect(() => { setPage(1); }, [areaName, search, limit]);
 
+  const onOpenCreateArea = () => { setOpenAreaModal(true); };
   const onOpenCreateTable = () => {
     setTableEditing(false);
-    setTableForm({
-      name: "",
-      areaId: selectedAreaId || "",
-      seats: 2,
-      note: "",
-      status: "active",
-      order: 0,
-    });
+    setForm({ name: "", areaId: "", seats: 2, note: "", status: "active", order: 0 });
     setOpenTableModal(true);
   };
-
   const onOpenEditTable = (t: DiningTableDTO) => {
     setTableEditing(true);
-    setTableForm({
+    setForm({
       id: t.id,
       name: t.name,
-      areaId: t.areaId,
+      areaId: t.area.id,
       seats: t.seats,
       note: t.note ?? "",
       status: toModalStatus(t.status),
@@ -137,236 +99,183 @@ export default function TablesPage() {
     setOpenTableModal(true);
   };
 
-  // ===== Submit Area
-   const handleSubmitArea = () => {
-    if (!areaName.trim()) return;
+  // submit area
+  const handleSubmitArea = () => {
     createArea.mutate(
-      { name: areaName.trim(), note: areaNote || undefined, status: "AVAILABLE" },
+      { name: form.name, note: "", status: "AVAILABLE" }, // bạn có thể dùng state riêng cho area modal như trước
       {
-        onSuccess: (a) => {
-          toast.success("Đã tạo khu vực", a.name);
-          setOpenAreaModal(false);
-          setSelectedAreaId(a.id);
-          setTableForm((f) => ({ ...f, areaId: a.id }));
-        },
+        onSuccess: (a) => { toast.success("Đã tạo khu vực", a.name); setOpenAreaModal(false); },
         onError: () => toast.error("Không tạo được khu vực"),
       }
     );
   };
-  // ===== Submit Table (tạo/sửa)
-  const handleSubmitTable = () => {
-    if (!tableForm.name.trim() || !tableForm.areaId) return;
-    const payload = {
-      name: tableForm.name.trim(),
-      seats: Number(tableForm.seats ?? 2) || 2,
-      note: tableForm.note || undefined,
-      areaId: tableForm.areaId,
-      status: toApiStatus(tableForm.status),
-    };
 
-    if (tableEditing && tableForm.id) {
+  // submit table
+  const handleSubmitTable = () => {
+    if (!form.name.trim() || !form.areaId) return;
+    const payload = {
+      name: form.name.trim(),
+      seats: Number(form.seats ?? 2) || 2,
+      note: form.note || undefined,
+      areaId: form.areaId,
+      status: toApiStatus(form.status),
+    };
+    if (tableEditing && form.id) {
       updateTable.mutate(
-        { id: tableForm.id, body: payload },
+        { args: { id: form.id }, data: payload },
         {
-          onSuccess: () => {
-            toast.success("Đã cập nhật bàn", tableForm.name);
-            setOpenTableModal(false);
-          },
+          onSuccess: () => { toast.success("Đã cập nhật bàn", form.name); setOpenTableModal(false); },
           onError: () => toast.error("Không cập nhật được bàn"),
         }
       );
     } else {
       createTable.mutate(payload, {
-        onSuccess: () => {
-          toast.success("Đã tạo bàn", tableForm.name);
-          setOpenTableModal(false);
-        },
+        onSuccess: () => { toast.success("Đã tạo bàn", form.name); setOpenTableModal(false); },
         onError: () => toast.error("Không tạo được bàn"),
       });
     }
   };
 
-  // ===== Delete
+  // delete
   const handleDelete = (t: DiningTableDTO) => {
-    if (confirm(`Xoá bàn "${t.name}"?`)) {
-      deleteTable.mutate(t.id, {
-        onSuccess: () => toast.success("Đã xoá bàn", t.name),
-        onError: () => toast.error("Không xoá được bàn"),
-      });
-    }
+    if (!confirm(`Xoá bàn "${t.name}"?`)) return;
+    deleteTable.mutate(
+      { id: t.id },
+      { onSuccess: () => toast.success("Đã xoá bàn", t.name), onError: () => toast.error("Không xoá được bàn") }
+    );
   };
 
-  // ===== Busy/Error
-  const busy =
-    areasLoading ||
-    createArea.isPending ||
-    createTable.isPending ||
-    updateTable.isPending ||
-    deleteTable.isPending;
+  const busy = isFetching || createArea.isPending || createTable.isPending || updateTable.isPending || deleteTable.isPending;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Bàn &amp; Khu vực</h1>
-        </div>
-        <div className="flex gap-2">
-          {busy && (
-            <span className="animate-pulse text-xs text-gray-500">
-              Đang xử lý…
-            </span>
-          )}
-          {areasError && (
-            <span className="text-xs text-red-600">
-              {String((areasError as any)?.message || "Có lỗi xảy ra")}
-            </span>
-          )}
-        </div>
+    <div className="space-y-4">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Danh sách bàn</h1>
+        {busy && <span className="text-xs text-muted-foreground animate-pulse">Đang xử lý…</span>}
       </header>
 
       {/* Filters */}
-      <section className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="col-span-1">
-          <label className="mb-1 block text-sm font-medium">Khu vực</label>
-          <select
-            className="w-full rounded-lg border p-2"
-            value={selectedAreaId}
-            onChange={(e) => {
-              setSelectedAreaId(e.target.value);
-              setTableForm((f) => ({ ...f, areaId: e.target.value }));
-            }}
-          >
-            <option value="">Tất cả</option>
-            {normalizedAreas.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="md:col-span-2">
+          <Label>Tìm kiếm</Label>
+          <Input placeholder="Tên bàn…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-
-        <div className="col-span-1">
-          <label className="mb-1 block text-sm font-medium">Tìm kiếm</label>
-          <input
-            className="w-full rounded-lg border p-2"
-            placeholder="Tên bàn…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div>
+          <Label>Khu vực (lọc theo tên)</Label>
+          <Select value={areaName} onValueChange={(v) => setAreaName(v === "__all__" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Tất cả" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Tất cả</SelectItem>
+              {areaOptions.map(a => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
+        <div>
+          <Label>Hiển thị</Label>
+          <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[5, 10, 20, 50].map(n => <SelectItem key={n} value={String(n)}>{n}/trang</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+  <Label className="text-sm font-medium">Trạng thái</Label>
+  <RadioGroup
+    value={status}
+    onValueChange={(v) => setStatus(v as "ACTIVE" | "INACTIVE" | "ALL")}
+    className="mt-1 space-y-2"
+  >
+    <div className="flex items-center space-x-2">
+      <RadioGroupItem id="st-active" value="ACTIVE" />
+      <Label htmlFor="st-active">Đang hoạt động</Label>
+    </div>
+    <div className="flex items-center space-x-2">
+      <RadioGroupItem id="st-inactive" value="INACTIVE" />
+      <Label htmlFor="st-inactive">Ngừng hoạt động</Label>
+    </div>
+    <div className="flex items-center space-x-2">
+      <RadioGroupItem id="st-all" value="ALL" />
+      <Label htmlFor="st-all">Tất cả</Label>
+    </div>
+  </RadioGroup>
+</div>
+      </div>
 
-        <div className="col-span-1 flex items-end gap-2">
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setSelectedAreaId("");
-              setSearch("");
-            }}
-          >
-            Xoá bộ lọc
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button onClick={onOpenCreateArea} className="bg-black hover:opacity-90">+ Tạo khu vực</Button>
+        <Button variant="outline" onClick={onOpenCreateTable}>+ Tạo bàn</Button>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead className="w-[28%]">Tên bàn</TableHead>
+              <TableHead className="w-[22%]">Khu vực</TableHead>
+              <TableHead className="w-[14%]">Ghế</TableHead>
+              <TableHead className="w-[14%]">Trạng thái</TableHead>
+              <TableHead className="w-[22%]" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {error ? (
+              <TableRow><TableCell colSpan={5} className="py-10 text-center text-red-600">{String((error as any)?.message || "Có lỗi xảy ra")}</TableCell></TableRow>
+            ) : tables.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">Không có dữ liệu</TableCell></TableRow>
+            ) : (
+              tables.map(t => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.name}</TableCell>
+                  <TableCell>{t.area?.name ?? "—"}</TableCell>
+                  <TableCell>{t.seats}</TableCell>
+                  <TableCell>
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${t.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-700"
+                      }`}>{t.status}</span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => onOpenEditTable(t)}>Sửa</Button>
+                      <Button variant="destructive" onClick={() => handleDelete(t)}>Xoá</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">Tổng {meta.total} bàn · Trang {meta.page}/{meta.pages || 1}</div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || isFetching}>
+            <ChevronLeft className="mr-1 h-4 w-4" /> Trước
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(meta.pages || 1, p + 1))} disabled={page >= (meta.pages || 1) || isFetching}>
+            Sau <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
-      </section>
+      </div>
 
-      {/* Action buttons */}
-      <section className="mb-4 flex flex-wrap gap-2">
-        <Button onClick={onOpenCreateArea} className="bg-black hover:opacity-90">
-          + Tạo khu vực
-        </Button>
-        <Button variant="outline" onClick={onOpenCreateTable}>
-          + Tạo bàn
-        </Button>
-      </section>
-
-      {/* Area -> Tables */}
-      <section className="space-y-6">
-        {filteredAreas.map((area) => (
-          <div key={area.id} className="rounded-2xl border">
-            <div className="flex items-center justify-between border-b p-4">
-              <h2 className="text-lg font-medium">{area.name}</h2>
-              <span className="text-sm text-gray-500">
-                Bàn: {area.tables.length}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left">
-                  <tr>
-                    <th className="px-4 py-3">Tên</th>
-                    <th className="px-4 py-3">Ghế</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {area.tables.map((t) => (
-                    <tr key={t.id} className="border-t">
-                      <td className="px-4 py-2">{t.name}</td>
-                      <td className="px-4 py-2">{t.seats}</td>
-                      <td className="px-4 py-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs ${
-                            t.status === "ACTIVE"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-200 text-gray-700"
-                          }`}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" onClick={() => onOpenEditTable(t)}>
-                            Sửa
-                          </Button>
-                          <Button variant="destructive" onClick={() => handleDelete(t)}>
-                            Xoá
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {area.tables.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-gray-500" colSpan={4}>
-                        Không có bàn
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-
-        {filteredAreas.length === 0 && (
-          <div className="rounded-2xl border p-8 text-center text-gray-500">
-            Không có dữ liệu
-          </div>
-        )}
-      </section>
-
-      {/* ====== Modals ====== */}
+      {/* Modals */}
       <AreaFormModal
         open={openAreaModal}
         setOpen={setOpenAreaModal}
-        areaName={areaName}
-        setAreaName={setAreaName}
-        areaNote={areaNote}
-        setAreaNote={setAreaNote}
+        areaName={""} setAreaName={() => { }}
+        areaNote={""} setAreaNote={() => { }}
         onSubmit={handleSubmitArea}
       />
-
       <TableFormModal
         open={openTableModal}
         setOpen={setOpenTableModal}
-        form={tableForm}
-        setForm={setTableForm}
+        form={form}
+        setForm={setForm}
         handleSubmit={handleSubmitTable}
-        areas={tableAreas}
+        areas={areaOptions}
         editing={tableEditing}
       />
     </div>

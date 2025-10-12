@@ -18,10 +18,6 @@ const makeBatchId = () => {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 };
 
-type UseOrdersArgs = {
-  menuItems: { id: string; price: number }[];
-};
-
 /* ----------------------- API helpers (qua axios instance) ----------------------- */
 async function fetchOrders() {
   const res = await api.get("/orders", {

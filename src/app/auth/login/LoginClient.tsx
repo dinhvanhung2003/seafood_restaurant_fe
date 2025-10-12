@@ -124,7 +124,7 @@ export default function LoginClient({ back }: { back?: string }) {
                     name="email"
                     type="email"
                     placeholder="admin@restaurant.com"
-                    className={`h-11 text-base text-white placeholder-gray-300 ${
+                    className={`h-11 text-base text-black placeholder-gray-300 ${
                       fieldErr.email ? "border-red-500 focus-visible:ring-red-500" : ""
                     }`}
                     autoComplete="email"
@@ -135,7 +135,7 @@ export default function LoginClient({ back }: { back?: string }) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm text-white">
+                  <Label htmlFor="password" className="text-sm text-black">
                     Mật khẩu
                   </Label>
                   <div className="relative">
@@ -144,7 +144,7 @@ export default function LoginClient({ back }: { back?: string }) {
                       name="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Mật khẩu"
-                      className={`h-11 pr-10 text-base text-white placeholder-gray-300 ${
+                      className={`h-11 pr-10 text-base text-black placeholder-gray-300 ${
                         fieldErr.password ? "border-red-500 focus-visible:ring-red-500" : ""
                       }`}
                       autoComplete="current-password"
