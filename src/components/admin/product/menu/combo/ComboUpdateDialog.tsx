@@ -47,7 +47,7 @@ export default function ComboUpdateDialog({
       setDesc(detail.data.description ?? "");
       setIsAvailable(detail.data.isAvailable);
       setRows(
-        (detail.data.components || []).map((c) => ({
+        (detail.data.components || []).map((c:any) => ({
           itemId: c.item.id,
           quantity: Number(c.quantity) || 1,
         }))
@@ -150,24 +150,25 @@ export default function ComboUpdateDialog({
               }
 
               update.mutate(
-                {
-                  id,
-                  data: {
-                    name,
-                    comboPrice: price,
-                    description: desc,
-                    isAvailable,
-                    components, // chỉ gửi khi bật "Cập nhật thành phần"
-                    image: file,
-                  },
-                },
-                {
-                  onSuccess: () => {
-                    onUpdated?.();
-                    onOpenChange(false);
-                  },
-                }
-              );
+  {
+    args: { id }, // ✅ path params phải nằm trong args
+    data: {
+      name,
+      comboPrice: price,
+      description: desc,
+      isAvailable,
+      components,               // chỉ gửi khi bật "Cập nhật thành phần"
+      image: file,              // có thể undefined, ok vì UpdateComboDto là Partial
+    },
+  },
+  {
+    onSuccess: () => {
+      onUpdated?.();
+      onOpenChange(false);
+    },
+  }
+);
+
             }}
             disabled={update.isPending || detail.isLoading}
           >

@@ -1,4 +1,5 @@
 "use client";
+import { isUUID } from "@/lib/uuid";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useComboDetailQuery } from "@/hooks/admin/useCombo";
@@ -11,7 +12,8 @@ function formatVND(x: string | number) {
 export default function ComboDetailDialog({
   id, open, onOpenChange,
 }: { id?: string; open: boolean; onOpenChange: (v: boolean) => void; }) {
-  const q = useComboDetailQuery(id);
+    const enabled = open && isUUID(id);
+  const q = useComboDetailQuery(enabled ? id : undefined, { enabled });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -34,7 +36,7 @@ export default function ComboDetailDialog({
                 <div className="text-sm text-muted-foreground">—</div>
               ) : (
                 <ul className="list-disc pl-6 text-sm">
-                  {q.data.components!.map((c) => (
+                  {q.data.components!.map((c:any) => (
                     <li key={c.id}>{c.item?.name ?? c.id} — SL: {c.quantity}</li>
                   ))}
                 </ul>

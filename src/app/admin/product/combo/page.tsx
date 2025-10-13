@@ -42,11 +42,26 @@ export default function ComboPage() {
         CreateButton={<Button onClick={() => setOpenCreate(true)}>+ Tạo combo</Button>}
       />
 
-      <ComboDetailDialog id={detailId} open={Boolean(detailId)} onOpenChange={(v) => !v && setDetailId(undefined)} />
+    {detailId && (
+  <ComboDetailDialog
+    id={detailId}
+    open
+    onOpenChange={(v) => !v && setDetailId(undefined)}
+  />
+)}
+
+{editId && (
+  <ComboUpdateDialog
+    id={editId}
+    open
+    onOpenChange={(v) => !v && setEditId(undefined)}
+    onUpdated={() => q.refetch()}
+  />
+)}
 
       <ComboCreateDialog open={openCreate} onOpenChange={setOpenCreate} onCreated={() => q.refetch()} />
 
-      <ComboUpdateDialog id={editId} open={Boolean(editId)} onOpenChange={(v) => !v && setEditId(undefined)} onUpdated={() => q.refetch()} />
+  
     </div>
   );
 }
