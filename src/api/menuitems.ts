@@ -1,5 +1,5 @@
 // api/menuitems.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL|| "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 type MenuItem = {
   id: string; name: string; price: string; description: string | null;
@@ -17,7 +17,7 @@ export type MenuItemsQuery = {
   limit?: number;          // <= 100
   search?: string;
   categoryId?: string;
-  isAvailable?: "true"|"false";
+  isAvailable?: "true" | "false";
   minPrice?: number;
   maxPrice?: number;
   sortBy?: "name" | "price" | "createdAt";

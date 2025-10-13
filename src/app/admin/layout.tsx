@@ -4,8 +4,18 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Package, Table as TableIcon, CreditCard, Users, UserCircle,
-  ShoppingCart, Wallet, BarChart3, Boxes, ChevronDown, LogOut,
+  LayoutDashboard,
+  Package,
+  Table as TableIcon,
+  CreditCard,
+  Users,
+  UserCircle,
+  ShoppingCart,
+  Wallet,
+  BarChart3,
+  Boxes,
+  ChevronDown,
+  LogOut,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -14,49 +24,61 @@ function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 type NavChild = { label: string; href: string };
-type NavItem = { label: string; href: string; icon: any; children?: NavChild[] };
+type NavItem = {
+  label: string;
+  href: string;
+  icon: any;
+  children?: NavChild[];
+};
 
 const NAV: NavItem[] = [
   { label: "Tổng quan", href: "/admin/dashboard", icon: LayoutDashboard },
-  { label: "Hàng hóa", href: "/admin/hang-hoa", icon: Package,
+  {
+    label: "Hàng hóa",
+    href: "/admin/hang-hoa",
+    icon: Package,
 
- children: [
-     
+    children: [
       { label: "Thực đơn", href: "/admin/product/menu" },
       { label: "Danh mục", href: "/admin/product/category" },
       { label: "Combo", href: "/admin/product/combo" },
-      { label: "Khuyến mãi", href: "/admin/product/promotion" }
+      { label: "Khuyến mãi", href: "/admin/product/promotion" },
     ],
-  
-
-   },
+  },
   { label: "Phòng/Bàn", href: "/admin/table", icon: TableIcon },
-  { label: "Giao dịch", href: "/admin/giao-dich", icon: CreditCard,
+  {
+    label: "Giao dịch",
+    href: "/admin/giao-dich",
+    icon: CreditCard,
 
- children: [
+    children: [
       { label: "Hóa đơn", href: "/admin/transaction/invoice" },
       // { label: "Nhập kho", href: "/admin/inventories/purchase" },
-      
     ],
-
-   },
-  { label: "Đối tác", href: "/admin/doi-tac", icon: Users,
-children: [
+  },
+  {
+    label: "Đối tác",
+    href: "/admin/doi-tac",
+    icon: Users,
+    children: [
       { label: "Khách hàng", href: "/admin/customer" },
       { label: "Nhà Cung Cấp", href: "/admin/supplier" },
-     
     ],
-
-
-   },
-  { label: "Nhân viên", href: "/admin/employee", icon: UserCircle,
-     children: [
+  },
+  {
+    label: "Nhân viên",
+    href: "/admin/employee",
+    icon: UserCircle,
+    children: [
       { label: "Danh sách nhân viên", href: "/admin/employee/list" },
       { label: "Lịch làm việc", href: "/admin/employee/shift" },
       { label: "Bảng chấm công", href: "/admin/employee/attendance" },
-      { label: "Thiết lập chấm công", href: "/admin/employee/attendance-setting" },
+      {
+        label: "Thiết lập chấm công",
+        href: "/admin/employee/attendance-setting",
+      },
     ],
-   },
+  },
   { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
   {
     label: "Kho hàng",
@@ -74,7 +96,11 @@ children: [
   { label: "Báo cáo", href: "/admin/bao-cao", icon: BarChart3 },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
@@ -83,8 +109,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const init: Record<string, boolean> = {};
     NAV.forEach((item) => {
       if (item.children?.length) {
-        const childActive = item.children.some((c) => pathname?.startsWith(c.href));
-        if (childActive || pathname?.startsWith(item.href)) init[item.href] = true;
+        const childActive = item.children.some((c) =>
+          pathname?.startsWith(c.href)
+        );
+        if (childActive || pathname?.startsWith(item.href))
+          init[item.href] = true;
       }
     });
     setExpanded((prev) => ({ ...prev, ...init }));
@@ -92,7 +121,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isActive = (href: string) => {
     if (!pathname) return false;
-    if (href === "/admin") return pathname === "/admin" || pathname === "/admin/";
+    if (href === "/admin")
+      return pathname === "/admin" || pathname === "/admin/";
     return pathname.startsWith(href);
   };
 
@@ -102,7 +132,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const Icon = item.icon;
         const activeParent =
           isActive(item.href) ||
-          (item.children?.length ? item.children.some((c) => isActive(c.href)) : false);
+          (item.children?.length
+            ? item.children.some((c) => isActive(c.href))
+            : false);
         const hasChildren = !!item.children?.length;
         const isExpanded = expanded[item.href];
 
@@ -126,19 +158,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span
                 className={cx(
                   "absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r transition-colors",
-                  activeParent ? "bg-sky-500" : "bg-transparent group-hover:bg-slate-600"
+                  activeParent
+                    ? "bg-sky-500"
+                    : "bg-transparent group-hover:bg-slate-600"
                 )}
               />
               <Icon
                 className={cx(
                   "h-5 w-5 flex-none transition-colors",
-                  activeParent ? "text-sky-400" : "text-slate-400 group-hover:text-slate-200"
+                  activeParent
+                    ? "text-sky-400"
+                    : "text-slate-400 group-hover:text-slate-200"
                 )}
               />
               {hasChildren ? (
                 <span className="truncate">{item.label}</span>
               ) : (
-                <Link href={item.href} className="truncate" onClick={onItemClick}>
+                <Link
+                  href={item.href}
+                  className="truncate"
+                  onClick={onItemClick}
+                >
                   {item.label}
                 </Link>
               )}
@@ -171,7 +211,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <span
                           className={cx(
                             "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r",
-                            active ? "bg-sky-500" : "bg-transparent group-hover:bg-slate-600"
+                            active
+                              ? "bg-sky-500"
+                              : "bg-transparent group-hover:bg-slate-600"
                           )}
                         />
                         {c.label}
@@ -192,8 +234,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar desktop */}
       <aside className="hidden md:flex w-64 shrink-0 flex-col bg-slate-900 text-slate-200 border-r border-slate-800">
         <div className="flex items-center gap-2 h-14 px-5 border-b border-slate-800">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-600 text-white font-bold">A</div>
-          <div className="font-bold text-lg tracking-tight text-slate-100">Admin</div>
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-600 text-white font-bold">
+            A
+          </div>
+          <div className="font-bold text-lg tracking-tight text-slate-100">
+            Admin
+          </div>
         </div>
         <nav className="flex-1 py-3">{renderNav()}</nav>
 
@@ -224,12 +270,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+          />
           <aside className="absolute left-0 top-0 h-full w-72 bg-slate-900 text-slate-200 border-r border-slate-800 shadow-xl flex flex-col">
             <div className="flex items-center gap-2 h-14 px-5 border-b border-slate-800">
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-600 text-white font-bold">A</div>
-              <div className="font-bold text-lg tracking-tight text-slate-100">Admin</div>
-              <button className="ml-auto text-sm underline" onClick={() => setOpen(false)}>
+              <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-600 text-white font-bold">
+                A
+              </div>
+              <div className="font-bold text-lg tracking-tight text-slate-100">
+                Admin
+              </div>
+              <button
+                className="ml-auto text-sm underline"
+                onClick={() => setOpen(false)}
+              >
                 Đóng
               </button>
             </div>
