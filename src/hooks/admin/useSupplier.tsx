@@ -1,14 +1,31 @@
 // hooks/admin/useSuppliers.ts
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
-import type { SuppliersFilter, Supplier, CreateSupplierBody, UpdateBody } from "@/types/types";
+import type {
+  SuppliersFilter,
+  Supplier,
+  CreateSupplierBody,
+  UpdateBody,
+} from "@/types/types";
 
-type ListResp = { items: Supplier[]; total: number; page: number; limit: number };
+type ListResp = {
+  data: Supplier[];
+  total: number;
+  page: number;
+  limit: number;
+};
 
 const clean = (p: Record<string, any>) => {
   const q = { ...p };
-  Object.keys(q).forEach((k) => (q as any)[k] === "" || (q as any)[k] == null ? delete (q as any)[k] : null);
+  Object.keys(q).forEach((k) =>
+    (q as any)[k] === "" || (q as any)[k] == null ? delete (q as any)[k] : null
+  );
   return q;
 };
 
@@ -30,9 +47,11 @@ export function useSuppliers(
   });
 
   return useQuery<ListResp>({
-    queryKey: ["suppliers", params],          // gom key gọn theo params đã clean
+    queryKey: ["suppliers", params], // gom key gọn theo params đã clean
     queryFn: async () => {
-      const { data } = await api.get<ListResp>("/supplier/get-list-suppliers", { params });
+      const { data } = await api.get<ListResp>("/supplier/get-list-suppliers", {
+        params,
+      });
       return data;
     },
     initialData,
@@ -96,7 +115,10 @@ export function useUpdateSupplier() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: { id: string; body: UpdateBody }) => {
-      const { data } = await api.patch(`/supplier/update-supplier/${p.id}`, p.body);
+      const { data } = await api.patch(
+        `/supplier/update-supplier/${p.id}`,
+        p.body
+      );
       return data;
     },
     onSuccess: (_, vars) => {
