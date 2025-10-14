@@ -101,7 +101,7 @@ export default function StaffPage() {
         onOpenChange={(v) => {
           setOpenProfile(v);
           if (!v) setSelectedUserId(undefined);
-        }}
+        }} 
       />
     </div>
   );
