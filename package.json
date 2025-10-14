@@ -47,6 +47,7 @@
     "react-hook-form": "^7.62.0",
     "react-leaflet": "^5.0.0",
     "react-qr-code": "^2.0.18",
+    "react-select": "^5.10.2",
     "recharts": "^3.2.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",

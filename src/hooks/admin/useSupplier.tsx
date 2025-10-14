@@ -4,7 +4,7 @@ import api from "@/lib/axios";
 import { toast } from "sonner";
 import type { SuppliersFilter, Supplier, CreateSupplierBody, UpdateBody } from "@/types/types";
 
-type ListResp = { items: Supplier[]; total: number; page: number; limit: number };
+type ListResp = { data: Supplier[]; total: number; page: number; limit: number };
 
 const clean = (p: Record<string, any>) => {
   const q = { ...p };
@@ -26,7 +26,7 @@ export function useSuppliers(
     status: filters?.status,
     supplierGroupId: filters?.supplierGroupId,
     city: filters?.city,
-    withGroup: true, // 👈 bắt buộc
+    withGroup: true, //bắt buộc
   });
 
   return useQuery<ListResp>({

@@ -2,8 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
 
@@ -36,7 +35,7 @@ export type ComboListResp = {
 
 export type ComboListQuery = { page?: number; limit?: number; search?: string };
 
-export type ComboComponent = { itemId: string; quantity: number }; // nếu BE cần "menuItemId" thì map ở FormData
+export type ComboComponent = { itemId: string; quantity: number };
 export type CreateComboDto = {
   name: string;
   comboPrice: number;
@@ -65,7 +64,6 @@ const fdCreate = (p: CreateComboDto) => {
   f.set("comboPrice", String(p.comboPrice));
   if (p.description != null) f.set("description", p.description);
   if (p.isAvailable != null) f.set("isAvailable", String(p.isAvailable));
-  // Nếu BE yêu cầu {menuItemId, quantity} thì map: p.components.map(c => ({menuItemId:c.itemId, quantity:c.quantity}))
   f.set("components", JSON.stringify(p.components));
   f.set("image", p.image);
   return f;
@@ -94,14 +92,13 @@ export function useCombosQuery(params: ComboListQuery = { page: 1, limit: 10 }) 
       const { data } = await api.get<ComboListResp>("/menucomboitem/list", {
         params: { page, limit, search },
       });
-      return data; // shape: { data, total, page, limit, totalPages }
+      return data; // { data, total, page, limit, totalPages }
     },
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     retry: 1,
   });
 
-  // Toast lỗi (v5 không hỗ trợ onError trong useQuery)
   useEffect(() => {
     if (q.isError) {
       toast.error("Không tải được danh sách combo", { description: errMsg(q.error), id: "combos-list-error" });
@@ -158,10 +155,19 @@ export function useCreateComboMutation() {
 }
 
 /* ================= UPDATE ================= */
+// HỖ TRỢ CẢ 2 DẠNG GỌI: { id, data } hoặc { args: { id }, data }
+type UpdateInputFlexible =
+  | { id: string; data: UpdateComboDto }
+  | { args: { id: string }; data: UpdateComboDto };
+
 export function useUpdateComboMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: UpdateComboDto }) => {
+    mutationFn: async (payload: UpdateInputFlexible) => {
+      const id = ("id" in payload ? payload.id : payload.args?.id) as string | undefined;
+      if (!id) throw new Error("Thiếu ID combo để cập nhật");
+      const data = payload.data;
+
       if (data.image) {
         const res = await api.patch<ComboDetail>(`/menucomboitem/${id}`, fdUpdate(data), {
           headers: { "Content-Type": "multipart/form-data" },
@@ -174,15 +180,17 @@ export function useUpdateComboMutation() {
     onMutate: () => ({ tid: toast.loading("Đang lưu combo…") }),
     onSuccess: (data, vars, ctx) => {
       if (ctx?.tid) toast.dismiss(ctx.tid);
-      // bust cache ảnh nếu key giữ nguyên
+
       const patched =
         data.image ? { ...data, image: data.image + (data.image.includes("?") ? "&" : "?") + "v=" + Date.now() } : data;
 
-      toast.success("Đã cập nhật combo", { description: `“${data.name}”` });
-      // refresh detail + list
-      if (isUUID(vars.id)) {
-        qc.setQueryData(["combo", vars.id], patched);
+      // Lấy id vừa dùng để cập nhật cache detail
+      const id = ("id" in vars ? vars.id : vars.args?.id) as string | undefined;
+      if (id && isUUID(id)) {
+        qc.setQueryData(["combo", id], patched);
       }
+
+      toast.success("Đã cập nhật combo", { description: `“${data.name}”` });
       qc.invalidateQueries({ queryKey: ["combos"] });
     },
     onError: (e, _v, ctx) => {
@@ -200,7 +208,7 @@ export function useDeleteComboMutation() {
       await api.delete(`/menucomboitem/delete/${id}`);
       return id;
     },
-    onMutate: id => {
+    onMutate: (id) => {
       const tid = toast.loading("Đang xoá combo…");
 
       // Optimistic: gỡ item khỏi mọi cache list combos
@@ -211,7 +219,7 @@ export function useDeleteComboMutation() {
         if (prev) {
           qc.setQueryData<ComboListResp>(key as any, {
             ...prev,
-            data: prev.data.filter(x => x.id !== id),
+            data: prev.data.filter((x) => x.id !== id),
             total: Math.max(0, prev.total - 1),
           });
         }
