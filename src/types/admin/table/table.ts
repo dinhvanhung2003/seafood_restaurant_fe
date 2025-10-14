@@ -7,8 +7,13 @@ export interface DiningTableDTO {
   seats: number;
   note?: string | null;
   status: TableStatus;
-  order?: number | null;
-  area: { id: string; name: string }; 
+  // BE trả sortOrder, không phải order
+  sortOrder?: number | null;
+  // các field đang có trong response
+  orderCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  area: { id: string; name: string };
 }
 
 export interface AreaDTO {
@@ -32,30 +37,30 @@ export interface CreateTableInput {
 }
 
 export type PageMeta = { total: number; page: number; limit: number; pages: number };
-export type TablesListResp = { items: DiningTableDTO[]; meta: PageMeta };
+
+export type TablesListResp = { data: DiningTableDTO[]; meta: PageMeta };
 
 export type TablesQuery = {
   page?: number;
   limit?: number;
-  area?: string;   
-  search?: string;   
+  area?: string;
+  search?: string;
   status?: TableStatus | "ALL";
 };
-
 
 export type TxUser = { id: string | null; name: string | null };
 
 export type TableTransactionRow = {
   invoiceId: string;
   invoiceNumber: string;
-  createdAt: string;     // ISO
-  totalAmount: string;   // số dạng string
-  status: 'UNPAID' | 'PAID' | 'VOID' | string;
-  cashier: TxUser;       // Người tạo (thu ngân)
-  orderedBy: TxUser;     // Người nhận đơn (người order)
+  createdAt: string;
+  totalAmount: string;
+  status: "UNPAID" | "PAID" | "VOID" | string;
+  cashier: TxUser;
+  orderedBy: TxUser;
 };
 
 export type TableTransactionsResp = {
   items: TableTransactionRow[];
-  meta: { total: number; page: number; limit: number; pages: number };
+  meta: PageMeta;
 };

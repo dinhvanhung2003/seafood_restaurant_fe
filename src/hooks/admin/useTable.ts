@@ -10,28 +10,41 @@ import type {
   TablesListResp,
   TablesQuery,
   TableTransactionsResp,
+  PageMeta,
 } from "@/types/admin/table/table";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/axios";
-export type TxQuery = { page?: number; limit?: number; status?: string };
-/** unwrap thông minh: nếu có .data thì trả .data, còn không trả raw */
-const safeExtract = (raw: any) =>
-  raw && typeof raw === "object" && "data" in raw ? (raw as any).data : raw;
 
-/** ========== BÀN: LIST + CRUD (BE trả ResponseCommon) ========== */
+export type TxQuery = { page?: number; limit?: number; status?: string };
+
+/** ===== extract dành riêng cho tables: giữ nguyên cả meta ===== */
+function extractTables(raw: any): TablesListResp | any {
+  // Envelope: { code, success, message, data: [...], meta: {...} }
+  if (raw && typeof raw === "object" && Array.isArray(raw.data) && raw.meta) {
+    return { data: raw.data, meta: raw.meta } as TablesListResp;
+  }
+  // fallback: nếu API trả mảng thuần
+  if (Array.isArray(raw)) {
+    const meta: PageMeta = { total: raw.length, page: 1, limit: raw.length, pages: 1 };
+    return { data: raw, meta } as TablesListResp;
+  }
+  return raw;
+}
+
+/** ========== BÀN: LIST + CRUD (BE trả ResponseCommon có meta) ========== */
 const tables = createRestHooks<
-  TablesListResp,
-  DiningTableDTO,
-  TablesQuery,
-  CreateTableInput,
-  Partial<CreateTableInput>
+  TablesListResp,                 // TList
+  DiningTableDTO,                 // TItem
+  TablesQuery,                    // TListQuery
+  CreateTableInput,               // TCreateDto
+  Partial<CreateTableInput>       // TUpdateDto
 >({
   key: "tables",
   list:   { path: "/restauranttable/get-all-tables" },
   create: { path: "/restauranttable/create-table", method: "post" },
   update: { path: ({ id }: { id: string }) => `/restauranttable/${id}`, method: "put" },
   remove: { path: ({ id }: { id: string }) => `/restauranttable/${id}`, method: "delete" },
-  extract: safeExtract, 
+  extract: extractTables,         // ⬅️ giữ { data, meta }
 });
 
 export const {
@@ -41,7 +54,13 @@ export const {
   useRemoveMutation: useDeleteTable,
 } = tables;
 
-/** ========== KHU VỰC: LIST + CREATE (BE có thể trả mảng thuần) ========== */
+/** ===== extract areas: nhận mảng thuần hoặc envelope {data: [...]} ===== */
+function extractAreas(raw: any): AreaDTO[] | any {
+  if (raw && typeof raw === "object" && Array.isArray(raw.data)) return raw.data as AreaDTO[];
+  return raw;
+}
+
+/** ========== KHU VỰC: LIST + CREATE ========== */
 const areas = createRestHooks<
   AreaDTO[],
   AreaDTO,
@@ -52,7 +71,7 @@ const areas = createRestHooks<
   key: "areas",
   list:   { path: "/area/get-list-area" },
   create: { path: "/area/create-area", method: "post" },
-  extract: safeExtract, // ✅ ok cho cả mảng thuần lẫn ResponseCommon
+  extract: extractAreas,
 });
 
 export const {
@@ -60,8 +79,13 @@ export const {
   useCreateMutation: useCreateArea,
 } = areas;
 
+/** ========== Giao dịch của bàn (BE bọc ResponseCommon, không có meta ở envelope) ========== */
 export function useTableTransactions(tableId: string, q: TxQuery) {
-  const params = { page: q.page ?? 1, limit: q.limit ?? 10, ...(q.status ? { status: q.status } : {}) };
+  const params = {
+    page:  q.page  ?? 1,
+    limit: q.limit ?? 10,
+    ...(q.status ? { status: q.status } : {}),
+  };
 
   return useQuery({
     queryKey: ["table-transactions", tableId, params],
@@ -70,7 +94,7 @@ export function useTableTransactions(tableId: string, q: TxQuery) {
         `/restauranttable/${tableId}/transactions`,
         { params }
       );
-      return data.data; // BE bọc ResponseCommon → lấy .data
+      return data.data; // lấy phần data bên trong envelope
     },
     enabled: !!tableId,
     staleTime: 30_000,
