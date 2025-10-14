@@ -27,7 +27,7 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
   const { data, isLoading } = useSupplierDetail(id, open);
   const changeStatus = useChangeSupplierStatus();
   const update = useUpdateSupplier();
-  const { groups, isLoading: loadingGroups } = useSupplierGroups({ limit: 100 });
+  const { groups, isLoading: loadingGroups } = useSupplierGroups({ limit: 10 });
 
   const [edit, setEdit] = React.useState(false);
   const [form, setForm] = React.useState<any>({});

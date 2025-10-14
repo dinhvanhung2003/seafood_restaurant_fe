@@ -31,7 +31,7 @@ export type SupplierGroupListParams = {
 
 /* ======================= Query Keys ======================= */
 const qk = {
-  supplierGroups: (p?: SupplierGroupListParams) =>
+  supplierGroups: (p?: Record<string, any>) =>
     ["supplierGroups", { ...(p ?? {}) }] as const,
 };
 
@@ -43,37 +43,44 @@ function getErrMsg(err: any) {
   return err?.message || "Có lỗi xảy ra";
 }
 
-function cleanParams(obj: Record<string, any>) {
-  const q: Record<string, any> = { ...obj };
-  Object.keys(q).forEach((k) => {
-    const v = q[k];
-    if (v === "" || v === null || v === undefined) delete q[k];
-  });
-  return q;
+function toInt(n: any, def: number) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return def;
+  return Math.floor(v);
+}
+
+function normalizeListParams(p?: SupplierGroupListParams) {
+  const pageRaw = p?.page ?? 1;
+  const limitRaw = p?.limit ?? 10;
+
+  // ép kiểu + clamp: page ≥1, limit ∈ [1,100]
+  const page = Math.max(1, toInt(pageRaw, 1));
+  const limit = Math.max(1, Math.min(100, toInt(limitRaw, 10)));
+
+  return {
+    page,
+    limit,
+    search: p?.search?.trim() || undefined,
+    status: p?.status || undefined,
+    sortBy: p?.sortBy ?? "createdAt",
+    sortOrder: p?.sortOrder ?? "DESC",
+  } as const;
 }
 
 /* ======================= Hook ======================= */
 export function useSupplierGroups(params?: SupplierGroupListParams) {
   const qc = useQueryClient();
 
-  /* -------- LIST (v5: toast bằng useEffect) -------- */
-  const listQuery = useQuery({
-    queryKey: qk.supplierGroups(params),
-    queryFn: async () => {
-      const raw: SupplierGroupListParams = {
-        page: 1,
-        limit: 100,
-        search: "",
-        // status: undefined,  // để trống khi “Tất cả”
-        sortBy: "createdAt",
-        sortOrder: "DESC",
-        ...(params ?? {}),
-      };
-      const p = cleanParams(raw);
+  // dùng params đã chuẩn hoá để tránh 400: page/limit invalid
+  const norm = normalizeListParams(params);
 
+  /* -------- LIST -------- */
+  const listQuery = useQuery({
+    queryKey: qk.supplierGroups(norm),
+    queryFn: async () => {
       const { data } = await api.get<{ data: SupplierGroup[]; meta: any }>(
         "/suppliergroup/get-all-supplier-groups",
-        { params: p }
+        { params: norm }
       );
       return data.data;
     },
@@ -103,8 +110,8 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       return data;
     },
     onMutate: async (payload) => {
-      await qc.cancelQueries({ queryKey: qk.supplierGroups(params) });
-      const key = qk.supplierGroups(params);
+      await qc.cancelQueries({ queryKey: qk.supplierGroups(norm) });
+      const key = qk.supplierGroups(norm);
       const prev = qc.getQueryData<SupplierGroup[]>(key);
 
       const optimistic: SupplierGroup = {
@@ -123,11 +130,11 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.success(`Đã tạo nhóm “${res.name}”`, { id: ctx?.tid });
     },
     onError: (e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(params), ctx.prev);
+      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(norm), ctx.prev);
       toast.error(`Tạo nhóm thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: qk.supplierGroups(params) });
+      qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
     },
   });
 
@@ -147,8 +154,8 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       return data;
     },
     onMutate: async ({ id, data }) => {
-      await qc.cancelQueries({ queryKey: qk.supplierGroups(params) });
-      const key = qk.supplierGroups(params);
+      await qc.cancelQueries({ queryKey: qk.supplierGroups(norm) });
+      const key = qk.supplierGroups(norm);
       const prev = qc.getQueryData<SupplierGroup[]>(key);
 
       if (prev) {
@@ -165,11 +172,11 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.success(`Đã cập nhật nhóm “${res.name}”`, { id: ctx?.tid });
     },
     onError: (e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(params), ctx.prev);
+      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(norm), ctx.prev);
       toast.error(`Cập nhật thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: qk.supplierGroups(params) });
+      qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
     },
   });
 
@@ -182,8 +189,8 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       return data;
     },
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: qk.supplierGroups(params) });
-      const key = qk.supplierGroups(params);
+      await qc.cancelQueries({ queryKey: qk.supplierGroups(norm) });
+      const key = qk.supplierGroups(norm);
       const prev = qc.getQueryData<SupplierGroup[]>(key);
 
       if (prev) {
@@ -200,11 +207,11 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.success("Đã ngừng hoạt động nhóm", { id: ctx?.tid });
     },
     onError: (e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(params), ctx.prev);
+      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(norm), ctx.prev);
       toast.error(`Thao tác thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: qk.supplierGroups(params) });
+      qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
     },
   });
 

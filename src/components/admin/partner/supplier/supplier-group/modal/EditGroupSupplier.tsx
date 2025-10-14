@@ -34,7 +34,7 @@ export default function EditSupplierGroupModal({
   onDeactivated,
 }: Props) {
   const { updateGroup, deactivateGroup, updateStatus, deactivateStatus } =
-    useSupplierGroups({ limit: 100 });
+    useSupplierGroups({ limit: 10 });
 
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
