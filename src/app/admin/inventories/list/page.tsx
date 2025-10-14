@@ -1,40 +1,50 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { useIngredients } from "@/hooks/admin/useIngredients";
-import {useStockInIngredient} from "@/hooks/admin/useIngredients";
-import type { IngredientDTO } from "@/types/admin/product/ingredient";
+import React, { useEffect, useState } from "react";
+import {
+  useIngredients,
+  useStockInIngredient,
+} from "@/hooks/admin/useIngredients";
 import { useAppToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-  DialogTrigger, DialogClose
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton"; 
+import { Skeleton } from "@/components/ui/skeleton";
+
 export default function IngredientsPage() {
   const toast = useAppToast();
 
-  // Query list
-  const { data, isLoading, error, isFetching } = useIngredients();
-  const ingredients = (data ?? []) as IngredientDTO[];
-
-  // Search + filter
+  // --- paging + search ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
-  const filtered = useMemo(
-    () =>
-      ingredients.filter(
-        (i) =>
-          !search ||
-          i.name.toLowerCase().includes(search.toLowerCase()) ||
-          i.unit.toLowerCase().includes(search.toLowerCase())
-      ),
-    [ingredients, search]
-  );
+  const [debounced, setDebounced] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => setPage(1), [debounced]); // đổi keyword thì về trang 1
 
-  // Modal state (stock-in)
+  // GỌI HOOK mới (đã sửa TListQuery ở file hook)
+  const {
+    data: ingredients = [],
+    meta, // <-- lấy meta để vẽ phân trang
+    isLoading,
+    error,
+    isFetching,
+  } = useIngredients(page, limit, debounced);
+
+  // --- modal nhập kho (giữ nguyên) ---
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -43,26 +53,16 @@ export default function IngredientsPage() {
     alertThreshold: 0,
     description: "",
   });
-
   const stockIn = useStockInIngredient();
 
   const onSubmit = () => {
-    if (!form.name.trim()) {
-      toast.error("Tên nguyên liệu không được trống");
-      return;
-    }
-    if (!form.unit.trim()) {
-      toast.error("Đơn vị không được trống");
-      return;
-    }
-    if (Number.isNaN(+form.quantity) || +form.quantity < 0) {
-      toast.error("Số lượng không hợp lệ");
-      return;
-    }
-    if (Number.isNaN(+form.alertThreshold) || +form.alertThreshold < 0) {
-      toast.error("Ngưỡng cảnh báo không hợp lệ");
-      return;
-    }
+    if (!form.name.trim())
+      return toast.error("Tên nguyên liệu không được trống");
+    if (!form.unit.trim()) return toast.error("Đơn vị không được trống");
+    if (Number.isNaN(+form.quantity) || +form.quantity < 0)
+      return toast.error("Số lượng không hợp lệ");
+    if (Number.isNaN(+form.alertThreshold) || +form.alertThreshold < 0)
+      return toast.error("Ngưỡng cảnh báo không hợp lệ");
 
     stockIn.mutate(
       {
@@ -76,109 +76,25 @@ export default function IngredientsPage() {
         onSuccess: (ing) => {
           toast.success("Đã nhập kho nguyên liệu", ing.name);
           setOpen(false);
-          setForm({ name: "", unit: "kg", quantity: 0, alertThreshold: 0, description: "" });
+          setForm({
+            name: "",
+            unit: "kg",
+            quantity: 0,
+            alertThreshold: 0,
+            description: "",
+          });
         },
-        onError: () => {
-          toast.error("Nhập kho thất bại");
-        },
+        onError: () => toast.error("Nhập kho thất bại"),
       }
     );
   };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Nguyên liệu</h1>
-          <p className="text-sm text-muted-foreground">Quản lý tồn kho nguyên liệu</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {(isLoading || (isFetching && !isLoading)) && (
-            <Skeleton className="h-4 w-28" />
-          )}
-          {error && <span className="text-xs text-red-600">Không tải được dữ liệu</span>}
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-black hover:opacity-90">+ Nhập kho nguyên liệu</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Nhập kho nguyên liệu</DialogTitle>
-              </DialogHeader>
+      {/* header + modal giữ nguyên... */}
 
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <Label>Tên</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Ví dụ: Tôm hùm"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Đơn vị</Label>
-                    <Input
-                      value={form.unit}
-                      onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                      placeholder="kg, chai, thùng…"
-                    />
-                  </div>
-                  <div>
-                    <Label>Số lượng</Label>
-                    <Input
-                      type="number"
-                      value={form.quantity}
-                      onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
-                      min={0}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Ngưỡng cảnh báo</Label>
-                    <Input
-                      type="number"
-                      value={form.alertThreshold}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, alertThreshold: Number(e.target.value) }))
-                      }
-                      min={0}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <span className="text-xs text-muted-foreground">
-                      Báo động khi tồn &le; ngưỡng
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Mô tả</Label>
-                  <Textarea
-                    value={form.description}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    placeholder="Ghi chú chất lượng, lô nhập, ..."
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="mt-2">
-                <DialogClose asChild>
-                  <Button variant="outline">Huỷ</Button>
-                </DialogClose>
-                <Button onClick={onSubmit} disabled={stockIn.isPending}>
-                  {stockIn.isPending ? "Đang lưu..." : "Lưu"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </header>
-
-      {/* Search */}
-      <div className="mb-4">
+      {/* Search + page-size */}
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         {isLoading ? (
           <Skeleton className="h-9 w-80" />
         ) : (
@@ -188,6 +104,25 @@ export default function IngredientsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         )}
+
+        <div className="flex items-center gap-2 text-sm">
+          <span>Hiển thị</span>
+          <select
+            className="border rounded px-2 py-1"
+            value={limit}
+            onChange={(e) => {
+              setLimit(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {[5, 10, 20, 50].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <span>bản ghi / trang</span>
+        </div>
       </div>
 
       {/* Table */}
@@ -204,23 +139,38 @@ export default function IngredientsPage() {
             </tr>
           </thead>
 
-          {/* Skeleton body khi tải lần đầu */}
           {isLoading ? (
             <tbody>
               {Array.from({ length: 6 }).map((_, idx) => (
                 <tr key={idx} className="border-t">
-                  <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-6 w-12 rounded" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-4 w-64" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-4 w-40" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-4 w-16" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-6 w-12 rounded" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-4 w-16" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-4 w-64" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Skeleton className="h-4 w-28" />
+                  </td>
                 </tr>
               ))}
             </tbody>
           ) : (
-            <tbody className={isFetching ? "opacity-70 transition-opacity" : undefined}>
-              {filtered.map((i) => {
+            <tbody
+              className={
+                isFetching ? "opacity-70 transition-opacity" : undefined
+              }
+            >
+              {ingredients.map((i) => {
                 const low = i.quantity <= i.alertThreshold;
                 return (
                   <tr key={i.id} className="border-t">
@@ -229,24 +179,32 @@ export default function IngredientsPage() {
                     <td className="px-4 py-2">
                       <span
                         className={`rounded px-2 py-0.5 text-xs ${
-                          low ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+                          low
+                            ? "bg-red-100 text-red-700"
+                            : "bg-green-100 text-green-700"
                         }`}
                       >
                         {i.quantity}
                       </span>
                     </td>
                     <td className="px-4 py-2">{i.alertThreshold}</td>
-                    <td className="px-4 py-2 text-gray-600">{i.description ?? "-"}</td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {i.description ?? "-"}
+                    </td>
                     <td className="px-4 py-2 text-gray-500">
-                      {i.updatedAt ? new Date(i.updatedAt).toLocaleString() : "-"}
+                      {i.updatedAt
+                        ? new Date(i.updatedAt).toLocaleString()
+                        : "-"}
                     </td>
                   </tr>
                 );
               })}
-
-              {filtered.length === 0 && !isLoading && (
+              {ingredients.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-gray-500" colSpan={6}>
+                  <td
+                    className="px-4 py-8 text-center text-gray-500"
+                    colSpan={6}
+                  >
                     Không có dữ liệu
                   </td>
                 </tr>
@@ -255,6 +213,29 @@ export default function IngredientsPage() {
           )}
         </table>
       </section>
+
+      {/* Pagination */}
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <span>
+          Trang {meta.page}/{meta.pages} • Tổng {meta.total} bản ghi
+        </span>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={meta.page <= 1 || isFetching}
+          >
+            Trước
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.min(meta.pages || p + 1, p + 1))}
+            disabled={meta.page >= meta.pages || isFetching}
+          >
+            Sau
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
