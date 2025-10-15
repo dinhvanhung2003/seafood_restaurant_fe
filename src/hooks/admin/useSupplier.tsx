@@ -19,6 +19,8 @@ type ListResp = {
   total: number;
   page: number;
   limit: number;
+
+  
 };
 
 const clean = (p: Record<string, any>) => {

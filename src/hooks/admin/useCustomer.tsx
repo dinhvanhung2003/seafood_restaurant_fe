@@ -43,3 +43,45 @@ export function useCreateCustomer() {
     },
   });
 }
+export function useCustomerDetail(id?: string) {
+  return useQuery({
+    queryKey: ["customer", id],
+    queryFn: async () => {
+      const { data } = await api.get(`/customers/${id}`);
+      return data.data ?? data; // nếu BE bọc {code, success, data}
+    },
+    enabled: Boolean(id),
+    staleTime: 30_000,
+  });
+}
+
+export function useCustomerInvoices(id?: string, page = 1, limit = 10) {
+  return useQuery({
+    queryKey: ["customer", id, "invoices", page, limit],
+    queryFn: async () => {
+      const { data } = await api.get(`/customers/${id}/invoices`, { params: { page, limit } });
+      // BE trả ResponseCommon { data: { items, meta } } hay bọc khác -> normalize
+      return data.data ?? data;
+    },
+    enabled: Boolean(id),
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
+      const { data } = await api.patch(`/customers/${id}`, payload);
+      return data.data ?? data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.setQueryData(["customer", data.id], data);
+      toast.success("Cập nhật khách hàng thành công");
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.message || "Cập nhật thất bại");
+    },
+  });
+}

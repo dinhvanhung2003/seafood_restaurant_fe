@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import CustomerTable from "@/components/admin/partner/customer/table/TableCustomerList";
 import AddCustomerModal from "@/components/admin/partner/customer/modal/AddCustomerModal";
+import CustomerDetailModal from "@/components/admin/partner/customer/modal/CustomerModalDetail";
 import { useCustomers } from "@/hooks/admin/useCustomer";
 import SidebarFilter, { CustomersFilter } from "@/components/admin/partner/customer/filter/CustomerFilter";
 
@@ -11,8 +12,17 @@ export default function CustomersPage() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  // state filter (khớp với SidebarFilter)
- const [filters, setFilters] = useState<CustomersFilter>({
+  // selected / modal state
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const onRowClick = (c: any) => {
+    setSelectedCustomerId(c.id);
+    setDetailOpen(true);
+  };
+
+  // state filter
+  const [filters, setFilters] = useState<CustomersFilter>({
     q: "",
     type: "",
     gender: "",
@@ -38,8 +48,16 @@ export default function CustomersPage() {
         {isLoading ? (
           <div>Đang tải...</div>
         ) : (
-          <CustomerTable data={data?.data ?? []} />
+          // Always render CustomerTable and pass onRowClick handler
+          <CustomerTable data={data?.data ?? []} onRowClick={onRowClick} />
         )}
+
+        {/* Detail modal — render outside of ternary so it's always mounted when needed */}
+        <CustomerDetailModal
+          open={detailOpen}
+          setOpen={setDetailOpen}
+          customerId={selectedCustomerId}
+        />
 
         <div className="flex justify-end gap-2">
           <Button
