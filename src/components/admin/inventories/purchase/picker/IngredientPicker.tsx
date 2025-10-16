@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useIngredients } from "@/hooks/admin/useIngredients";
+import type { StockFilter } from "@/hooks/admin/useIngredients";
 
 export default function IngredientPicker({
   onAdd,
@@ -17,8 +18,8 @@ export default function IngredientPicker({
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [search, setSearch] = useState("");
-
-  const ingQuery = useIngredients(page, limit, search);
+const [stock, setStock] = useState<StockFilter>("ALL");
+const ingQuery = useIngredients(page, limit, search, stock);
 
   const ingFiltered = useMemo(() => {
     const src = ingQuery.data ?? [];
