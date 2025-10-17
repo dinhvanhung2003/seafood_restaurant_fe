@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ChevronLeft, ChevronRight, Eye, RefreshCw, Trash2, Pencil } from "lucide-react";
-import type { ComboItem } from "@/hooks/admin/useCombo";
+import type { ComboListItem } from "@/hooks/admin/useCombo";
 
 function formatVND(x: string | number) {
   const n = typeof x === "string" ? Number(x) : x;
@@ -12,7 +12,7 @@ function formatVND(x: string | number) {
 }
 
 type Props = {
-  data?: ComboItem[];
+  data?: ComboListItem[];
   total?: number;
   page: number;
   pages: number;

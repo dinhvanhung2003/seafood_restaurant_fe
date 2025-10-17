@@ -19,7 +19,7 @@ export default function AddScheduleDialog({
 }: { open: boolean; onOpenChange: (v: boolean) => void; userId?: string; date?: string; }) {
   const { data: shiftsRes, isLoading: shiftsLoading, error: shiftsError } = useShiftsQuery();
   const shifts = shiftsRes?.data ?? [];
-  const { rows: employees } = useEmployee();
+  const { rows: employees } = useEmployee(1,10,"");
   const create = useCreateSchedule();
 
   // state chọn ca & options

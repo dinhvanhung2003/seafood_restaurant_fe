@@ -13,7 +13,7 @@ export default function ComboDetailDialog({
   id, open, onOpenChange,
 }: { id?: string; open: boolean; onOpenChange: (v: boolean) => void; }) {
     const enabled = open && isUUID(id);
-  const q = useComboDetailQuery(enabled ? id : undefined, { enabled });
+  const q = useComboDetailQuery(enabled ? id : undefined);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

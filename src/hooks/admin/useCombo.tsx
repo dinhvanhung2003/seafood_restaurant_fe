@@ -2,11 +2,30 @@
 "use client";
 
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
 
 /* ================= Types ================= */
+
+// Thành phần hiển thị của 1 combo (dùng cho cả list/detail)
+export type ComboComponentView = {
+  id: string;
+  quantity: string | number;
+  item: {
+    id: string;
+    name: string;
+    price: string | number;
+    image: string | null;
+    isCombo: boolean;
+  };
+};
+
 export type ComboListItem = {
   id: string;
   name: string;
@@ -15,14 +34,14 @@ export type ComboListItem = {
   image: string | null;
   isAvailable: boolean;
   isCombo: true;
+
+  // LIST có thể không trả; để optional để UI đọc an toàn
+  components?: ComboComponentView[];
 };
 
-export type ComboDetail = ComboListItem & {
-  components: Array<{
-    id: string;
-    quantity: string | number;
-    item: { id: string; name: string; price: string | number; image: string | null; isCombo: boolean };
-  }>;
+// Detail luôn có components
+export type ComboDetail = Omit<ComboListItem, "components"> & {
+  components: ComboComponentView[];
 };
 
 export type ComboListResp = {
@@ -36,6 +55,7 @@ export type ComboListResp = {
 export type ComboListQuery = { page?: number; limit?: number; search?: string };
 
 export type ComboComponent = { itemId: string; quantity: number };
+
 export type CreateComboDto = {
   name: string;
   comboPrice: number;
@@ -46,8 +66,12 @@ export type CreateComboDto = {
 };
 export type UpdateComboDto = Partial<CreateComboDto>;
 
+// Alias để tương thích chỗ gọi cũ (nếu có)
+export type ComboItem = ComboListItem;
+
 /* ================= Helpers ================= */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUUID = (s?: string): s is string => !!s && UUID_RE.test(s);
 
 const clamp = (n: any, min: number, max: number) =>
@@ -55,7 +79,9 @@ const clamp = (n: any, min: number, max: number) =>
 
 const errMsg = (e: any) => {
   const d = e?.response?.data;
-  return Array.isArray(d?.message) ? d.message.join(", ") : (d?.message || e?.message || "Có lỗi xảy ra");
+  return Array.isArray(d?.message)
+    ? d.message.join(", ")
+    : d?.message || e?.message || "Có lỗi xảy ra";
 };
 
 const fdCreate = (p: CreateComboDto) => {
@@ -89,10 +115,19 @@ export function useCombosQuery(params: ComboListQuery = { page: 1, limit: 10 }) 
   const q = useQuery<ComboListResp>({
     queryKey: ["combos", { page, limit, search }],
     queryFn: async () => {
-      const { data } = await api.get<ComboListResp>("/menucomboitem/list", {
+      // API hiện trả: { code, success, message, data: [...], meta: {...} }
+      const { data: res } = await api.get("/menucomboitem/list", {
         params: { page, limit, search },
       });
-      return data; // { data, total, page, limit, totalPages }
+
+      const mapped: ComboListResp = {
+        data: res.data as ComboListItem[],
+        total: Number(res?.meta?.total ?? 0),
+        page: Number(res?.meta?.page ?? page),
+        limit: Number(res?.meta?.limit ?? limit),
+        totalPages: Number(res?.meta?.pages ?? 1),
+      };
+      return mapped;
     },
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -101,7 +136,10 @@ export function useCombosQuery(params: ComboListQuery = { page: 1, limit: 10 }) 
 
   useEffect(() => {
     if (q.isError) {
-      toast.error("Không tải được danh sách combo", { description: errMsg(q.error), id: "combos-list-error" });
+      toast.error("Không tải được danh sách combo", {
+        description: errMsg(q.error),
+        id: "combos-list-error",
+      });
     }
   }, [q.isError, q.error]);
 
@@ -124,7 +162,10 @@ export function useComboDetailQuery(id?: string) {
 
   useEffect(() => {
     if (q.isError) {
-      toast.error("Không tải được chi tiết combo", { description: errMsg(q.error), id: "combo-detail-error" });
+      toast.error("Không tải được chi tiết combo", {
+        description: errMsg(q.error),
+        id: "combo-detail-error",
+      });
     }
   }, [q.isError, q.error]);
 
@@ -136,9 +177,11 @@ export function useCreateComboMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateComboDto) => {
-      const res = await api.post<ComboDetail>("/menucomboitem/create", fdCreate(payload), {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await api.post<ComboDetail>(
+        "/menucomboitem/create",
+        fdCreate(payload),
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
       return res.data;
     },
     onMutate: () => ({ tid: toast.loading("Đang tạo combo…") }),
@@ -155,7 +198,7 @@ export function useCreateComboMutation() {
 }
 
 /* ================= UPDATE ================= */
-// HỖ TRỢ CẢ 2 DẠNG GỌI: { id, data } hoặc { args: { id }, data }
+// Hỗ trợ 2 dạng: { id, data } hoặc { args: { id }, data }
 type UpdateInputFlexible =
   | { id: string; data: UpdateComboDto }
   | { args: { id: string }; data: UpdateComboDto };
@@ -164,14 +207,18 @@ export function useUpdateComboMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: UpdateInputFlexible) => {
-      const id = ("id" in payload ? payload.id : payload.args?.id) as string | undefined;
+      const id = ("id" in payload ? payload.id : payload.args?.id) as
+        | string
+        | undefined;
       if (!id) throw new Error("Thiếu ID combo để cập nhật");
       const data = payload.data;
 
       if (data.image) {
-        const res = await api.patch<ComboDetail>(`/menucomboitem/${id}`, fdUpdate(data), {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const res = await api.patch<ComboDetail>(
+          `/menucomboitem/${id}`,
+          fdUpdate(data),
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
         return res.data;
       }
       const res = await api.patch<ComboDetail>(`/menucomboitem/${id}`, data);
@@ -182,10 +229,20 @@ export function useUpdateComboMutation() {
       if (ctx?.tid) toast.dismiss(ctx.tid);
 
       const patched =
-        data.image ? { ...data, image: data.image + (data.image.includes("?") ? "&" : "?") + "v=" + Date.now() } : data;
+        data.image
+          ? {
+              ...data,
+              image:
+                data.image +
+                (data.image.includes("?") ? "&" : "?") +
+                "v=" +
+                Date.now(),
+            }
+          : data;
 
-      // Lấy id vừa dùng để cập nhật cache detail
-      const id = ("id" in vars ? vars.id : vars.args?.id) as string | undefined;
+      const id = ("id" in vars ? vars.id : vars.args?.id) as
+        | string
+        | undefined;
       if (id && isUUID(id)) {
         qc.setQueryData(["combo", id], patched);
       }

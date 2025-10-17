@@ -25,7 +25,7 @@ type FormValues = {
 };
 
 export default function CreateEmployeeDialog() {
-  const { createUser, createStatus } = useEmployee();
+  const { createUser, createStatus } = useEmployee(1, 10, "");
   const { control, register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       email: "", phoneNumber: "", username: "", password: "", role: "WAITER",

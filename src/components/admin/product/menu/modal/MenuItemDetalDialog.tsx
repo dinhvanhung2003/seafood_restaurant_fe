@@ -28,7 +28,8 @@ export default function MenuItemDetailDialog({ id, open, onOpenChange }: Props) 
   // lấy categories & ingredients từ hooks bạn đã có
   const { data: categoriesResp, isLoading: catLoading } = useCategoriesQuery({ page: 1, limit: 10 });
   const categories = categoriesResp?.data ?? [];
-  const { data: ingredientsList, isLoading: ingLoading } = useIngredients();
+  const { data: ingredientsList, isLoading: ingLoading } = useIngredients(1, 10, "", "ALL");
+
   
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<{
