@@ -61,7 +61,7 @@ export default function WorkSchedulePage() {
   const start = formatYMD(weekDays[0]);
   const end   = formatYMD(weekDays[6]);
   // Nhân viên
-  const { rows: employees, isLoading: empLoading } = useEmployee(0,10,"");
+  const { rows: employees, isLoading: empLoading } = useEmployee(1,10,"");
 
   // Lịch theo tuần
   const { data: items = [], isLoading } = useWeekSchedules(start, end);
