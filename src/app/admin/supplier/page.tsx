@@ -45,7 +45,7 @@ export default function SuppliersPage() {
           <div>Đang tải…</div>
         ) : (
           <SuppliersTable
-            data={data?.items ?? []}
+            data={data?.data ?? []}
             onRowClick={(id) => {
               setDetailId(id);
               setOpenDetail(true);
@@ -54,7 +54,11 @@ export default function SuppliersPage() {
         )}
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
             Trước
           </Button>
           <Button

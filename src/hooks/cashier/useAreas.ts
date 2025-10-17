@@ -1,22 +1,24 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+import api from "@/lib/axios";
 
-async function fetchAreas(token?: string) {
-  const res = await fetch(`${API_BASE}/area/get-list-area`, {
-    headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<Array<{ id:string; name:string; tables:{id:string; name:string; seats:number}[] }>>;
+type Area = {
+  id: string;
+  name: string;
+  tables: { id: string; name: string; seats: number }[];
+};
+
+async function fetchAreas(): Promise<Area[]> {
+  const { data } = await api.get("/area/get-list-area");
+  return data as Area[]; // hoặc điều chỉnh theo shape BE trả về
 }
 
-export function useAreas(token?: string) {
+export function useAreas() {
   return useQuery({
-    queryKey: ["areas", token],
-    queryFn: () => fetchAreas(token),
-    enabled: !!token,
+    queryKey: ["areas"],
+    queryFn: fetchAreas,
+    enabled: true,        // interceptor sẽ tự gắn Authorization nếu cần
     staleTime: 60_000,
   });
 }

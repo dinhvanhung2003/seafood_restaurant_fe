@@ -17,7 +17,7 @@ export type MenuItemsQuery = {
   limit?: number;          // <= 100
   search?: string;
   categoryId?: string;
-  isAvailable?: "true"|"false";
+  isAvailable?: "true" | "false";
   minPrice?: number;
   maxPrice?: number;
   sortBy?: "name" | "price" | "createdAt";

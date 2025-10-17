@@ -16,7 +16,7 @@ export default function CreateSupplierGroupModal({
   onSuccess?: (newId: string) => void;
   triggerAs?: "icon" | "button";
 }) {
-  const { createGroup, createStatus } = useSupplierGroups({ limit: 100 });
+  const { createGroup, createStatus } = useSupplierGroups({ limit: 10 });
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");

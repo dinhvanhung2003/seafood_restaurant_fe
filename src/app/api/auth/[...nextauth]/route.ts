@@ -2,24 +2,24 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
-const API = process.env.AUTH_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL!;
+const API = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
-const decodeJwt = <T=any>(t?: string): T | null => {
+const decodeJwt = <T = any>(t?: string): T | null => {
   try { if (!t) return null; return JSON.parse(Buffer.from(t.split(".")[1], "base64").toString("utf8")); }
   catch { return null; }
 };
 
 async function refresh(token: any) {
   const r = await fetch(`${API}/auth/refresh`, {
-    method: "POST", headers: { "Content-Type":"application/json" },
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken: token.refreshToken }), cache: "no-store",
   });
   if (!r.ok) throw new Error("refresh failed");
   const j = await r.json();
   const accessToken = j?.data?.accessToken as string;
   const refreshToken = j?.data?.refreshToken ?? token.refreshToken;
-  const exp = decodeJwt<{exp:number}>(accessToken)?.exp;
-  return { ...token, accessToken, refreshToken, accessTokenExpires: (exp? exp*1000 : Date.now()+55*60_000) };
+  const exp = decodeJwt<{ exp: number }>(accessToken)?.exp;
+  return { ...token, accessToken, refreshToken, accessTokenExpires: (exp ? exp * 1000 : Date.now() + 55 * 60_000) };
 }
 
 export const authOptions: NextAuthOptions = {
@@ -31,22 +31,38 @@ export const authOptions: NextAuthOptions = {
       name: "credentials",
       credentials: { email: {}, password: { type: "password" } },
       async authorize(c) {
-        if (!c?.email || !c.password) return null;
+        if (!c?.email || !c.password) throw new Error("Thiếu email hoặc mật khẩu");
+
         const r = await fetch(`${API}/auth/login`, {
-          method:"POST", headers:{ "Content-Type":"application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: c.email, password: c.password }),
         });
-        if (!r.ok) return null;
+
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err?.message || "Sai thông tin đăng nhập");
+        }
+
         const j = await r.json();
-        const accessToken = j?.data?.accessToken as string;
-        const refreshToken = j?.data?.refreshToken as string|undefined;
-        if (!accessToken) return null;
-        const p = decodeJwt<{ sub:string; email:string; role?:string; exp:number }>(accessToken)!;
+        const accessToken = j?.data?.accessToken as string | undefined;
+        const refreshToken = j?.data?.refreshToken as string | undefined;
+        if (!accessToken) throw new Error("Thiếu accessToken từ backend");
+
+        // ⚠️ decode base64url-safe để tránh lỗi ký tự - _
+        const p = decodeJwt<{ sub?: string; email?: string; role?: string; exp?: number }>(accessToken);
+        if (!p?.sub || !p?.email) throw new Error("Token không hợp lệ");
+
         return {
-          id: p.sub, name: p.email, email: p.email, role: p.role,
-          accessToken, refreshToken, accessTokenExpires: p.exp*1000,
+          id: String(p.sub),
+          name: p.email,
+          email: p.email,
+          role: p.role,
+          accessToken,
+          refreshToken,
+          accessTokenExpires: (p.exp ? p.exp * 1000 : Date.now() + 55 * 60_000),
         } as any;
-      },
+      }
     }),
   ],
   callbacks: {

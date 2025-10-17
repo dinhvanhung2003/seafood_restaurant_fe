@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { SlidersHorizontal } from "lucide-react";
-import { customerColumns } from "./Column"; 
+import { customerColumns } from "./Column";
 import type { CustomerRow } from "@/lib/admin/partner/customer/api";
 import ColumnToggleKiot from "./ColumnToggle";
 import ExcelDataIO from "@/utils/ExcelDataIO";
@@ -49,7 +49,7 @@ function ColumnToggle<T>({ table }: { table: RTable<T> }) {
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>Hiển thị cột</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <div className="grid grid-cols-2 gap-x-2">
+        <div className="grid grid-cols-2 gap-x-2 p-2">
           {hideable.map((column) => (
             <DropdownMenuCheckboxItem
               key={column.id}
@@ -66,24 +66,23 @@ function ColumnToggle<T>({ table }: { table: RTable<T> }) {
   );
 }
 
-export default function CustomerTable({ data }: { data: CustomerRow[] }) {
+type Props = {
+  data: CustomerRow[];
+  onRowClick?: (row: CustomerRow) => void;
+};
+
+export default function CustomerTable({ data, onRowClick }: Props) {
   // dùng VisibilityState của tanstack v8
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
 
-
-
- const [customers, setCustomers] = React.useState<any[]>([]);
+  const [customers, setCustomers] = React.useState<any[]>([]);
 
   const handleImport = (rows: any[]) => {
-    // Ví dụ: bạn có thể gọi API để lưu vào DB
     console.log("Imported Excel rows:", rows);
     setCustomers(rows);
-
     toast.success(`Đã import ${rows.length} khách hàng từ Excel`);
   };
-
-
 
   // Load cấu hình ẩn/hiện cột đã lưu
   useEffect(() => {
@@ -116,17 +115,15 @@ export default function CustomerTable({ data }: { data: CustomerRow[] }) {
     <div className="space-y-3">
       {/* Hàng action */}
       <div className="flex items-center justify-end gap-2">
-     
-       <div className="flex items-center gap-2">
-      <ExcelDataIO
-        data={customers}
-        fileName="customers.xlsx"
-        columns={["code", "name", "phone", "address"]} // export những field này
-        onImport={handleImport}
-      />
-    </div>
-       <ColumnToggleKiot table={table} />
-
+        <div className="flex items-center gap-2">
+          <ExcelDataIO
+            data={customers}
+            fileName="customers.xlsx"
+            columns={["code", "name", "phone", "address"]}
+            onImport={handleImport}
+          />
+        </div>
+        <ColumnToggleKiot table={table} />
       </div>
 
       {/* Bảng */}
@@ -151,18 +148,26 @@ export default function CustomerTable({ data }: { data: CustomerRow[] }) {
 
           <TableBody>
             {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                // row.original is your data object (CustomerRow)
+                const original = row.original as CustomerRow;
+                return (
+                  <TableRow
+                    key={row.id}
+                    className="cursor-pointer hover:bg-slate-50"
+                    onClick={() => onRowClick?.(original)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell

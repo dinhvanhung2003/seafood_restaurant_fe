@@ -49,7 +49,7 @@ const ALL = "__ALL__";
 
 export default function AddSupplierModal({ open, onOpenChange }: Props) {
   const create = useCreateSupplier();
-  const { groups, isLoading } = useSupplierGroups({ limit: 100 });
+  const { groups, isLoading } = useSupplierGroups({ limit: 10 });
 
   const [form, setForm] = React.useState<Form>({
     name: "",

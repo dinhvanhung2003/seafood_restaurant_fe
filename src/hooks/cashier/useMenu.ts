@@ -1,34 +1,43 @@
 "use client";
-
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+import api from "@/lib/axios";
 
-async function fetchMenu(params: any, token?: string) {
-  const url = new URL(`${API_BASE}/menuitems/list-menuitems`);
-  const qp = { ...params, limit: Math.max(1, Math.min(Number(params.limit ?? 12), 100)) };
-  Object.entries(qp).forEach(([k, v]) => v != null && v !== "" && url.searchParams.set(k, String(v)));
-  const res = await fetch(url.toString(), {
-    headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
+type UseMenuArgs = {
+  page: number;
+  limit: number;
+  search: string;
+  categoryId: string;
+};
 
-export function useMenu({
-  page, limit, search, categoryId, token,
-}: { page:number; limit:number; search:string; categoryId:string; token?:string }) {
-  return useQuery({
-    queryKey: ["menu", { page, limit, search, categoryId, token }],
-    queryFn: () => fetchMenu({
-      page,
-      limit,
-      search: search || undefined,
-      categoryId: categoryId === "all" ? undefined : categoryId,
+// Nếu BE trả về { data, meta } thì giữ nguyên kiểu trả về như cũ
+async function fetchMenu(params: {
+  page: number;
+  limit: number;
+  search?: string;
+  categoryId?: string;
+}) {
+  const safeLimit = Math.max(1, Math.min(Number(params.limit ?? 12), 100));
+
+  const { data } = await api.get("/menuitems/list-menuitems", {
+    params: {
+      ...params,
+      limit: safeLimit,
       sortBy: "name",
       order: "ASC",
-    }, token),
-    enabled: !!token,
+    },
+  });
+
+  return data; // có thể là { data, meta } hoặc mảng, tuỳ BE
+}
+
+export function useMenu({ page, limit, search, categoryId }: UseMenuArgs) {
+  const cat = categoryId === "all" ? undefined : categoryId;
+  const q = search || undefined;
+
+  return useQuery({
+    queryKey: ["menu", { page, limit, search: q, categoryId: cat }],
+    queryFn: () => fetchMenu({ page, limit, search: q, categoryId: cat }),
+    enabled: true, // interceptor sẽ tự lo Authorization
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });

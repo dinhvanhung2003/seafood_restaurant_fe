@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useStockInIngredient } from "@/features/admin/inventory/api";
+import { useStockInIngredient } from "@/hooks/admin/useIngredients";
 import { toast } from "sonner";
 
 export type AddIngredientModalProps = {

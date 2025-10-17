@@ -5,6 +5,15 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePRList } from "@/hooks/admin/usePurchase";
 import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationEllipsis,
+  PaginationPrevious,
+  PaginationNext,
+} from "@/components/ui/pagination";
 import PurchaseReceiptDetailModal from "@/components/admin/inventories/purchase/modal/PurchaseReceiptDetailModal";
 import {
   ReceiptStatus,
@@ -16,29 +25,44 @@ export default function PurchaseListPage() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  const { data } = usePRList({ page, limit });
+  // Lấy dữ liệu + trạng thái tải
+  const { data, isFetching } = usePRList({ page, limit });
 
-  const currentPage = data?.page ?? page;
-  const totalPages =
-    data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / limit));
+  // Chuẩn hoá dữ liệu trả về
+  const rows = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? Math.max(1, Math.ceil(total / limit));
 
-  // Tạo dải số trang (tối đa 5 nút) quanh trang hiện tại
-  const pageNumbers = useMemo(() => {
-    const maxButtons = 5;
-    const half = Math.floor(maxButtons / 2);
-    const start = Math.max(
-      1,
-      Math.min(currentPage - half, totalPages - maxButtons + 1)
-    );
-    const end = Math.min(totalPages, start + maxButtons - 1);
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [currentPage, totalPages]);
+  // Dải số trang có dấu "..."
+  const pages = useMemo(() => {
+    const last = totalPages;
+    const current = page;
+    const siblings = 1; // số nút sát hai bên trang hiện tại
+
+    if (last <= 5) {
+      return Array.from({ length: last }, (_, i) => i + 1) as (number | "...")[];
+    }
+
+    const arr: (number | "...")[] = [1];
+    const start = Math.max(2, current - siblings);
+    const end = Math.min(last - 1, current + siblings);
+
+    if (start > 2) arr.push("...");
+    for (let p = start; p <= end; p++) arr.push(p);
+    if (end < last - 1) arr.push("...");
+    arr.push(last);
+
+    return arr;
+  }, [page, totalPages]);
+
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
 
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   return (
-    <div className="p-4">
+    <div className="p-4 space-y-3">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-xl font-semibold">Phiếu nhập hàng</div>
         <Link href="/admin/inventories/purchase/new">
@@ -54,11 +78,11 @@ export default function PurchaseListPage() {
               <th className="px-3 py-2 text-left">Thời gian</th>
               <th className="px-3 py-2 text-left">Nhà cung cấp</th>
               <th className="px-3 py-2 text-right">Trạng thái</th>
-              <th className="px-3 py-2"></th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
-            {(data?.data ?? []).map((r: any) => (
+            {rows.map((r: any) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2">{r.code}</td>
                 <td className="px-3 py-2">{r.receiptDate}</td>
@@ -69,8 +93,7 @@ export default function PurchaseListPage() {
                       ReceiptStatusColor[r.status as ReceiptStatus]
                     }`}
                   >
-                    {ReceiptStatusLabel[r.status as ReceiptStatus] ??
-                      "Không xác định"}
+                    {ReceiptStatusLabel[r.status as ReceiptStatus] ?? "Không xác định"}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right">
@@ -87,13 +110,10 @@ export default function PurchaseListPage() {
               </tr>
             ))}
 
-            {(!data || (data?.data ?? []).length === 0) && (
+            {rows.length === 0 && (
               <tr>
-                <td
-                  colSpan={5}
-                  className="px-3 py-6 text-center text-slate-500"
-                >
-                  Không có dữ liệu
+                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                  {isFetching ? "Đang tải..." : "Không có dữ liệu"}
                 </td>
               </tr>
             )}
@@ -101,48 +121,62 @@ export default function PurchaseListPage() {
         </table>
       </div>
 
-      {/* Phân trang */}
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={currentPage <= 1}
-        >
-          Trước
-        </Button>
-
-        {/* Nút số trang */}
-        <div className="flex items-center gap-1">
-          {pageNumbers.map((p) => (
-            <Button
-              key={p}
-              size="sm"
-              variant={p === currentPage ? "default" : "outline"}
-              onClick={() => setPage(p)}
-            >
-              {p}
-            </Button>
-          ))}
+      {/* Pagination shadcn/ui + thông tin tổng */}
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-slate-500">
+          Trang {page}/{totalPages} • Tổng {total}
+          {isFetching && <span className="ml-2 italic text-slate-400">Đang tải…</span>}
         </div>
 
-        <span className="ml-2 text-sm text-slate-600">
-          Trang <b>{currentPage}</b>/<b>{totalPages}</b>
-        </span>
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (canPrev) setPage((p) => p - 1);
+                }}
+                className={!canPrev ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
 
-        <Button
-          variant="outline"
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          disabled={currentPage >= totalPages}
-        >
-          Sau
-        </Button>
+            {pages.map((p, i) =>
+              p === "..." ? (
+                <PaginationItem key={`e-${i}`}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={p}>
+                  <PaginationLink
+                    href="#"
+                    isActive={p === page}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setPage(p as number);
+                    }}
+                  >
+                    {p}
+                  </PaginationLink>
+                </PaginationItem>
+              )
+            )}
+
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (canNext) setPage((p) => p + 1);
+                }}
+                className={!canNext ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
 
-      <PurchaseReceiptDetailModal
-        open={open}
-        onOpenChange={setOpen}
-        id={selectedId}
-      />
+      <PurchaseReceiptDetailModal open={open} onOpenChange={setOpen} id={selectedId} />
     </div>
   );
 }

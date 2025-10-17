@@ -1,5 +1,5 @@
 // src/hooks/purchase/usePurchaseReceipts.ts
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient,keepPreviousData } from "@tanstack/react-query";
 import api from "@/lib/axios";
 
 /** ===== Types theo swagger mới ===== */
@@ -32,12 +32,23 @@ export interface PRCreateResponse {
   id: string;
   code: string;
 }
-
+export type PRListResp = {
+  data: any[];
+  total: number;
+  page: number;       // 1-based
+  limit: number;
+  totalPages: number;
+};
 /** ===== Queries ===== */
-export function usePRList(params: { page?: number; limit?: number }) {
+export function usePRList(params: { page: number; limit: number }) {
   return useQuery({
-    queryKey: ["pr-list", params],
-    queryFn: async () => (await api.get("/purchasereceipt/list", { params })).data,
+    queryKey: ["pr-list", params.page, params.limit],
+    queryFn: async (): Promise<PRListResp> => {
+      const { data } = await api.get("/purchasereceipt/list", { params }); // BE đang nhận { page, limit }
+      return data as PRListResp;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }
 
@@ -53,7 +64,12 @@ export function usePRCreate() {
   const qc = useQueryClient();
   return useMutation<PRCreateResponse, unknown, PRCreatePayload>({
     mutationFn: async (payload) =>
-      (await api.post<PRCreateResponse>("/purchasereceipt/create-purreceipt-posted", payload)).data,
+      (
+        await api.post<PRCreateResponse>(
+          "/purchasereceipt/create-purreceipt-posted",
+          payload
+        )
+      ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-list"] });
     },
@@ -69,9 +85,38 @@ export function usePRCreateDraft() {
   const qc = useQueryClient();
   return useMutation<PRCreateResponse, unknown, PRCreatePayload>({
     mutationFn: async (payload) =>
-      (await api.post<PRCreateResponse>("/purchasereceipt/create-purreceipt-draft", payload)).data,
+      (
+        await api.post<PRCreateResponse>(
+          "/purchasereceipt/create-purreceipt-draft",
+          payload
+        )
+      ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-list"] });
+    },
+  });
+}
+
+// bổ sung type cho update (thực chất same create, chỉ thêm status/updatedBy optional)
+export interface PRUpdatePayload extends PRCreatePayload {}
+
+// ---- UPDATE Draft PUT /purchasereceipt/update/:id?postNow=... ----
+export function usePRUpdateDraftOrPost() {
+  const qc = useQueryClient();
+  return useMutation<
+    any,
+    unknown,
+    { id: string; postNow: boolean | string; payload: PRUpdatePayload }
+  >({
+    mutationFn: async ({ id, postNow, payload }) =>
+      (
+        await api.put(`/purchasereceipt/update-draft-or-post/${id}`, payload, {
+          params: { postNow },
+        })
+      ).data,
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["pr-list"] });
+      qc.invalidateQueries({ queryKey: ["pr-one", vars.id] });
     },
   });
 }
