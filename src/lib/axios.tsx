@@ -1,9 +1,13 @@
-// lib/axios.ts
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from "axios";
+
+/** Normalize BASE URL: loại bỏ '/' thừa ở cuối */
+const RAW = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const BASE_URL = RAW.replace(/\/+$/, ""); 
 
 /** Instance */
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  baseURL: BASE_URL,
+  withCredentials: true,
 });
 
 /** Access token (client only) */
@@ -23,7 +27,8 @@ api.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   } else {
     (cfg.headers as Record<string, any>)["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
   }
+
   return cfg;
 });
 
-export default api; 
+export default api;
