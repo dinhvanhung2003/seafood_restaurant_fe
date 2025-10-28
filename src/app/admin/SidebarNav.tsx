@@ -77,7 +77,7 @@ const NAV: NavItem[] = [
       { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
     ],
   },
-  { label: "Sổ quỹ", href: "/admin/so-quy", icon: Wallet },
+  { label: "Sổ quỹ", href: "/admin/cashbook", icon: Wallet },
   { label: "Báo cáo", href: "/admin/report", icon: BarChart3,
      children: [
       { label: "Bán hàng", href: "/admin/report/sale" },

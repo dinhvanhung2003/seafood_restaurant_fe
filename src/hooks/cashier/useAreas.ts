@@ -18,7 +18,7 @@ export function useAreas() {
   return useQuery({
     queryKey: ["areas"],
     queryFn: fetchAreas,
-    enabled: true,        // interceptor sẽ tự gắn Authorization nếu cần
+    enabled: true,        
     staleTime: 60_000,
   });
 }

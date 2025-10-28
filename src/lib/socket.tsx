@@ -1,33 +1,28 @@
-// lib/socket.ts
-import { io, Socket } from "socket.io-client";
+// src/lib/socket.ts
+import { io, type Socket } from "socket.io-client";
+
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;          // http://localhost:8000
+const NS   = process.env.NEXT_PUBLIC_SOCKET_NAMESPACE || "/realtime-pos";
+const PATH = process.env.NEXT_PUBLIC_SOCKET_PATH || "/socket.io";
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (socket) return socket;
-  socket = io("", {
-    path: "/api/socket",
-    transports: ["websocket"],
-    withCredentials: false,
-    autoConnect: true,
-  });
-  socket.on("connect", () => console.log("[socket] connect:", socket!.id));
-  socket.on("connect_error", (e) => console.error("[socket] connect_error:", e));
-  return socket;
-}
 
-// Đảm bảo server đã boot và client đã connect trước khi emit/join
-export async function ensureSocketReady(): Promise<Socket> {
-  await fetch("/api/socket").catch(() => {}); // boot API route server-side
-  const s = getSocket();
-  if (s.connected) return s;
-  return await new Promise<Socket>((resolve, reject) => {
-    const to = setTimeout(() => reject(new Error("Socket connect timeout")), 7000);
-    s.once("connect", () => {
-      clearTimeout(to);
-      resolve(s);
-    });
-    // phòng trường hợp autoConnect:false (ở đây đang true)
-    s.connect();
+  socket = io(`${BASE}${NS}`, {
+    path: PATH,
+    transports: ["websocket"],   // ✅ khớp BE
+    withCredentials: false,
+    timeout: 15000,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 800,
   });
+
+  socket.on("connect", () => console.log("[socket] ✅ connected:", socket!.id));
+  socket.on("connect_error", (e: any) =>
+    console.error("[socket] ❌ connect_error:", e?.message || e)
+  );
+
+  return socket;
 }
