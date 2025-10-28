@@ -1,5 +1,4 @@
 "use client";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type Props = {
   value: "all" | "using" | "empty";
@@ -9,19 +8,44 @@ type Props = {
 
 export function StatusFilter({ value, onChange, counts }: Props) {
   return (
-    <RadioGroup value={value} onValueChange={(v) => onChange(v as Props["value"])} className="flex items-center gap-4">
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <RadioGroupItem value="all" />
+    <fieldset className="flex items-center gap-4">
+      <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="radio"
+          name="status"
+          value="all"
+          checked={value === "all"}
+          onChange={() => onChange("all")}
+          className="h-4 w-4 accent-current"
+        />
         <span>Tất cả ({counts.all})</span>
       </label>
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <RadioGroupItem value="using" />
-        <span>Sử dụng ({counts.using})</span>
+
+      <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="radio"
+          name="status"
+          value="using"
+          checked={value === "using"}
+          onChange={() => onChange("using")}
+          className="h-4 w-4 accent-current"
+        />
+        <span>Đang dùng ({counts.using})</span>
       </label>
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <RadioGroupItem value="empty" />        {/* ← "empty" */}
-        <span>Còn trống ({counts.empty})</span>
+
+      <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="radio"
+          name="status"
+          value="empty"
+          checked={value === "empty"}
+          onChange={() => onChange("empty")}
+          className="h-4 w-4 accent-current"
+        />
+        <span>Trống ({counts.empty})</span>
       </label>
-    </RadioGroup>
+    </fieldset>
   );
 }
+
+export default StatusFilter;

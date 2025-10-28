@@ -34,6 +34,15 @@ type ItemStatus =
   | "READY"
   | "SERVED"
   | "CANCELLED";
+type KitchenNotifyPayload = {
+  orderId: string;
+  tableName: string;
+  batchId: string;
+  createdAt: string;
+  priority?: boolean;
+  note?: string;
+  items: Array<{ orderItemId: string; name: string; qty: number }>;
+};
 
 // Hàng từ BE: mỗi row = 1 "order item" với quantity n
 export type ApiOrderItemExt = {
@@ -57,20 +66,19 @@ export type Ticket = {
   itemIds: string[]; // [orderItemId]
   priority?: "high" | "normal";
   note?: string;
+  justArrived?: boolean;
 };
 
 /* =============== API helpers =============== */
-async function listItemsByStatus(
-  status: ItemStatus,
-  page = 1,
-  limit = 200,
-): Promise<ApiOrderItemExt[]> {
-  const res = await api.get("/orderitems", { params: { status, page, limit } });
-  return (res.data?.data ?? res.data) as ApiOrderItemExt[];
-}
+// Gợi ý: đổi tên cho rõ nghĩa
+type ApiKitchenTicket = ApiOrderItemExt; // giữ shape cũ để không phải sửa thêm
 
+async function listItemsByStatus(status: ItemStatus, page=1, limit=200) {
+  const res = await api.get("/kitchen/tickets", { params: { status, page, limit } });
+  return (res.data?.data ?? res.data);
+}
 async function updateItemsStatus(itemIds: string[], status: ItemStatus) {
-  const res = await api.patch("/orderitems/status", { itemIds, status });
+  const res = await api.patch("/kitchen/tickets/status", { ticketIds: itemIds, status });
   return res.data;
 }
 
@@ -101,8 +109,10 @@ function TicketCard({
     <div className="rounded-xl border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <div className="font-semibold text-slate-800">{t.table}</div>
-        <div className="flex items-center gap-2">
+          {t.justArrived && <Badge className="bg-emerald-600">NEW</Badge>} {/* 👈 */}
           {t.priority === "high" && <Badge className="bg-red-600">Ưu tiên</Badge>}
+        <div className="flex items-center gap-2">
+          {/* {t.priority === "high" && <Badge className="bg-red-600">Ưu tiên</Badge>} */}
           <div className="flex items-center text-xs text-slate-500">
             <Clock4 className="mr-1 h-4 w-4" />
             {t.createdAt}
@@ -188,6 +198,15 @@ function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
 export default function KitchenScreen() {
   const qc = useQueryClient();
 
+
+const [bootstrapped, setBootstrapped] = useState(false);
+
+
+
+
+
+
+
   // socket tickets keyed by orderItemId (ROW-LEVEL)
   const [socketTickets, setSocketTickets] = useState<Record<string, Ticket>>({});
   const [listNew, setListNew] = useState<Ticket[]>([]);
@@ -195,28 +214,43 @@ export default function KitchenScreen() {
 const processedBatchIdsRef = useRef<Set<string>>(new Set());
 
 // số lượng đã hiển thị cho từng orderItemId (ROW-LEVEL)
-const shownQtyRef = useRef<Record<string, number>>({});
+// const shownQtyRef = useRef<Record<string, number>>({});
 // Reconcile NEW: ưu tiên socket (nếu có), KHÔNG xé lẻ, không cộng dồn
   // polling chống rớt socket
   const COMMON_Q = {
     staleTime: 15_000,
     placeholderData: keepPreviousData,
-    refetchInterval: 8_000,
+    refetchInterval: 0,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   } as const;
-
+const [socketReady, setSocketReady] = useState(false);
   // NEW rows: PENDING + CONFIRMED
-  const qNewRows = useQuery({
-    queryKey: ["items", "NEW_ROWS"],
-    queryFn: async () => {
-      const pending = await listItemsByStatus("PENDING", 1, 200);
-      const confirmed = await listItemsByStatus("CONFIRMED", 1, 200);
-      return [...pending, ...confirmed];
-    },
-    ...COMMON_Q,
-  });
+
+
+
+
+
+  
+const qNewRows = useQuery({
+  queryKey: ["items", "NEW_ROWS"],
+  queryFn: async () => {
+    const pending = await listItemsByStatus("PENDING", 1, 200);
+    const confirmed = await listItemsByStatus("CONFIRMED", 1, 200);
+    return [...pending, ...confirmed];
+  },
+  enabled: socketReady ,
+});
+useEffect(() => {
+  if (qNewRows.data && !bootstrapped) {
+    setBootstrapped(true);
+  }
+}, [qNewRows.data]);
+
+
+
+ 
 
   // PREPARING & READY
   const qPreparingItems = useQuery({
@@ -242,127 +276,174 @@ const shownQtyRef = useRef<Record<string, number>>({});
       hit("READY");
     },
   });
-function reconcileNewTickets(
-  apiNewRows: ApiOrderItemExt[],
-  socketMap: Record<string, Ticket>,
-): Ticket[] {
-  const out: Ticket[] = [];
-  const covered = new Set<string>();
+// function reconcileNewTickets(
+//   apiNewRows: ApiOrderItemExt[],
+//   socketMap: Record<string, Ticket>,
+// ): Ticket[] {
+//   const out: Ticket[] = [];
+//   const covered = new Set<string>();
 
-  // ưu tiên socket nếu còn tồn tại ở API
-  const apiIds = new Set(apiNewRows.map((r) => r.id));
-  for (const [orderItemId, t] of Object.entries(socketMap)) {
-    if (apiIds.has(orderItemId)) {
-      out.push(t);
-      covered.add(orderItemId);
-    }
-  }
+//   // ưu tiên socket nếu còn tồn tại ở API
+//   const apiIds = new Set(apiNewRows.map((r) => r.id));
+//   for (const [orderItemId, t] of Object.entries(socketMap)) {
+//     if (apiIds.has(orderItemId)) {
+//       out.push(t);
+//       covered.add(orderItemId);
+//     }
+//   }
 
-  // phần còn lại từ API nhưng chỉ lấy những dòng có quantity > shownQty
-  for (const r of apiNewRows) {
-    if (covered.has(r.id)) continue;
-    const shown = shownQtyRef.current[r.id] ?? 0;
-    if (r.quantity > shown) {
-      out.push(mapRowsToTickets([r])[0]!);
-    }
-  }
+//   // phần còn lại từ API nhưng chỉ lấy những dòng có quantity > shownQty
+//   for (const r of apiNewRows) {
+//     if (covered.has(r.id)) continue;
+//     const shown = shownQtyRef.current[r.id] ?? 0;
+//     if (r.quantity > shown) {
+//       out.push(mapRowsToTickets([r])[0]!);
+//     }
+//   }
 
-  return out.sort((a, b) => b.createdTs - a.createdTs);
-}
+//   return out.sort((a, b) => b.createdTs - a.createdTs);
+// }
   /* =============== Socket =============== */
-  useEffect(() => {
-    (async () => {
-      await fetch("/api/socket").catch(() => {});
-    })();
+  // trong KitchenScreen effect
+// =============== Socket ===============
+function summarizeItems(p: any) {
+  const items = Array.isArray(p?.items) ? p.items : [];
+  const head = items.slice(0, 3).map((it: any) => `${it.name} x${it.qty}`).join(" • ");
+  return head + (items.length > 3 ? ` +${items.length - 3}` : "");
+}
+function getTableName(p: any) {
+  // thử lần lượt các khả năng BE có thể gửi
+  return (
+    p?.tableName ||
+    p?.table?.name ||
+    p?.table ||
+    p?.order?.table?.name ||
+    "—"
+  );
+} 
+useEffect(() => {
+  const s = getSocket();
 
-    const s = getSocket();
+  const doJoin = () => s.emit("room:join", "kitchen");
+  if (s.connected) doJoin(); else s.once("connect", doJoin);
 
-    // debug
-    s.on("connect", () => console.log("[kitchen] socket connected:", s.id));
-    s.on("disconnect", (r) => console.warn("[kitchen] socket disconnect:", r));
-    s.on("connect_error", (e) => console.error("[kitchen] connect_error:", e?.message || e));
+  s.on("connect", () => {
+  setSocketReady(true);
+  setBootstrapped(false); // reset khi reconnect
+  toast.success("Đã kết nối màn bếp");
+});
 
-    // join room sau khi connect
-    const doJoin = () => s.emit("room:join", "kitchen");
-    if (s.connected) doJoin();
-    else s.once("connect", doJoin);
+  s.on("disconnect", (r) => {
+    setSocketReady(false);
+    toast.error("Mất kết nối màn bếp", { description: String(r ?? "") });
+  });
 
-    const burstRefetch = () => {
-      qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
-      qc.invalidateQueries({ queryKey: ["items", "PREPARING"] });
-      qc.invalidateQueries({ queryKey: ["items", "READY"] });
-    };
+  // const burstRefetch = () => {
+  //   qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
+  //   qc.invalidateQueries({ queryKey: ["items", "PREPARING"] });
+  //   qc.invalidateQueries({ queryKey: ["items", "READY"] });
+  // };
 
-    // nhận payload từ thu ngân: GIỮ qty, không xé lẻ
-    const pushTicket = (p: any) => {
+const JUST_MS = 15000;
+
+const pushTicket = (p: KitchenNotifyPayload) => {
   const items = Array.isArray(p?.items) ? p.items : [];
   if (!items.length) return;
 
-  // 1) chống trùng batch
   const batchId = p?.batchId;
   if (batchId && processedBatchIdsRef.current.has(batchId)) return;
   if (batchId) processedBatchIdsRef.current.add(batchId);
 
-  const createdTs = Date.parse(p.createdAt || "") || Date.now();
+  const createdTs = Date.parse(p?.createdAt || "") || Date.now();
+  const table = getTableName(p);
 
-  for (const it of items) {
-    const orderItemId = it?.orderItemId;
-    if (!orderItemId) continue;
+  setSocketTickets(prev => {
+    const next = { ...prev };
 
-    const qtyIncoming = Math.max(1, Number(it?.qty) || 1);
+    for (const it of items) {
+      const { orderItemId, name, qty } = it || ({} as any);
+      if (!orderItemId) continue;
 
-    // 2) nếu qty nhận <= qty đã hiển thị -> bỏ qua (không “gọi” lại)
-    const shown = shownQtyRef.current[orderItemId] ?? 0;
-    if (qtyIncoming <= shown) continue;
+      // ❗️Mỗi orderItemId là MỘT LẦN GỬI riêng lẻ → ticket riêng
+      const t: Ticket = {
+        id: orderItemId,                          // unique per lần gửi (BE sinh mới)
+        orderId: p.orderId,
+        table,
+        createdAt: p.createdAt ?? new Date().toLocaleString(),
+        createdTs,
+        items: [{ name, qty: Math.max(1, Number(qty) || 1) }],  // qty đúng bằng delta lần này
+        itemIds: [orderItemId],
+        priority: p.priority ? "high" : "normal",
+        note: p.note ?? undefined,
+        justArrived: true,
+      };
 
-    // 3) cập nhật ticket (giữ qty như cashier gửi) + cập nhật "đã hiển thị"
-    const t: Ticket = {
-      id: orderItemId,
-      orderId: p.orderId,
-      table: p.tableName ?? "—",
-      createdAt: p.createdAt ?? new Date().toLocaleString(),
-      createdTs,
-      items: [{ name: it.name, qty: qtyIncoming }],
-      itemIds: [orderItemId],
-      priority: p.priority ? "high" : "normal",
-      note: p.note ?? undefined,
-    };
+      next[orderItemId] = t;
+    }
 
-    shownQtyRef.current[orderItemId] = qtyIncoming;
-    setSocketTickets(prev => ({ ...prev, [orderItemId]: t }));
-  }
+    return next;
+  });
+
+  // tự gỡ badge NEW sau 15s
+  setTimeout(() => {
+    setSocketTickets(prev => {
+      const next = { ...prev };
+      for (const it of items) {
+        const id = it?.orderItemId;
+        if (id && next[id]) next[id] = { ...next[id], justArrived: false };
+      }
+      return next;
+    });
+  }, JUST_MS);
 };
 
-    const handleSingle = (p: any) => {
-      pushTicket(p);
-      burstRefetch();
-    };
-    const handleBatch = (p: any) => {
-      pushTicket(p);
-      burstRefetch();
-    };
+// ===== 3) Reconcile giữ nguyên tư duy, không dựa vào shownQtyRef nữa =====
 
-    s.on("cashier:notify_item", handleSingle);
-    s.on("cashier:notify_items", handleBatch);
 
-    const onDisconnect = () => {
-      burstRefetch();
-      let n = 0;
-      const id = setInterval(() => {
-        burstRefetch();
-        if (++n >= 3) clearInterval(id);
-      }, 3000);
-    };
-    s.on("disconnect", onDisconnect);
-    s.on("connect_error", onDisconnect);
 
-    return () => {
-      s.off("cashier:notify_item", handleSingle);
-      s.off("cashier:notify_items", handleBatch);
-      s.off("disconnect", onDisconnect);
-      s.off("connect_error", onDisconnect);
-    };
-  }, [qc]);
+
+ const handleSingle = (p: any) => {
+  pushTicket(p);
+  toast.success(p?.priority ? "Có order mới" : "Phiếu mới", {
+    description: `Bàn ${getTableName(p)} • ${summarizeItems(p)}`,
+    duration: 3500,
+  });
+
+  qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] }); // 👈 thêm dòng này
+};
+
+const handleBatch = (p: any) => {
+  pushTicket(p);
+  toast.success(p?.priority ? "Có order mới" : "Phiếu mới", {
+    description: `Bàn ${getTableName(p)} • ${summarizeItems(p)}`,
+    duration: 3500,
+  });
+
+  qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] }); // 👈 thêm dòng này
+};
+
+
+  s.on("cashier:notify_item", handleSingle);
+  s.on("cashier:notify_items", handleBatch);
+
+  // (tùy chọn) âm báo
+  const ding = (src = "/sounds/notify.mp3") => {
+    try { new Audio(src).play().catch(() => {}); } catch {}
+  };
+  s.on("cashier:notify_item", ding);
+  s.on("cashier:notify_items", ding);
+
+  return () => {
+    s.off("cashier:notify_item", handleSingle);
+    s.off("cashier:notify_items", handleBatch);
+    s.off("cashier:notify_item", ding);
+    s.off("cashier:notify_items", ding);
+    s.off("connect");
+    s.off("disconnect");
+  };
+}, [qc]);
+
+
 
   // Clean socketTickets khi NEW từ API thay đổi (chỉ giữ những orderItemId vẫn còn NEW)
   useEffect(() => {
@@ -375,7 +456,30 @@ function reconcileNewTickets(
       return next;
     });
   }, [qNewRows.data]);
+function reconcileNewTickets(
+  apiNewRows: ApiOrderItemExt[],
+  socketMap: Record<string, Ticket>,
+): Ticket[] {
+  const out: Ticket[] = [];
+  const covered = new Set<string>();
+  const apiIds = new Set(apiNewRows.map((r) => r.id));
 
+  // ưu tiên socket (nếu id còn ở API)
+  for (const [orderItemId, t] of Object.entries(socketMap)) {
+    if (apiIds.has(orderItemId)) {
+      out.push(t);
+      covered.add(orderItemId);
+    }
+  }
+
+  // phần còn lại lấy từ API (mỗi row là 1 lần)
+  for (const r of apiNewRows) {
+    if (covered.has(r.id)) continue;
+    out.push(mapRowsToTickets([r])[0]!);
+  }
+
+  return out.sort((a, b) => b.createdTs - a.createdTs);
+}
   // Reconcile NEW (ưu tiên socket)
   useEffect(() => {
     setListNew(reconcileNewTickets(qNewRows.data ?? [], socketTickets));

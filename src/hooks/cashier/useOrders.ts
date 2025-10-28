@@ -21,7 +21,7 @@ const makeBatchId = () => {
 /* ----------------------- API helpers (qua axios instance) ----------------------- */
 async function fetchOrders() {
   const res = await api.get("/orders", {
-    params: { page: 1, limit: 200, excludeStatus: "PAID,CANCELLED" },
+    params: { page: 1, limit: 200, excludeStatus: "PAID,CANCELLED,MERGED" },
   });
   const json = res.data;
   return Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];

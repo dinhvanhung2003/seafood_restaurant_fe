@@ -9,7 +9,6 @@ import { OrderItemCard } from "./OrderItemCard";
 import { User2, CircleDollarSign, Bell, Plus, Trash2, X } from "lucide-react";
 import { currency } from "@/utils/money";
 import type { Table, OrderItem, Catalog } from "@/types/types";
-import { CustomerModal } from "@/components/cashier/modals/CustomerModal";
 import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
 import {useCustomerSearch } from "@/hooks/cashier/useCustomers";
 import { toast } from "sonner";
@@ -19,12 +18,14 @@ import { useMemo } from "react";
 import { useCashierStore } from '@/store/cashier';
 import api from "@/lib/axios"; 
 import AddCustomerModal from "@/components/admin/partner/customer/modal/AddCustomerModal";
-
+import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 type ShortCustomer = { id: string; name: string; phone?: string };
-
-
-
+import { Clock } from "lucide-react";
+import { useKitchenHistory} from "@/hooks/cashier/useKitchenHistory";
+import { NotifyHistoryDrawer } from "@/components/cashier/drawer/NotifyHistoryDrawer";
+import MergeOrderModal from "@/components/cashier/modals/MergeOrderModal";
+import SplitOrderModal from "@/components/cashier/modals/SplitOrderModal";
 // ====== INPUT: mỗi item là 1 dòng OrderItem thật từ BE ======
 export type UIOrderItemInput = {
   rowId?: string;           // orderItemId
@@ -34,78 +35,78 @@ export type UIOrderItemInput = {
   batchId?: string | null;  // null khi chưa gửi bếp
 };
 
-type Props = {
-  orderId?: string;
-  table: Table | null;
-  items: UIOrderItemInput[];
-  catalog: Catalog;
-  total: number;
-  onChangeQty: (menuItemId: string, delta: number) => void; // POS sẽ xử lý quy tắc +/-
-  onCheckout: () => void;
-  onNotify: () => void;
-  onClear?: () => void;
-  orderTabs?: { activeId: string; orders: { id: string; label: string }[] };
-  onAddOrder?: () => void;
-  onSwitchOrder?: (id: string) => void;
-  onCloseOrder?: (id: string) => void;
-  canCancel?: boolean;
-  onCancelOrder?: () => void;
-  canNotify?: boolean;
-};
+// type Props = {
+//   orderId?: string;
+//   table: Table | null;
+//   items: UIOrderItemInput[];
+//   catalog: Catalog;
+//   total: number;
+//   onChangeQty: (menuItemId: string, delta: number) => void; // POS sẽ xử lý quy tắc +/-
+//   onCheckout: () => void;
+//   onNotify: () => void;
+//   onClear?: () => void;
+//   orderTabs?: { activeId: string; orders: { id: string; label: string }[] };
+//   onAddOrder?: () => void;
+//   onSwitchOrder?: (id: string) => void;
+//   onCloseOrder?: (id: string) => void;
+//   canCancel?: boolean;
+//   onCancelOrder?: () => void;
+//   canNotify?: boolean;
+// };
 
 // ====== Gom theo món để hiển thị 1 dòng ======
-type GroupRow = {
-  menuItemId: string;
-  name: string;
-  totalQty: number;
-  pendingQty: number;     // PENDING & batchId=null
-  confirmedQty: number;
-  preparingQty: number;
-  readyQty: number;
-  servedQty: number;
-  // một row PENDING để – / xóa (nếu cần)
-  anyPendingRowId?: string;
-};
+// type GroupRow = {
+//   menuItemId: string;
+//   name: string;
+//   totalQty: number;
+//   pendingQty: number;     // PENDING & batchId=null
+//   confirmedQty: number;
+//   preparingQty: number;
+//   readyQty: number;
+//   servedQty: number;
+//   // một row PENDING để – / xóa (nếu cần)
+//   anyPendingRowId?: string;
+// };
 
-function buildGroups(items: UIOrderItemInput[], catalog: Catalog): GroupRow[] {
-  const m = new Map<string, GroupRow>();
+// function buildGroups(items: UIOrderItemInput[], catalog: Catalog): GroupRow[] {
+//   const m = new Map<string, GroupRow>();
 
-  for (const it of items) {
-    const mid = it.id;
-    const def = catalog.items.find(x => x.id === mid);
-    if (!def) continue;
+//   for (const it of items) {
+//     const mid = it.id;
+//     const def = catalog.items.find(x => x.id === mid);
+//     if (!def) continue;
 
-    if (!m.has(mid)) {
-      m.set(mid, {
-        menuItemId: mid,
-        name: def.name,
-        totalQty: 0,
-        pendingQty: 0,
-        confirmedQty: 0,
-        preparingQty: 0,
-        readyQty: 0,
-        servedQty: 0,
-      });
-    }
-    const g = m.get(mid)!;
-    g.totalQty += it.qty;
+//     if (!m.has(mid)) {
+//       m.set(mid, {
+//         menuItemId: mid,
+//         name: def.name,
+//         totalQty: 0,
+//         pendingQty: 0,
+//         confirmedQty: 0,
+//         preparingQty: 0,
+//         readyQty: 0,
+//         servedQty: 0,
+//       });
+//     }
+//     const g = m.get(mid)!;
+//     g.totalQty += it.qty;
 
-    switch (it.status) {
-      case "PENDING":
-        if (!it.batchId) {
-          g.pendingQty += it.qty;
-          if (!g.anyPendingRowId) g.anyPendingRowId = it.rowId;
-        }
-        break;
-      case "CONFIRMED": g.confirmedQty += it.qty; break;
-      case "PREPARING": g.preparingQty += it.qty; break;
-      case "READY":     g.readyQty += it.qty; break;
-      case "SERVED":    g.servedQty += it.qty; break;
-    }
-  }
+//     switch (it.status) {
+//       case "PENDING":
+//         if (!it.batchId) {
+//           g.pendingQty += it.qty;
+//           if (!g.anyPendingRowId) g.anyPendingRowId = it.rowId;
+//         }
+//         break;
+//       case "CONFIRMED": g.confirmedQty += it.qty; break;
+//       case "PREPARING": g.preparingQty += it.qty; break;
+//       case "READY":     g.readyQty += it.qty; break;
+//       case "SERVED":    g.servedQty += it.qty; break;
+//     }
+//   }
 
-  return Array.from(m.values());
-}
+//   return Array.from(m.values());
+// }
 
 
 
@@ -165,6 +166,9 @@ export function OrderList({
   const guestCount = useCashierStore((s) => s.guestCount);
   const setGuestCount = useCashierStore((s) => s.setGuestCount);
 
+  const [mergeOpen, setMergeOpen] = useState(false);
+
+
    const selectedCus = useCashierStore(s => s.selectedCustomer);
   const setSelectedCus = useCashierStore(s => s.setSelectedCustomer);
   const [q, setQ] = useState("");
@@ -178,7 +182,19 @@ export function OrderList({
   };
 
 
-
+const [splitOpen, setSplitOpen] = useState(false);
+const splitItems = useMemo(
+  () =>
+    items.map((it) => ({
+      id: it.rowId ?? it.id, // ưu tiên orderItemId; fallback (không khuyến nghị) là menuItemId
+      name: catalog.items.find((m) => m.id === it.id)?.name ?? "Món",
+      quantity: it.qty,
+    })),
+  [items, catalog]
+);
+const { cookedMap } = useKitchenProgress(orderId);
+const [historyOpen, setHistoryOpen] = useState(false);
+const { data: history = [], prepend } = useKitchenHistory(orderId);
 // Gộp các dòng cùng menuItemId để hiển thị một dòng duy nhất
 const mergedItems = useMemo(() => {
   const seen = new Map<string, UIOrderItem>();
@@ -278,7 +294,7 @@ const mergedItems = useMemo(() => {
     {mergedItems.map((oi, idx) => {
       const menuItem = catalog.items.find((m) => m.id === oi.id);
       if (!menuItem) return null;
-
+ const cooked = cookedMap.get(oi.id) ?? 0;
       return (
         <OrderItemCard
           key={`${orderId ?? "no-order"}-${oi.id}`}
@@ -286,6 +302,7 @@ const mergedItems = useMemo(() => {
           item={menuItem}
           order={oi}               // qty đã gộp
           onChangeQty={onChangeQty}
+          cooked={cooked}
         />
       );
     })}
@@ -312,10 +329,22 @@ const mergedItems = useMemo(() => {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <select className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 text-sm" disabled={!hasTable}>
+            {/* <select className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 text-sm" disabled={!hasTable}>
               <option>Nguyễn...</option>
-            </select>
-
+            </select> */}
+<Button variant="outline" onClick={() => setHistoryOpen(true)}>
+  <Clock className="w-4 h-4 mr-1" /> 
+</Button>
+  <Button
+  variant="outline"
+  onClick={() => setMergeOpen(true)}
+  disabled={!orderId}
+>
+  Ghép đơn
+</Button>
+ <Button variant="outline" onClick={() => setSplitOpen(true)} disabled={!orderId}>
+    Tách đơn
+  </Button>
             <Button
               onClick={() => setGuestModalOpen(true)}
               variant="outline"
@@ -386,6 +415,31 @@ const mergedItems = useMemo(() => {
         onClose={() => setGuestModalOpen(false)}
         onSubmit={(count) => setGuestCount(count)}
       />
+      <NotifyHistoryDrawer open={historyOpen} onOpenChange={setHistoryOpen} data={history}/>
+     {orderId && (
+  <MergeOrderModal
+    open={mergeOpen}
+    onOpenChange={setMergeOpen}
+    fromOrderId={orderId}             // giờ chắc chắn là string
+    currentTableId={table?.id}        // có thể undefined -> để prop optional
+    onMerged={() => {
+      // activeOrdersQuery.refetch?.();
+    }}
+  />
+)}
+
+
+{orderId && (
+  <SplitOrderModal
+    open={splitOpen}
+    onOpenChange={setSplitOpen}
+    fromOrderId={orderId}
+    fromTableId={table?.id}
+    fromTableName={table?.name}
+    items={splitItems} // <-- dùng mảng đã map ở bước 3
+  />
+)}
     </div>
+    
   );
 }

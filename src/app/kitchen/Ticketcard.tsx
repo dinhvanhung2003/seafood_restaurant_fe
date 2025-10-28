@@ -1,30 +1,32 @@
-"use client";
-
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock4, CheckCircle2, ChefHat, Truck } from "lucide-react";
-
-/* Nếu bạn chưa có type chung thì thêm vào đây */
+import { Button } from "@/components/ui/button";
+import { Clock4, ChefHat, CheckCircle2, Truck } from "lucide-react";
 export type Ticket = {
-  id: string;
+  id: string; // = orderItemId (ROW-LEVEL — KHÔNG XÉ LẺ)
   orderId: string;
   table: string;
-  items: { name: string; qty: number }[];
   createdAt: string;
+  createdTs: number; // để sort
+  items: { name: string; qty: number }[]; // [{..., qty:n}] — GIỮ n
+  itemIds: string[]; // [orderItemId]
   priority?: "high" | "normal";
   note?: string;
 };
 
-type Props = {
-  t: Ticket;
-  // ✅ Sửa: đồng bộ với KitchenScreen (new | cooking | ready)
-  variant: "new" | "cooking" | "ready";
-  onStart?: (t: Ticket) => void;     // chuyển sang PREPARING
-  onComplete?: (t: Ticket) => void;  // chuyển sang READY
-  onServe?: (t: Ticket) => void;     // chuyển sang SERVED
-};
 
-export default function TicketCard({ t, variant, onStart, onComplete, onServe }: Props) {
+export default function TicketCard({
+  t,
+  variant,
+  onStart,
+  onComplete,
+  onServe,
+}: {
+  t: Ticket;
+  variant: "new" | "preparing" | "ready";
+  onStart?: (t: Ticket) => void; // -> PREPARING (toàn bộ row)
+  onComplete?: (t: Ticket) => void; // -> READY (toàn bộ row)
+  onServe?: (t: Ticket) => void; // -> SERVED (toàn bộ row)
+}) {
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
@@ -56,21 +58,23 @@ export default function TicketCard({ t, variant, onStart, onComplete, onServe }:
       )}
 
       <div className="mt-3 flex items-center gap-2">
-        {/* ✅ Hiển thị nút theo 3 trạng thái */}
         {variant === "new" && (
           <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
             <ChefHat className="mr-2 h-4 w-4" />
-            Bắt đầu
+            Bắt đầu nấu (toàn bộ)
           </Button>
         )}
-
-        {variant === "cooking" && (
-          <Button size="sm" variant="secondary" className="h-8" onClick={() => onComplete?.(t)}>
+        {variant === "preparing" && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            onClick={() => onComplete?.(t)}
+          >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            Hoàn tất
+            Hoàn tất (READY)
           </Button>
         )}
-
         {variant === "ready" && (
           <Button
             size="sm"
@@ -78,7 +82,7 @@ export default function TicketCard({ t, variant, onStart, onComplete, onServe }:
             onClick={() => onServe?.(t)}
           >
             <Truck className="mr-2 h-4 w-4" />
-            Cung ứng
+            Cung ứng (SERVED)
           </Button>
         )}
       </div>
