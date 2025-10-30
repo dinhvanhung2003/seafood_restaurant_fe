@@ -26,7 +26,8 @@ const [tableLimit, setTableLimit] = useState(24);
 const [areaId, setAreaId] = useState<string | undefined>(undefined); // chọn theo ID để query BE
     // state filter cho bảng có phân trang 
     
-
+const [cancelOneOpen, setCancelOneOpen] = useState(false);
+const [cancelOne, setCancelOne] = useState<CancelTarget | null>(null);
     
   const [localOrderCreatedAt, setLocalOrderCreatedAt] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
@@ -45,8 +46,8 @@ const [areaId, setAreaId] = useState<string | undefined>(undefined); // chọn t
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   // const [notified, setNotified] = useState<Record<string, Record<string, number>>>({});
 
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelTargets, setCancelTargets] = useState<CancelTarget[]>([]);
+  // const [cancelOpen, setCancelOpen] = useState(false);
+  // const [cancelTargets, setCancelTargets] = useState<CancelTarget[]>([]);
  const [socketReady, setSocketReady] = useState(false);
   const [kitchenOnline, setKitchenOnline] = useState(false);
   useEffect(() => {
@@ -354,65 +355,101 @@ const deltaItems = useMemo(() => {
   const hasOrder = !!(selectedTable && orderIds[selectedTable.id]);
 
   // helper
- const wasSentToKitchen = (it: any) =>
-  Boolean(it?.batchId) || it?.status !== "PENDING";
+ // tổng đã báo bếp theo menuItemId
+const sentQty = (menuItemId: string) => notifiedMap.get(menuItemId) ?? 0;
 
-  const onChangeQty = async (menuItemId: string, delta: number) => {
-    if (!selectedTable) return;
-    const it = activeItems.find((x) => x.id === menuItemId);
-    const cur = it?.qty ?? 0;
-    const next = Math.max(0, cur + delta);
+// 1 dòng trên OrderList (gộp) được coi là "đã gửi" nếu có ít nhất 1 phần đã báo
+const wasSentToKitchen = (it: any) => sentQty(it.id) > 0;
 
-    if (!it) {
-      if (delta > 0) await addOne(selectedTable.id, menuItemId);
-      return;
-    }
 
-    const locked = wasSentToKitchen(it);
-
-    if (locked) {
-      if (delta > 0) {
-        await addOne(selectedTable.id, menuItemId);
-      } else if (delta < 0) {
-        setCancelTargets([
-          {
-            orderItemId: it.rowId!,
-            name: menuItems.find((m) => m.id === it.id)?.name ?? "",
-            qty: it.qty,
-          },
-        ]);
-        setCancelOpen(true);
-      }
-      return;
-    }
-
-    if (next === 0) {
-      await changeQty(selectedTable.id, menuItemId, -cur, activeItems);
-      return;
-    }
-    await changeQty(selectedTable.id, menuItemId, delta, activeItems);
-  };
-
-  // confirm huỷ item
- const confirmCancelItems = async (reason: string) => {
-  if (!currentOrderId) return;
+const confirmCancelOne = async ({ qty, reason }: { qty: number; reason: string }) => {
+  if (!cancelOne) return;
   try {
-    await api.patch(`/orderitems/cancel`, {
-      itemIds: cancelTargets.map(t => t.orderItemId),
-      reason,
-    });
+    if (qty >= cancelOne.qty) {
+      await api.patch(`/orderitems/cancel`, { itemIds: [cancelOne.orderItemId], reason });
+    } else {
+      await api.patch(`/orderitems/cancel-partial`, {
+        itemId: cancelOne.orderItemId,
+        qty,
+        reason,
+      });
+    }
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["active-orders"] }),
       qc.invalidateQueries({ queryKey: ["kitchen-progress", currentOrderId] }),
+      qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] }),
     ]);
     toast.success("Đã huỷ món");
   } catch (e: any) {
     toast.error("Huỷ món thất bại", { description: e?.response?.data?.message || e.message });
   } finally {
-    setCancelOpen(false);
-    setCancelTargets([]);
+    setCancelOneOpen(false);
+    setCancelOne(null);
   }
 };
+  const onChangeQty = async (menuItemId: string, delta: number) => {
+  if (!selectedTable) return;
+
+  const it = activeItems.find(x => x.id === menuItemId);
+  const cur = it?.qty ?? 0;
+  const next = Math.max(0, cur + delta);
+
+  // chưa có dòng -> chỉ cho tăng
+  if (!it) {
+    if (delta > 0) await addOne(selectedTable.id, menuItemId);
+    return;
+  }
+
+  const sent = sentQty(menuItemId); // tổng đã báo bếp của món này
+
+  if (delta > 0) {
+    // thêm mới luôn là row mới (để lần báo sau vẫn ra batch riêng)
+    await addOne(selectedTable.id, menuItemId);
+    return;
+  }
+
+  // delta < 0: muốn giảm
+  if (next >= sent) {
+    // còn đủ phần "chưa gửi" để giảm → update qty bình thường
+    // (giảm tối đa đến ngưỡng 'sent')
+    const reducible = cur - sent;          // phần chưa gửi
+    const apply = Math.max(delta, -reducible);
+    if (apply !== 0) await changeQty(selectedTable.id, menuItemId, apply, activeItems);
+    return;
+  }
+
+  // next < sent ⇒ phải hủy phần đã gửi
+ // next < sent ⇒ phải hủy phần đã gửi
+const needCancel = sent - next; // số lượng tối thiểu cần hủy
+setCancelOne({
+  orderItemId: it.rowId!,
+  name: menuItems.find(m => m.id === it.id)?.name ?? "",
+  qty: sent, // ✅ cho phép chọn tới toàn bộ phần đã báo bếp
+});
+setCancelOneOpen(true);
+};
+
+
+  // confirm huỷ item
+//  const confirmCancelItems = async (reason: string) => {
+//   if (!currentOrderId) return;
+//   try {
+//     await api.patch(`/orderitems/cancel`, {
+//       itemIds: cancelTargets.map(t => t.orderItemId),
+//       reason,
+//     });
+//     await Promise.all([
+//       qc.invalidateQueries({ queryKey: ["active-orders"] }),
+//       qc.invalidateQueries({ queryKey: ["kitchen-progress", currentOrderId] }),
+//     ]);
+//     toast.success("Đã huỷ món");
+//   } catch (e: any) {
+//     toast.error("Huỷ món thất bại", { description: e?.response?.data?.message || e.message });
+//   } finally {
+//     setCancelOpen(false);
+//     setCancelTargets([]);
+//   }
+// };
 
 
 
@@ -437,6 +474,17 @@ const deltaItems = useMemo(() => {
     }
   }, [orderIds, activeOrdersQuery.data]);
 
+
+const onDelete = (it:any) => {
+  const sent = sentQty(it.id);
+  if (sent === 0) {
+    changeQty(selectedTable!.id, it.id, -it.qty, activeItems);
+  } else {
+   setCancelOne({ orderItemId: it.rowId!, name: it.name, qty: it.qty });
+   setCancelOne({ orderItemId: it.rowId!, name: it.name, qty: sent });
+    setCancelOneOpen(true);
+  }
+};
 
 
 
@@ -545,13 +593,12 @@ const onNotify = async () => {
 
     // modals
     checkoutOpen, setCheckoutOpen,
-    cancelOpen, setCancelOpen,
-    cancelTargets, setCancelTargets,
+
 
     // handlers
     onAdd, onClear, onChangeQty, onNotify,
     onCancelOrder, handleCheckout, handleCheckoutSuccess,
-    confirmCancelItems,
+    // confirmCancelItems,
 
 
     // export thêm
@@ -569,8 +616,12 @@ const onNotify = async () => {
     tablesQuery,                     // để kiểm tra isFetching
     tableMeta,       
     
-    
+    confirmCancelOne,
+    cancelOne, setCancelOne,
+    cancelOneOpen, setCancelOneOpen,
     //socket 
-    notifying// { page, pages, total, limit }
+    notifying,
+
+    onDelete
   };
 }

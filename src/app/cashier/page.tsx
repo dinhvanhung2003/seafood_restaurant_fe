@@ -15,7 +15,7 @@ import { CategoryFilter } from "@/components/cashier/menu/CategoryFilter";
 import { MenuGrid } from "@/components/cashier/menu/MenuGrid";
 import { OrderList } from "@/components/cashier/order/OrderList";
 import CheckoutModal from "@/components/cashier/modals/CheckoutModal";
-import CancelItemsModal from "@/components/cashier/modals/CancelModal";
+import CancelOneItemModal from "@/components/cashier/modals/CancelModal";
 
 import { usePosPage } from "./usePosPage";
 
@@ -235,13 +235,13 @@ export default function POSPage() {
             orderId={M.currentOrderId ?? null}
           />
         )}
+<CancelOneItemModal
+  open={M.cancelOneOpen}
+  onClose={() => { M.setCancelOneOpen(false); M.setCancelOne(null); }}
+  item={M.cancelOne}
+  onConfirm={M.confirmCancelOne}
+/>
 
-        <CancelItemsModal
-          open={M.cancelOpen}
-          onClose={() => M.setCancelOpen(false)}
-          items={M.cancelTargets}
-          onConfirm={M.confirmCancelItems}
-        />
       </div>
     </div>
   );
