@@ -7,6 +7,7 @@ export interface IngredientDTO {
   alertThreshold: number;
   description?: string | null;
   updatedAt?: string | null; // ISO
+  unitCode?: string;       // "KG", "CAN", ...
 }
 
 export interface CreateIngredientInput {
