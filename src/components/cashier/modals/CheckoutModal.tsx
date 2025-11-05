@@ -73,24 +73,7 @@ type VietQrState = {
 
 type QRState = PayOSQrState | VietQrState;
 
-const toImgSrc = (s?: string) =>
-  s?.startsWith("data:") ? s : `data:image/png;base64,${s ?? ""}`;
 
-const normalizeQr = (raw: VietQrResp) => {
-  const src =
-    raw.pngDataUrl ??
-    raw.qrDataUrl ??
-    raw.image ??
-    (raw.qrBase64 ? `data:image/png;base64,${raw.qrBase64}` : "");
-  return {
-    pngDataUrl: src,
-    bankName: raw.bankName ?? "",
-    accountNo: raw.accountNo ?? raw.accountNumber ?? "",
-    accountName: raw.accountName ?? "",
-    amount: Number(raw.amount ?? 0),
-    addInfo: raw.addInfo ?? "",
-  };
-};
 
 
 type Props = {
@@ -116,32 +99,35 @@ const selectedCus = useCashierStore(s => s.selectedCustomer);
   const clearSelectedCus = useCashierStore(s => s.clearSelectedCustomer);
  const guestCount = useCashierStore((s) => s.guestCount);
   const resetGuest = useCashierStore((s) => s.resetGuestCount);
- const lines: ReceiptLine[] = useMemo(() => {
+const lines: ReceiptLine[] = useMemo(() => {
+  // tra nhanh theo id
+  const dict = new Map(catalog.items.map(i => [i.id, i]));
   const map = new Map<string, ReceiptLine>(); // key = menuItemId
+
   for (const it of items) {
-    const m = catalog.items.find((x) => x.id === it.id);
-    if (!m) continue;
-    const cur = map.get(it.id) ?? { id: it.id, name: m.name, qty: 0, price: m.price, total: 0 };
-    cur.qty += it.qty;
-    cur.total = cur.qty * cur.price;
-    map.set(it.id, cur);
+    const m = dict.get(it.id);
+    const name  = m?.name ?? (it as any).name ?? "Món";
+    const price = (it as any).price ?? m?.price ?? 0;  // ⚠ fallback
+    const key   = it.id;
+
+    const cur = map.get(key) ?? { id: key, name, qty: 0, price, total: 0 };
+    cur.qty   += it.qty;
+    cur.price  = price;           // giữ giá đúng theo món
+    cur.total  = cur.qty * cur.price;
+    map.set(key, cur);
   }
+
   return Array.from(map.values());
 }, [items, catalog.items]);
 
 
+
 const [qr, setQr] = useState<QRState | null>(null);
-
-const toImgSrc = (s?: string) =>
-  s?.startsWith("data:") ? s : `data:image/png;base64,${s ?? ""}`;
-
-
-
 
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.total, 0), [lines]);
 
-  // ⚠️ BE hiện đang check số thanh toán == totalAmount trên invoice,
+  //  BE hiện đang check số thanh toán == totalAmount trên invoice,
   // nên tạm thời KHÔNG áp dụng discount vào số tiền gửi lên BE, tránh Amount mismatch.
   const [discount, setDiscount] = useState(0); // vẫn giữ UI nhưng sẽ không đẩy lên BE
   const totalUI = Math.max(0, subtotal - discount); // để hiển thị/ in bill phía khách

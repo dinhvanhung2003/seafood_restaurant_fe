@@ -43,29 +43,50 @@ export function useOrders() {
 
   // Hydrate local state từ data của query
   useEffect(() => {
-    const rows = activeOrdersQuery.data ?? [];
-    const nextOrders: OrdersByTable = {};
+  const rows = activeOrdersQuery.data ?? [];
+
+  setOrders(prev => {
+    const next: OrdersByTable = {};
     const nextOrderIds: Record<string, string> = {};
 
     for (const o of rows) {
       const tid = o.table?.id ?? o.tableId;
       if (!tid) continue;
 
+      // map tableId -> orderId để các mutation dùng
       nextOrderIds[tid] = o.id;
 
-      const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
-        id: it.menuItem?.id ?? it.menuItemId,
-        qty: it.quantity,
-        rowId: it.id, // orderItemId
-      }));
+      // items hiện tại
+     const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
+  id: it.menuItem?.id ?? it.menuItemId,
+  qty: it.quantity,
+  rowId: it.id,
+  name: it.menuItem?.name,
+  // Ưu tiên it.price (đơn giá “chốt” theo hóa đơn), fallback menuItem.price
+  price: it.price != null ? Number(it.price) : Number(it.menuItem?.price ?? 0),
+  image: it.menuItem?.image,
+}));
 
-      const id = _uid();
-      nextOrders[tid] = { activeId: id, orders: [{ id, label: "1", items }] };
+      // dùng order.id làm tab id (ổn định)
+      const tabId = o.id;
+
+      // nếu trước đó đã có activeId hợp lệ, giữ nguyên
+      const prevActive = prev[tid]?.activeId;
+      const prevHasTab = prev[tid]?.orders?.some(t => t.id === prevActive);
+      const activeId = prevHasTab ? prevActive : tabId;
+
+      next[tid] = {
+        activeId,
+        orders: [{ id: tabId, label: "1", items }],
+      };
     }
 
-    setOrders(nextOrders);
+    // cập nhật cả orderIds cho mutations
     setOrderIds(nextOrderIds);
-  }, [activeOrdersQuery.data]);
+    return next;
+  });
+}, [activeOrdersQuery.data]);
+
 
   /* ----------------------- Mutations ----------------------- */
 
@@ -242,29 +263,54 @@ const setItemQtyMu = useMutation({
 
   const addWithBatch = addMany;
 
-async function changeQty(tableId: string, menuItemId: string, delta: number, currentItems: UIOrderItem[]) {
+async function changeQty(
+  tableId: string,
+  menuItemId: string,
+  delta: number,
+  currentItems: UIOrderItem[],
+) {
   const oid = orderIds[tableId];
   if (!oid) {
     if (delta > 0) return addOne(tableId, menuItemId);
     return;
   }
+
   const it = currentItems.find((x) => x.id === menuItemId);
   const cur = it?.qty ?? 0;
   const next = Math.max(0, cur + delta);
 
+  // 👉 QUY TẮC MỚI:
+  // 1) Mọi lần tăng (delta > 0) sau khi đã có dòng (đã từng báo bếp)
+  //    -> TẠO DÒNG MỚI CHO DELTA để BE phát socket notify
+  // 2) Giảm hoặc về 0 -> PATCH /qty như cũ
+  if (delta > 0 && it?.rowId) {
+    const batchId = makeBatchId(); // giữ unique để kitchen không bị dedupe
+    await addItemsMu.mutateAsync({
+      orderId: oid,
+      items: [{ menuItemId, quantity: delta }],
+      batchId,
+    });
+    return;
+  }
+
+  // chưa có dòng mà delta > 0 -> thêm dòng như cũ
   if (!it && delta > 0) {
     await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
     return;
   }
   if (!it) return;
 
+  // giảm số lượng / về 0 vẫn PATCH /qty để đồng bộ
   try {
     await setItemQtyMu.mutateAsync({
-      orderId: oid, orderItemId: it.rowId!, quantity: next, menuItemId,
+      orderId: oid,
+      orderItemId: it.rowId!,
+      quantity: next,
+      menuItemId,
     });
   } catch (e: any) {
-    if (e?.response?.status === 400 && delta > 0) {
-      // ✅ row bị khóa (PREPARING/READY) → thêm dòng mới với delta dương
+    // fallback: nếu BE khóa dòng, vẫn tạo dòng mới cho delta dương
+    if (delta > 0 && (e?.response?.status === 400 || e?.response?.status === 404)) {
       await addItemsMu.mutateAsync({
         orderId: oid,
         items: [{ menuItemId, quantity: delta }],

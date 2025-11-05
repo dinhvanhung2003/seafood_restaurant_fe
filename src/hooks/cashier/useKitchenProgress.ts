@@ -45,15 +45,15 @@ export function useKitchenProgress(orderId?: string | null) {
 
   // 1) Snapshot từ BE
   const q = useQuery({
-    queryKey: ["kitchen-progress", orderId],
-    enabled: !!orderId,
-    queryFn: async () => {
-      const res = await api.get(`/kitchen/orders/${orderId}/progress`);
-      // BE trả ProgressRow[] (đã gộp sẵn)
-      return res.data as ProgressRow[];
-    },
-    staleTime: 10_000,
-  });
+  queryKey: ["kitchen-progress", orderId],
+  enabled: !!orderId,
+  queryFn: async () => (await api.get(`/kitchen/orders/${orderId}/progress`)).data,
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+});
 
   // 2) Realtime qua Socket: cập nhật gia tăng tại chỗ
  useEffect(() => {

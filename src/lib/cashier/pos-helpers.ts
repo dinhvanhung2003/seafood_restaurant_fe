@@ -7,6 +7,9 @@ export type UIOrderItem = {
   rowId?: string;      // orderItemId
   status?: ItemStatus;
   createAt?: string;
+    name?: string;
+  price?: number;    // đơn giá tại thời điểm order
+  image?: string;
 };
 
 export type OrdersByTable = Record<

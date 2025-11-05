@@ -27,7 +27,7 @@ async function fetchMenu(params: {
     },
   });
 
-  return data; // có thể là { data, meta } hoặc mảng, tuỳ BE
+  return data;
 }
 
 export function useMenu({ page, limit, search, categoryId }: UseMenuArgs) {
@@ -35,9 +35,9 @@ export function useMenu({ page, limit, search, categoryId }: UseMenuArgs) {
   const q = search || undefined;
 
   return useQuery({
-    queryKey: ["menu", { page, limit, search: q, categoryId: cat }],
+    // ghi rõ "all" để phân biệt cache
+    queryKey: ["menu", { page, limit, search: q ?? "", categoryId: categoryId ?? "all" }],
     queryFn: () => fetchMenu({ page, limit, search: q, categoryId: cat }),
-    enabled: true, // interceptor sẽ tự lo Authorization
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });

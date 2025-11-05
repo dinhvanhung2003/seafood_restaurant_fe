@@ -10,22 +10,24 @@ import { User2, CircleDollarSign, Bell, Plus, Trash2, X } from "lucide-react";
 import { currency } from "@/utils/money";
 import type { Table, OrderItem, Catalog } from "@/types/types";
 import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
-import {useCustomerSearch } from "@/hooks/cashier/useCustomers";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import type { UIOrderItem } from "@/lib/cashier/pos-helpers";
 import { useMemo } from "react";
-import { useCashierStore } from '@/store/cashier';
-import api from "@/lib/axios"; 
+import { useCashierStore } from '@/store/cashier'; 
 import AddCustomerModal from "@/components/admin/partner/customer/modal/AddCustomerModal";
 import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
-type ShortCustomer = { id: string; name: string; phone?: string };
 import { Clock } from "lucide-react";
 import { useKitchenHistory} from "@/hooks/cashier/useKitchenHistory";
 import { NotifyHistoryDrawer } from "@/components/cashier/drawer/NotifyHistoryDrawer";
 import MergeOrderModal from "@/components/cashier/modals/MergeOrderModal";
 import SplitOrderModal from "@/components/cashier/modals/SplitOrderModal";
+import { useCustomer } from "@/hooks/cashier/useCustomers";
+
+
+
+
 // ====== INPUT: mỗi item là 1 dòng OrderItem thật từ BE ======
 export type UIOrderItemInput = {
   rowId?: string;           // orderItemId
@@ -34,90 +36,6 @@ export type UIOrderItemInput = {
   status: "PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "SERVED" | "CANCELLED";
   batchId?: string | null;  // null khi chưa gửi bếp
 };
-
-// type Props = {
-//   orderId?: string;
-//   table: Table | null;
-//   items: UIOrderItemInput[];
-//   catalog: Catalog;
-//   total: number;
-//   onChangeQty: (menuItemId: string, delta: number) => void; // POS sẽ xử lý quy tắc +/-
-//   onCheckout: () => void;
-//   onNotify: () => void;
-//   onClear?: () => void;
-//   orderTabs?: { activeId: string; orders: { id: string; label: string }[] };
-//   onAddOrder?: () => void;
-//   onSwitchOrder?: (id: string) => void;
-//   onCloseOrder?: (id: string) => void;
-//   canCancel?: boolean;
-//   onCancelOrder?: () => void;
-//   canNotify?: boolean;
-// };
-
-// ====== Gom theo món để hiển thị 1 dòng ======
-// type GroupRow = {
-//   menuItemId: string;
-//   name: string;
-//   totalQty: number;
-//   pendingQty: number;     // PENDING & batchId=null
-//   confirmedQty: number;
-//   preparingQty: number;
-//   readyQty: number;
-//   servedQty: number;
-//   // một row PENDING để – / xóa (nếu cần)
-//   anyPendingRowId?: string;
-// };
-
-// function buildGroups(items: UIOrderItemInput[], catalog: Catalog): GroupRow[] {
-//   const m = new Map<string, GroupRow>();
-
-//   for (const it of items) {
-//     const mid = it.id;
-//     const def = catalog.items.find(x => x.id === mid);
-//     if (!def) continue;
-
-//     if (!m.has(mid)) {
-//       m.set(mid, {
-//         menuItemId: mid,
-//         name: def.name,
-//         totalQty: 0,
-//         pendingQty: 0,
-//         confirmedQty: 0,
-//         preparingQty: 0,
-//         readyQty: 0,
-//         servedQty: 0,
-//       });
-//     }
-//     const g = m.get(mid)!;
-//     g.totalQty += it.qty;
-
-//     switch (it.status) {
-//       case "PENDING":
-//         if (!it.batchId) {
-//           g.pendingQty += it.qty;
-//           if (!g.anyPendingRowId) g.anyPendingRowId = it.rowId;
-//         }
-//         break;
-//       case "CONFIRMED": g.confirmedQty += it.qty; break;
-//       case "PREPARING": g.preparingQty += it.qty; break;
-//       case "READY":     g.readyQty += it.qty; break;
-//       case "SERVED":    g.servedQty += it.qty; break;
-//     }
-//   }
-
-//   return Array.from(m.values());
-// }
-
-
-
-
-
-
-
-
-
-
-
 
 export function OrderList({
   orderId,
@@ -136,12 +54,14 @@ export function OrderList({
   canCancel,
   onCancelOrder,
   canNotify,
+  justChanged,
 }: {
   orderId?: string;
   table: Table | null;
   items: UIOrderItem[]; 
   catalog: Catalog;
   total: number;
+  justChanged: boolean;
   onChangeQty: (id: string, delta: number) => void;
   onCheckout: () => void;
   onNotify: () => void;
@@ -173,7 +93,7 @@ export function OrderList({
   const setSelectedCus = useCashierStore(s => s.setSelectedCustomer);
   const [q, setQ] = useState("");
 
-  const { data: results = [] } = useCustomerSearch(q);
+  const { data: results = [] } = useCustomer(q);
    const handleSelectCustomer = (c: any) => {
     if (!orderId) return toast.error("Chưa có đơn để chọn khách.");
     setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
@@ -212,13 +132,6 @@ const mergedItems = useMemo(() => {
   }
   return merged;                       // thứ tự = thứ tự gặp lần đầu
 }, [items]);
-
-
-
-
-
-
-  
 
   return (
     <div className="flex h-full flex-col rounded-xl border bg-white">
@@ -292,15 +205,26 @@ const mergedItems = useMemo(() => {
   <ScrollArea className="min-h-0 flex-1">
   <div className="space-y-4 p-4 pt-0">
     {mergedItems.map((oi, idx) => {
-      const menuItem = catalog.items.find((m) => m.id === oi.id);
-      if (!menuItem) return null;
- const cooked = cookedMap.get(oi.id) ?? 0;
+      // Lấy meta từ catalog (nếu có)
+      const meta = catalog.items.find((m) => m.id === oi.id);
+
+      // ✅ Ưu tiên field từ item trả về từ BE (đã map ở useOrders)
+      const name  = (oi as any).name  ?? meta?.name  ?? "Món";
+      const image = (oi as any).image ?? meta?.image;
+      const price = (oi as any).price ?? meta?.price ?? 0;
+
+      // Tạo object “menuItemLike” đủ tối thiểu cho OrderItemCard
+      const itemLike = { id: oi.id, name, price, image };
+
+      // cooked vẫn lấy như cũ
+      const cooked = cookedMap.get(oi.id) ?? 0;
+
       return (
         <OrderItemCard
           key={`${orderId ?? "no-order"}-${oi.id}`}
           index={idx}
-          item={menuItem}
-          order={oi}               // qty đã gộp
+          item={itemLike as any}   // nếu type chặt, sửa type của OrderItemCard cho rộng hơn
+          order={oi}
           onChangeQty={onChangeQty}
           cooked={cooked}
         />
@@ -311,27 +235,19 @@ const mergedItems = useMemo(() => {
 
 
 
+
       {/* Footer */}
       <Separator className="my-2" />
 
       <div className="space-y-2 p-3">
-        <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
-          Bạn vừa cập nhật đơn hàng. Click{" "}
-        <Button
-  className="h-12 rounded-xl border"
-  onClick={onNotify}
-  disabled={!hasTable || !canNotify}
->
-  {canNotify ? "Thông báo (F10)" : "Đã gửi – chờ thay đổi"}
-</Button>
-
-        </div>
+      {justChanged && canNotify && (  // <-- thêm canNotify
+    <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
+      🔔 Bạn vừa cập nhật đơn hàng. Click <strong>Thông báo</strong> để gửi thông tin chế biến đến bar bếp.
+    </div>
+  )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {/* <select className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 text-sm" disabled={!hasTable}>
-              <option>Nguyễn...</option>
-            </select> */}
 <Button variant="outline" onClick={() => setHistoryOpen(true)}>
   <Clock className="w-4 h-4 mr-1" /> 
 </Button>
@@ -364,7 +280,7 @@ const mergedItems = useMemo(() => {
         </div>
 
         <div className="mt-2 flex items-center gap-2">
-          {onClear && (
+          {/* {onClear && (
             <Button
               variant="outline"
               className="h-12 flex-1 rounded-xl"
@@ -374,8 +290,14 @@ const mergedItems = useMemo(() => {
               <Trash2 className="mr-2 h-5 w-5" />
               Xoá món
             </Button>
-          )}
-
+          )} */}
+      <Button
+  className="h-12 rounded-xl border"
+  onClick={onNotify}
+  disabled={!hasTable || !canNotify}
+>
+  {canNotify ? "Thông báo" : "Thông báo"}
+</Button>
           <Button
             variant="outline"
             className="h-12 flex-1 rounded-xl text-black border-2"

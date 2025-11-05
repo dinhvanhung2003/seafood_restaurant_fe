@@ -90,11 +90,11 @@ export default function POSPage() {
                         onClick={() => M.exitSearch()}
                         className="grid h-9 w-9 place-items-center rounded-full bg-slate-100"
                       >
-                        …
+                        <ChevronLeft className="h-4 w-4 text-slate-700" />
                       </button>
                       <div className="flex-1">
                         <SearchField
-                          placeholder="Tìm theo tên bàn, tên khách hàng, món trong đơn…"
+                          placeholder="Tìm theo tên bàn"
                           value={M.tableSearch}
                           onChange={M.setTableSearch}
                           autoFocus
@@ -201,6 +201,7 @@ export default function POSPage() {
           catalog={M.menuCatalog}
           total={M.orderTotal}
           onChangeQty={M.onChangeQty}
+          justChanged={M.justChanged}
           onClear={M.onClear}
           orderTabs={
             M.selectedTable && (M as any).orders?.[M.selectedTable.id]

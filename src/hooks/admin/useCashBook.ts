@@ -122,11 +122,14 @@ export function useOtherParties() {
   });
 }
 
+export type CreateOtherPartyInput = Omit<OtherParty, "id">;
+
 export function useCreateOtherParty() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: OtherParty) => {
+  return useMutation<OtherParty, unknown, CreateOtherPartyInput>({
+    mutationFn: async (body) => {
       const res = await api.post("/cashbook/create-other-party", body);
+      // server trả về OtherParty (có id)
       return res.data?.data ?? res.data;
     },
     onSuccess: () => {

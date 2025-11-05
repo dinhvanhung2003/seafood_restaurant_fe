@@ -1,22 +1,17 @@
+// hooks/cashier/useCustomerSuggest.ts
 "use client";
+import { useMemo } from "react";
+import { useCustomers } from "@/hooks/admin/useCustomer";
+import type { CustomersFilter } from "@/components/admin/partner/customer/filter/CustomerFilter";
+export function useCustomer(q: string, limit = 8) {
+  const enabled = q.trim().length >= 2;
+  const filters = useMemo(() => ({ q: q.trim() } as CustomersFilter), [q]);
+  const query = useCustomers(1, limit, filters);
+  const list =
+    Array.isArray((query.data as any)?.data) ? (query.data as any).data :
+    Array.isArray((query.data as any)?.items) ? (query.data as any).items :
+    Array.isArray(query.data as any) ? (query.data as any) : [];
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  attachCustomerToOrder,
-  createCustomer,
-  createAndAttachCustomer,
-  searchCustomers,
-} from '@/lib/cashier/customer/customer.api';
-
-// Search khách theo q
-export function useCustomerSearch(q: string) {
-  const enabled = q.trim().length > 0;
-  return useQuery({
-    queryKey: ['customers', 'search', q],
-    queryFn: () => searchCustomers(q),
-    enabled,
-    staleTime: 30_000,
-    // đảm bảo luôn là mảng
-    select: (data) => Array.isArray(data) ? data : [],
-  });
+  return { ...query, data: list, enabled };
 }
+

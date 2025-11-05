@@ -11,8 +11,8 @@ type ReasonKey = (typeof REASONS)[number];
 export default function CancelOneItemModal({
   open,
   onClose,
-  item,                         // ⬅️ 1 dòng món
-  onConfirm,                    // ⬅️ trả { qty, reason }
+  item,                         
+  onConfirm,                   
 }: {
   open: boolean;
   onClose: () => void;
@@ -99,7 +99,7 @@ export default function CancelOneItemModal({
               await onConfirm({ qty, reason });
             }}
           >
-            🗑️ Chắc chắn
+            Chắc chắn
           </Button>
         </div>
       </div>
