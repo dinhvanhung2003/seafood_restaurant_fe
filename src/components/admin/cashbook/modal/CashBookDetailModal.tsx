@@ -34,7 +34,7 @@ export function CashbookDetailModal({
   onOpenChange: (v: boolean) => void;
 }) {
   const { data, isLoading, isError } = useCashbookDetail(id);
-  const item = data?.data;
+  const item = data;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

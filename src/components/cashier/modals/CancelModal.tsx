@@ -1,54 +1,105 @@
-// src/components/cashier/modals/CancelItemsModal.tsx
+// src/components/cashier/modals/CancelOneItemModal.tsx
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export type CancelTarget = { orderItemId: string; name: string; qty: number };
 
-export default function CancelItemsModal({
-  open, onClose, items, onConfirm,
+const REASONS = ["Khách đổi món", "Đặt nhầm", "Hết hàng", "In lộn phiếu", "Khác"] as const;
+type ReasonKey = (typeof REASONS)[number];
+
+export default function CancelOneItemModal({
+  open,
+  onClose,
+  item,                         
+  onConfirm,                   
 }: {
   open: boolean;
   onClose: () => void;
-  items: CancelTarget[]; // các item sẽ huỷ nguyên dòng
-  onConfirm: (reason: string) => Promise<void>;
+  item: CancelTarget | null;
+  onConfirm: (p: { qty: number; reason: string }) => Promise<void> | void;
 }) {
-  const [reason, setReason] = useState("");
-  if (!open) return null;
+  const max = useMemo(() => item?.qty ?? 0, [item]);
+  const [qty, setQty] = useState(1);
+  const [reasonKey, setReasonKey] = useState<ReasonKey>("Khác");
+  const [reasonOther, setReasonOther] = useState("");
+
+  if (!open || !item) return null;
+
+  const dec = () => setQty((q) => Math.max(1, q - 1));
+  const inc = () => setQty((q) => Math.min(max, q + 1));
+  const reason = reasonKey === "Khác" ? reasonOther.trim() : reasonKey;
+  const canSubmit = qty >= 1 && qty <= max && reason.length > 0;
 
   return (
     <div className="fixed inset-0 z-[999] grid place-items-center bg-black/40">
-      <div className="w-[520px] rounded-xl bg-white p-4 shadow-xl">
-        <div className="mb-2 text-base font-semibold">Huỷ món đã báo bếp</div>
-        <div className="mb-3 text-sm text-slate-600">Những món dưới sẽ được huỷ (chỉ áp dụng khi chưa bắt đầu nấu):</div>
+      <div className="w-[540px] rounded-xl bg-white p-5 shadow-xl">
+        <div className="mb-2 text-base font-semibold">Xác nhận giảm / Huỷ món</div>
+        <p className="mb-4 text-sm text-slate-600">
+          Bạn có chắc chắn muốn huỷ món <b>{item.name}</b> không?
+        </p>
 
-        <ScrollArea className="mb-3 max-h-40 rounded-md border p-2">
-          <ul className="space-y-1 text-sm">
-            {items.map((it) => (
-              <li key={it.orderItemId} className="flex items-center justify-between">
-                <div className="truncate">{it.name}</div>
-                <div className="ml-2 font-medium">x{it.qty}</div>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
+        {/* Qty stepper */}
+        <div className="mb-4">
+          <div className="mb-1 text-sm font-medium text-slate-700">Số lượng huỷ</div>
+          <div className="flex items-center gap-3">
+            <button
+              className="h-8 w-8 rounded-full border text-lg leading-none"
+              onClick={dec}
+              disabled={qty <= 1}
+              aria-label="Giảm"
+            >
+              –
+            </button>
+            <div className="min-w-[40px] text-center text-base font-semibold">{qty}</div>
+            <span className="text-slate-500">/ {max}</span>
+            <button
+              className="h-8 w-8 rounded-full border text-lg leading-none"
+              onClick={inc}
+              disabled={qty >= max}
+              aria-label="Tăng"
+            >
+              +
+            </button>
+          </div>
+        </div>
 
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Lý do huỷ (bắt buộc)"
-          className="mb-3 h-24 w-full resize-none rounded-md border p-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-        />
+        {/* Reason */}
+        <div className="mb-4">
+          <div className="mb-1 text-sm font-medium text-slate-700">Lý do huỷ</div>
+          <div className="flex items-center gap-2">
+            <select
+              className="h-9 w-48 rounded-md border px-2 text-sm"
+              value={reasonKey}
+              onChange={(e) => setReasonKey(e.target.value as ReasonKey)}
+            >
+              {REASONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+
+            {reasonKey === "Khác" && (
+              <input
+                className="h-9 flex-1 rounded-md border px-2 text-sm"
+                placeholder="Nhập lý do khác…"
+                value={reasonOther}
+                onChange={(e) => setReasonOther(e.target.value)}
+              />
+            )}
+          </div>
+        </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Đóng</Button>
+          <Button variant="outline" onClick={onClose}>Bỏ qua</Button>
           <Button
             className="bg-red-600 hover:bg-red-600/90"
-            onClick={() => onConfirm(reason.trim())}
-            disabled={!reason.trim()}
+            disabled={!canSubmit}
+            onClick={async () => {
+              if (!canSubmit) return;
+              await onConfirm({ qty, reason });
+            }}
           >
-            Xác nhận huỷ
+            Chắc chắn
           </Button>
         </div>
       </div>

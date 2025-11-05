@@ -8,7 +8,6 @@ import {
   UserCircle, ShoppingCart, Wallet, BarChart3, Boxes, ChevronDown, LogOut
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import dynamic from "next/dynamic";
 type NavChild = { label: string; href: string };
 type NavItem = {
   label: string;
@@ -38,6 +37,7 @@ const NAV: NavItem[] = [
 
     children: [
       { label: "Hóa đơn", href: "/admin/transaction/invoice" },
+      {label:"Phiếu trả hàng nhập", href:"/admin/purchasereturn"},
       // { label: "Nhập kho", href: "/admin/inventories/purchase" },
     ],
   },

@@ -1,3 +1,4 @@
+// src/types/admin/cashbook.ts
 export type CashType = {
   id: string;
   name: string;
@@ -33,6 +34,8 @@ export type CashbookResponse = {
   data: CashbookItem[];
   meta: { total: number; page: number; limit: number; pages: number };
 };
+
+// chi tiết
 export type CashbookDetailResponse = {
   code: number;
   success: boolean;
@@ -40,54 +43,10 @@ export type CashbookDetailResponse = {
   data: CashbookItem;
 };
 
-
-export type OtherParty = {
-  id: string;
-  name: string;
-  phone?: string;
-  address?: string;
-  ward?: string;
-  district?: string;
-  province?: string;
-  note?: string;
-};
-
-export type CreateEntryBody = {
-  type: "RECEIPT" | "PAYMENT";
-  date: string;                  // ISO hoặc YYYY-MM-DD
-  cashTypeId: string;
-  amount: string;                // << GIỮ LÀ STRING
-  isPostedToBusinessResult?: boolean;
-
-  // enum đúng theo BE:
-  counterpartyGroup: "CUSTOMER" | "SUPPLIER" | "STAFF" | "DELIVERY_PARTNER" | "OTHER";
-
-  // id theo nhóm
-  customerId?: string;
-  supplierId?: string;
-  staffId?: string;              // << đổi từ employeeId -> staffId
-  deliveryPartnerId?: string;    // << thêm mới
-
-  // cho nhóm OTHER
-  cashOtherPartyId?: string;
-  counterpartyName?: string;
-
-  invoiceId?: string;
-  purchaseReceiptId?: string;
-  sourceCode?: string;
-};
-
-
-
-
-
-/* =================== Query Keys ==================== */
-export const CASHBOOK_KEYS = {
-  list: (params?: Record<string, any>) => ["cashbook", "list", params] as const,
-  detail: (id?: string) => ["cashbook", "detail", id] as const,
-  types: () => ["cashbook", "types"] as const,
-  otherParties: () => ["cashbook", "other-parties"] as const,
-  createEntry: () => ["cashbook", "create-entry"] as const,
-  createType: () => ["cashbook", "create-type"] as const,
-  createOtherParty: () => ["cashbook", "create-other-party"] as const,
+// (tuỳ chọn) nếu BE trả kèm summary trong list
+export type CashbookSummary = {
+  openingBalance: number;
+  totalReceipt: number;
+  totalPayment: number;
+  closingBalance: number;
 };

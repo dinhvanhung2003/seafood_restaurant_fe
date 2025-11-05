@@ -1,53 +1,13 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+
+import { useQuery, useMutation, useQueryClient, QueryKey, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
-import { useMutation, useQueryClient, QueryKey } from "@tanstack/react-query";
-
-
-
-/* ====================== Types ====================== */
-export type CashType = {
-  id: string;
-  name: string;
-  description?: string;
-  isIncomeType: boolean;
-  isActive: boolean;
-};
-
-export type OtherParty = {
-  id: string;
-  name: string;
-  phone?: string;
-  address?: string;
-  ward?: string;
-  district?: string;
-  province?: string;
-  note?: string;
-};
-
-export type CreateEntryBody = {
-  type: "RECEIPT" | "PAYMENT";
-  date: string;                     // YYYY-MM-DD
-  cashTypeId: string;
-  amount: string;                   // "100000"
-  isPostedToBusinessResult?: boolean;
-  counterpartyGroup: "CUSTOMER" | "SUPPLIER" | "EMPLOYEE" | "OTHER";
-  customerId?: string;
-  supplierId?: string;
-  employeeId?: string;
-  cashOtherPartyId?: string;
-  counterpartyName?: string;
-  invoiceId?: string;
-  purchaseReceiptId?: string;
-  sourceCode?: string;
-};
-
-export type CashbookResponse<T = any> = {
-  data: T[];
-  meta: { total: number; page: number; pages: number; limit: number };
-};
-
-export type CashbookDetailResponse<T = any> = { data: T };
+import type {
+  CashbookItem,
+  CashbookResponse,
+  CashbookDetailResponse,
+  CashbookSummary,
+} from "@/types/admin/cashbook";
 
 /* =================== Query Keys ==================== */
 export const CASHBOOK_KEYS = {
@@ -60,49 +20,58 @@ export const CASHBOOK_KEYS = {
   createOtherParty: () => ["cashbook", "create-other-party"] as const,
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { keepPreviousData } from "@tanstack/react-query";
+/* =================== List ==================== */
+/**
+ * Chuẩn hoá để hỗ trợ 2 dạng payload từ BE:
+ *  A) { code, success, data: { items: CashbookItem[], meta, summary? } }
+ *  B) { code, success, data: CashbookItem[], meta }
+ * Trả ra object thống nhất: { data: CashbookItem[], meta, summary? }
+ */
 export function useCashbookList(params: Record<string, any>) {
   return useQuery({
-    queryKey: ["cashbook", params],
-    queryFn: async () => {
-      const res = await api.get<CashbookResponse>("/cashbook/list-cashbook", {
-        params,
-      });
-      return res.data;
+    queryKey: CASHBOOK_KEYS.list(params),
+    queryFn: async (): Promise<{ data: CashbookItem[]; meta: CashbookResponse["meta"]; summary?: CashbookSummary }> => {
+      const res = await api.get("/cashbook/list-cashbook", { params });
+
+      // raw có thể là A hoặc B
+      const raw = res.data;
+      const hasNested = raw?.data && typeof raw.data === "object" && Array.isArray(raw.data.items);
+      const items: CashbookItem[] = hasNested ? raw.data.items : raw?.data ?? [];
+      const meta = hasNested ? raw.data.meta : raw?.meta ?? { total: 0, page: 1, limit: params?.limit ?? 15, pages: 1 };
+      const summary: CashbookSummary | undefined = hasNested ? raw.data.summary : undefined;
+
+      // đảm bảo luôn trả array để tránh rows.map lỗi
+      return {
+        data: Array.isArray(items) ? items : [],
+        meta,
+        summary,
+      };
     },
-    placeholderData:keepPreviousData
+    placeholderData: keepPreviousData,
   });
 }
+
+/* =================== Detail ==================== */
 export function useCashbookDetail(id?: string) {
   return useQuery({
-    queryKey: ["cashbook-detail", id],
+    queryKey: CASHBOOK_KEYS.detail(id),
     enabled: !!id,
-    queryFn: async () => {
+    queryFn: async (): Promise<CashbookDetailResponse["data"]> => {
       const res = await api.get<CashbookDetailResponse>(`/cashbook/detail-cashbook/${id}`);
-      return res.data;
+      return res.data.data;
     },
   });
 }
+
 /* =================== Cash Types =================== */
+export type CashType = {
+  id: string;
+  name: string;
+  description?: string | null;
+  isIncomeType: boolean;
+  isActive: boolean;
+};
+
 export function useCashTypes() {
   return useQuery({
     queryKey: CASHBOOK_KEYS.types(),
@@ -132,6 +101,17 @@ export function useCreateCashType() {
 }
 
 /* =================== Other Parties =================== */
+export type OtherParty = {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  note?: string;
+};
+
 export function useOtherParties() {
   return useQuery({
     queryKey: CASHBOOK_KEYS.otherParties(),
@@ -142,19 +122,14 @@ export function useOtherParties() {
   });
 }
 
+export type CreateOtherPartyInput = Omit<OtherParty, "id">;
+
 export function useCreateOtherParty() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: {
-      name: string;
-      phone?: string;
-      address?: string;
-      ward?: string;
-      district?: string;
-      province?: string;
-      note?: string;
-    }) => {
+  return useMutation<OtherParty, unknown, CreateOtherPartyInput>({
+    mutationFn: async (body) => {
       const res = await api.post("/cashbook/create-other-party", body);
+      // server trả về OtherParty (có id)
       return res.data?.data ?? res.data;
     },
     onSuccess: () => {
@@ -164,6 +139,28 @@ export function useCreateOtherParty() {
 }
 
 /* =================== Create Entry =================== */
+export type CreateEntryBody = {
+  type: "RECEIPT" | "PAYMENT";
+  date: string; // ISO hoặc YYYY-MM-DD
+  cashTypeId: string;
+  amount: string; // giữ string
+  isPostedToBusinessResult?: boolean;
+
+  counterpartyGroup: "CUSTOMER" | "SUPPLIER" | "STAFF" | "DELIVERY_PARTNER" | "OTHER";
+
+  customerId?: string;
+  supplierId?: string;
+  staffId?: string;           // đổi employeeId -> staffId
+  deliveryPartnerId?: string; // thêm mới
+
+  cashOtherPartyId?: string;
+  counterpartyName?: string;
+
+  invoiceId?: string;
+  purchaseReceiptId?: string;
+  sourceCode?: string;
+};
+
 export function useCreateCashbookEntry() {
   const qc = useQueryClient();
   return useMutation({
@@ -172,10 +169,8 @@ export function useCreateCashbookEntry() {
       return res.data?.data ?? res.data;
     },
     onSuccess: () => {
-      // Invalidate mọi list/detail liên quan đến cashbook
       qc.invalidateQueries({
-        predicate: (q) =>
-          Array.isArray(q.queryKey) && (q.queryKey as QueryKey).includes("cashbook"),
+        predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as QueryKey).includes("cashbook"),
       });
     },
   });

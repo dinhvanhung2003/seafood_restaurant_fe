@@ -16,7 +16,8 @@ export type ListQuery = {
   limit?: number;
   q?: string;
   baseUomCode?: string;  // VD: "CAN", "KG"...
-  stock?: StockFilter;   // radio ở sidebar
+  stock?: StockFilter;
+  supplierId?: string;       // radio ở sidebar
 };
 
 /** Tạo REST hooks cho resource Ingredients */
@@ -34,7 +35,8 @@ export function useIngredients(
   limit: number,
   search: string,
   stock: StockFilter,
-  baseUomCode?: string
+  baseUomCode?: string,
+   supplierId?: string     
 ) {
   const q = base.useListQuery({
     page,
@@ -42,6 +44,7 @@ export function useIngredients(
     q: search || undefined,
     stock: stock || "ALL",
     baseUomCode: baseUomCode || undefined,
+    supplierId: supplierId || undefined, 
   });
 
   const items: IngredientDTO[] = useMemo(() => {
@@ -49,11 +52,15 @@ export function useIngredients(
     return arr.map((r: any) => ({
       id: r.id,
       name: r.name,
+       unitCode: r?.baseUom?.code ?? "", 
       unit: r?.baseUom?.name ?? r?.baseUom?.code ?? "",
       quantity: Number(r?.quantity ?? 0),
       alertThreshold: Number(r?.alertThreshold ?? 0),
       description: r?.category?.name ?? undefined, // show category ở cột Mô tả
       updatedAt: r?.updatedAt ?? undefined,
+      // (tuỳ chọn) nếu muốn xài thêm:
+      code: r?.code,
+      suppliers: r?.suppliers ?? [],
     }));
   }, [q.data]);
 

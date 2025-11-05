@@ -118,11 +118,13 @@ export default function PromotionCreateForm({
     else if (v.kind === "PERCENT_OFF" && Number(v.value) > 100) {
       e.value = "Giá trị % phải từ 0 đến 100";
     }
-    // minOrderAmount: BE yêu cầu number >= 0
-    if (v.minOrderAmount === "" || Number.isNaN(Number(v.minOrderAmount)))
-      e.minOrderAmount = "Giá trị hóa đơn tối thiểu không hợp lệ";
-    else if (Number(v.minOrderAmount) < 0)
-      e.minOrderAmount = "Giá trị hóa đơn tối thiểu phải ≥ 0";
+    // minOrderAmount: chỉ yêu cầu khi áp dụng với HÓA ĐƠN
+    if (v.applyScope === "INVOICE") {
+      if (v.minOrderAmount === "" || Number.isNaN(Number(v.minOrderAmount)))
+        e.minOrderAmount = "Giá trị hóa đơn tối thiểu không hợp lệ";
+      else if (Number(v.minOrderAmount) < 0)
+        e.minOrderAmount = "Giá trị hóa đơn tối thiểu phải ≥ 0";
+    }
 
     if (!v.startDate) e.startDate = "Chọn ngày bắt đầu";
     if (!v.startTime) e.startTime = "Chọn giờ bắt đầu";
@@ -200,8 +202,18 @@ export default function PromotionCreateForm({
           : s === "ITEM"
           ? v.itemTargets
           : [],
+      // Khi chuyển sang Danh mục/Mặt hàng, minOrderAmount trở thành không bắt buộc – cho phép rỗng
+      ...(s !== "INVOICE"
+        ? { minOrderAmount: v.minOrderAmount === "" ? "" : v.minOrderAmount }
+        : {}),
     }));
-    setErrors(({ targets, ...rest }) => rest); // clear lỗi hiển thị targets
+    // clear lỗi targets và lỗi minOrderAmount nếu không còn áp dụng
+    setErrors((err) => {
+      const { targets, minOrderAmount, ...rest } = err;
+      return s === "INVOICE"
+        ? { ...rest, ...(minOrderAmount ? { minOrderAmount } : {}) }
+        : rest;
+    });
   }
 
   function canOpenModal(next: ApplyScope) {
@@ -433,8 +445,6 @@ export default function PromotionCreateForm({
 
   const kindDisplay = useMemo(() => {
     switch (vals.kind) {
-      case "FIXED_PRICE":
-        return "Đồng giá";
       case "AMOUNT_OFF":
         return "Giảm số tiền";
       case "PERCENT_OFF":
@@ -453,8 +463,6 @@ export default function PromotionCreateForm({
     if (vals.value !== "") {
       if (vals.kind === "PERCENT_OFF") lines.push(`${vals.value}%`);
       if (vals.kind === "AMOUNT_OFF") lines.push(`${currency(vals.value)} đ`);
-      if (vals.kind === "FIXED_PRICE")
-        lines.push(`Đồng giá ${currency(vals.value)} đ`);
     }
     if (vals.applyScope === "INVOICE") lines.push("Áp dụng trên hóa đơn");
     if (vals.applyScope === "CATEGORY") lines.push("Áp dụng cho danh mục");
@@ -537,7 +545,6 @@ export default function PromotionCreateForm({
                 }}
                 className="mt-2 w-full rounded-lg border px-3 py-2"
               >
-                <option value="FIXED_PRICE">Đồng giá</option>
                 <option value="AMOUNT_OFF">Giảm số tiền</option>
                 <option value="PERCENT_OFF">Giảm theo %</option>
               </select>
@@ -599,30 +606,32 @@ export default function PromotionCreateForm({
               </div>
             )}
 
-            <div>
-              <label className="text-sm font-medium">
-                Giá trị hoá đơn tối thiểu
-              </label>
-              <input
-                type="number"
-                value={vals.minOrderAmount}
-                onChange={(e) =>
-                  set(
-                    "minOrderAmount",
-                    e.target.value === "" ? "" : Number(e.target.value)
-                  )
-                }
-                placeholder="VD: 100000"
-                className={`mt-2 w-full rounded-lg border px-3 py-2 ${
-                  errors.minOrderAmount ? "border-red-500" : ""
-                }`}
-              />
-              {errors.minOrderAmount && (
-                <p className="mt-1 text-xs text-red-500">
-                  {errors.minOrderAmount}
-                </p>
-              )}
-            </div>
+            {vals.applyScope === "INVOICE" && (
+              <div>
+                <label className="text-sm font-medium">
+                  Giá trị hoá đơn tối thiểu
+                </label>
+                <input
+                  type="number"
+                  value={vals.minOrderAmount}
+                  onChange={(e) =>
+                    set(
+                      "minOrderAmount",
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  placeholder="VD: 100000"
+                  className={`mt-2 w-full rounded-lg border px-3 py-2 ${
+                    errors.minOrderAmount ? "border-red-500" : ""
+                  }`}
+                />
+                {errors.minOrderAmount && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {errors.minOrderAmount}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

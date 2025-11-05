@@ -1,20 +1,14 @@
+import { Ticket } from "./page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock4, ChefHat, CheckCircle2, Truck } from "lucide-react";
-export type Ticket = {
-  id: string; // = orderItemId (ROW-LEVEL — KHÔNG XÉ LẺ)
-  orderId: string;
-  table: string;
-  createdAt: string;
-  createdTs: number; // để sort
-  items: { name: string; qty: number }[]; // [{..., qty:n}] — GIỮ n
-  itemIds: string[]; // [orderItemId]
-  priority?: "high" | "normal";
-  note?: string;
-};
 
 
-export default function TicketCard({
+
+
+
+
+export function TicketCard({
   t,
   variant,
   onStart,
@@ -31,8 +25,10 @@ export default function TicketCard({
     <div className="rounded-xl border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <div className="font-semibold text-slate-800">{t.table}</div>
-        <div className="flex items-center gap-2">
+          {t.justArrived && <Badge className="bg-emerald-600">NEW</Badge>} {/* 👈 */}
           {t.priority === "high" && <Badge className="bg-red-600">Ưu tiên</Badge>}
+        <div className="flex items-center gap-2">
+          {/* {t.priority === "high" && <Badge className="bg-red-600">Ưu tiên</Badge>} */}
           <div className="flex items-center text-xs text-slate-500">
             <Clock4 className="mr-1 h-4 w-4" />
             {t.createdAt}
@@ -61,7 +57,7 @@ export default function TicketCard({
         {variant === "new" && (
           <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
             <ChefHat className="mr-2 h-4 w-4" />
-            Bắt đầu nấu (toàn bộ)
+            Bắt đầu nấu
           </Button>
         )}
         {variant === "preparing" && (

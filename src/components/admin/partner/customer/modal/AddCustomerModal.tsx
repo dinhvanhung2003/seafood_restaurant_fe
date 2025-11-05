@@ -95,7 +95,11 @@ export default function AddCustomerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-     <DialogContent className="w-[min(96vw,1200px)] max-w-none max-h-[90vh] overflow-auto p-6">
+<DialogContent className="w-[98vw] max-w-none max-h-[90vh] overflow-auto p-6">
+
+
+
+
 
         <DialogHeader>
           <DialogTitle>Thêm khách hàng</DialogTitle>
@@ -103,10 +107,10 @@ export default function AddCustomerModal({
 
         <div className="grid grid-cols-[132px_1fr_1fr] gap-x-5 gap-y-4 items-start">
           <div className="col-span-1">
-            <div className="h-[120px] w-[120px] rounded border bg-muted" />
+            {/* <div className="h-[120px] w-[120px] rounded border bg-muted" />
             <Button className="mt-2 w-[120px] bg-emerald-600 hover:bg-emerald-700">
               Chọn ảnh
-            </Button>
+            </Button> */}
           </div>
 
           <div className="col-span-2 grid grid-cols-2 gap-x-5 gap-y-4 min-w-0">
@@ -165,18 +169,18 @@ export default function AddCustomerModal({
                 onValueChange={(v) => set("gender", v as Gender)}
                 className="mt-2 grid grid-cols-3 gap-3"
               >
-                <label className="flex items-center gap-2">
-                  <RadioGroupItem value="" /> Không chọn
-                </label>
+                {/* <label className="flex items-center gap-2">
+                  <RadioGroupItem value="" /> Không
+                </label> */}
                 <label className="flex items-center gap-2">
                   <RadioGroupItem value="MALE" /> Nam
                 </label>
                 <label className="flex items-center gap-2">
                   <RadioGroupItem value="FEMALE" /> Nữ
                 </label>
-                <label className="flex items-center gap-2">
+                {/* <label className="flex items-center gap-2">
                   <RadioGroupItem value="OTHER" /> Khác
-                </label>
+                </label> */}
               </RadioGroup>
             </div>
 
