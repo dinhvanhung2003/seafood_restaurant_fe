@@ -16,8 +16,6 @@ function fmtValue(type: string, value: string) {
   const t = type.toUpperCase();
   if (t.includes("PERCENT")) return `${Number(value).toFixed(2)}%`;
   if (t.includes("AMOUNT")) return `${Number(value).toLocaleString("vi-VN")} đ`;
-  if (t.includes("FIXED"))
-    return `Đồng giá ${Number(value).toLocaleString("vi-VN")} đ`;
   return value;
 }
 function chipScope(s: string) {

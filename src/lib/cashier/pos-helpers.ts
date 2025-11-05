@@ -45,18 +45,47 @@ export function mapAreasToTables(
  * - { id, name, price, categoryId, imageUrl }
  * - { ... , isAvailable } (nếu không có thì mặc định là true)
  */
+// export function selectMenuItems(rows?: any[]) {
+//   const list = Array.isArray(rows) ? rows : [];
+
+//   return list
+//     // chỉ loại khi BE trả rõ ràng false
+//     .filter((r) => r?.isAvailable !== false)
+//     .map((r) => {
+//       const id = String(r?.id ?? "");
+//       const name = String(r?.name ?? "");
+//       const price = Number(r?.price ?? r?.menuPrice ?? 0);
+
+//       // an toàn khi category null/undefined
+//       const categoryId =
+//         r?.category?.id ??
+//         r?.categoryId ??
+//         r?.category?.ID ??
+//         r?.category_id ??
+//         null;
+
+//       const image =
+//         r?.image ??
+//         r?.imageUrl ??
+//         r?.thumbnail ??
+//         undefined;
+
+//       return { id, name, price, categoryId, image };
+//     })
+//     // lọc các item thiếu id/name tối thiểu để tránh crash ở nơi khác
+//     .filter((x) => x.id && x.name);
+// }
+
 export function selectMenuItems(rows?: any[]) {
   const list = Array.isArray(rows) ? rows : [];
 
   return list
-    // chỉ loại khi BE trả rõ ràng false
     .filter((r) => r?.isAvailable !== false)
     .map((r) => {
       const id = String(r?.id ?? "");
       const name = String(r?.name ?? "");
       const price = Number(r?.price ?? r?.menuPrice ?? 0);
 
-      // an toàn khi category null/undefined
       const categoryId =
         r?.category?.id ??
         r?.categoryId ??
@@ -65,16 +94,23 @@ export function selectMenuItems(rows?: any[]) {
         null;
 
       const image =
-        r?.image ??
-        r?.imageUrl ??
-        r?.thumbnail ??
-        undefined;
+        r?.image ?? r?.imageUrl ?? r?.thumbnail ?? undefined;
+      // Nhận thêm các trường khuyến mãi nếu có
+      const priceAfterDiscount = Number(r?.priceAfterDiscount ?? NaN);
+      const discountAmount = Number(r?.discountAmount ?? 0);
+      const badge = r?.badge ?? null;
 
-      return { id, name, price, categoryId, image };
+      return {
+        id, name, categoryId, image,
+        price,
+        priceAfterDiscount: Number.isFinite(priceAfterDiscount) ? priceAfterDiscount : undefined,
+        discountAmount: Number.isFinite(discountAmount) ? discountAmount : 0,
+        badge: typeof badge === "string" ? badge : null,
+      };
     })
-    // lọc các item thiếu id/name tối thiểu để tránh crash ở nơi khác
     .filter((x) => x.id && x.name);
 }
+
 
 export function calcOrderTotal(items: UIOrderItem[], priceDict: Map<string, number>) {
   return (items ?? []).reduce((s, it) => s + (priceDict.get(it.id) ?? 0) * (it.qty ?? 0), 0);

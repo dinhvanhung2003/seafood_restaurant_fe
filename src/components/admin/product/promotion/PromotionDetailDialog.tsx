@@ -30,7 +30,6 @@ function fmtValue(type?: string | null, value?: string | number | null) {
   const v = Number(value);
   if (t.includes("PERCENT")) return `${Number.isFinite(v) ? v : value}%`;
   if (t.includes("AMOUNT")) return fmtMoney(v);
-  if (t.includes("FIXED")) return `Đồng giá ${fmtMoney(v)}`;
   return String(value);
 }
 function fmtRange(startAt?: string | null, endAt?: string | null) {
