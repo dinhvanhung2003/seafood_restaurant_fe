@@ -41,12 +41,8 @@ export type PromotionListResp = {
   code: number;
   success: boolean;
   message: string;
-  data: {
-    items: Promotion[];
-    page: number;
-    limit: number;
-    total: number;
-  };
+  data: Promotion[];
+  meta: { total: number; page: number; limit: number; pages: number };
 };
 
 export type PromotionsQuery = {
@@ -95,7 +91,16 @@ type PromotionDetailResp = {
 
 /** ===== Queries ===== */
 export function usePromotionsQuery(params: PromotionsQuery) {
-  return useQuery<PromotionListResp["data"], any>({
+  return useQuery<
+    {
+      items: Promotion[];
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    },
+    any
+  >({
     queryKey: ["promotions", params],
     queryFn: async () => {
       const res = await api.get<PromotionListResp>("/promotions/list-all", {
@@ -107,11 +112,22 @@ export function usePromotionsQuery(params: PromotionsQuery) {
           isActive: params.isActive || undefined,
         },
       });
-      const d = res.data.data;
+
+      const items = res.data.data ?? [];
+      const m = res.data.meta ?? {
+        page: 1,
+        limit: 10,
+        total: items.length,
+        pages: 1,
+      };
+
       return {
-        ...d,
-        totalPages: Math.max(1, Math.ceil((d?.total ?? 0) / (d?.limit ?? 10))),
-      } as any;
+        items,
+        page: m.page,
+        limit: m.limit,
+        total: m.total,
+        totalPages: m.pages ?? Math.max(1, Math.ceil(m.total / m.limit || 10)),
+      };
     },
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -217,5 +233,51 @@ export function usePromotionRestoreMutation() {
       return res.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["promotions"] }),
+  });
+}
+
+export type ApplicablePromo = {
+  promotionId: string;
+  promotionCode: string;
+  name: string;
+  description?: string;
+  applyWith: "ORDER" | "CATEGORY" | "ITEM";
+  discountType: "PERCENT" | "AMOUNT";
+  discountValue: number;
+  maxDiscountAmount: number;
+  base: number;
+  estimatedDiscount: number;
+};
+
+export function useApplicablePromotions(invoiceId?: string | null) {
+  return useQuery<ApplicablePromo[]>({
+    queryKey: ["applicable-promos", invoiceId],
+    enabled: !!invoiceId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      if (!invoiceId) return [];
+      const res = await api.get(`/invoices/${invoiceId}/applicable-promotions`);
+      const list = Array.isArray(res.data) ? res.data : [];
+      return list
+        .filter((p: any) => p.applyWith === "ORDER")
+        .map((p: any) => ({
+          promotionId: p.promotionId,
+          promotionCode: p.promotionCode,
+          name: p.name,
+          description: p.description,
+          applyWith: p.applyWith,
+          discountType: p.discountType,
+          discountValue: Number(p.discountValue ?? 0),
+          maxDiscountAmount: Number(p.maxDiscountAmount ?? 0),
+          base: Number(p.base ?? 0),
+          estimatedDiscount: Number(p.estimatedDiscount ?? 0),
+        }))
+        .filter((p: ApplicablePromo) => p.estimatedDiscount > 0)
+        .sort(
+          (a: ApplicablePromo, b: ApplicablePromo) =>
+            b.estimatedDiscount - a.estimatedDiscount
+        );
+    },
   });
 }

@@ -34,11 +34,13 @@ export default function PromotionsPage() {
   );
 
   const { data, isLoading } = usePromotionsQuery(params);
+  console.log("promotions data", data);
   const toggle = usePromotionToggleMutation();
   const del = usePromotionSoftDeleteMutation();
   const restore = usePromotionRestoreMutation();
 
   const items = data?.items ?? [];
+  console.log("promotions data", items);
   const meta = {
     page: data?.page ?? page,
     limit: data?.limit ?? limit,

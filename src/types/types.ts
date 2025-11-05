@@ -21,6 +21,10 @@ export type MenuItem = {
   name: string;
   price: number;
   image?: string;
+  // optional promotion fields (populated by cashier hooks when present)
+  priceAfterDiscount?: number;
+  discountAmount?: number;
+  badge?: string | null;
   categoryId: string;
 };
 
@@ -43,6 +47,10 @@ export type CatalogItem = {
   id: string;
   name: string;
   price: number;
+  // optional promotion fields
+  priceAfterDiscount?: number;
+  discountAmount?: number;
+  badge?: string | null;
 
 };
 

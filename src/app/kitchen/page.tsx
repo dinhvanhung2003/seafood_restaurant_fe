@@ -69,19 +69,19 @@ function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
     .filter(r => !!r?.id)
     .map(r => {
       const ts = Date.parse(r.createdAt) || Date.now();
-      const uiId = r.orderItemId ?? r.id; // ✅ chốt dùng orderItemId
       return {
-        id: uiId,
+        id: r.id, // 👈 UI KEY = kitchen_tickets.id (duy nhất cho mỗi lần notify)
         orderId: r.order.id,
         table: r.order?.table?.name ?? "—",
         createdAt: new Date(r.createdAt).toLocaleString(),
         createdTs: ts,
-        items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
-        itemIds: [uiId], // ✅ đồng nhất
+      items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
+itemIds: [r.id], // PATCH theo ticket.id
       } as Ticket;
     })
     .sort((a, b) => b.createdTs - a.createdTs);
 }
+
 
 
 
@@ -381,49 +381,69 @@ useEffect(() => {
   const createdTs = Date.parse(p?.createdAt || "") || Date.now();
   const table = getTableName(p);
 
+  // thu thập các id vừa tạo để tắt "NEW" sau 15s
+  const createdIds: string[] = [];
+
   setSocketTickets(prev => {
     const next = { ...prev };
+
     for (const raw of items) {
-      const ticketId = raw?.ticketId as string | undefined;
-     const orderItemId = raw?.orderItemId as string | undefined;
-// ✅ dùng orderItemId làm id UI
-const idForUI = orderItemId ?? raw?.ticketId;
-      if (!idForUI) continue;
+      const orderItemId = raw?.orderItemId as string | undefined;
+
+      // 1) ticketId DÙNG LÀM UI KEY và PATCH
+      //    Ưu tiên id từ BE (ticketId/id). Nếu BE chưa có id duy nhất cho mỗi lần notify,
+      //    tạo fallback có batchId/createdTs để KHÔNG bị gộp lần 1 và lần 2.
+      let ticketIdResolved =
+        (raw as any)?.ticketId ??
+        (raw as any)?.id ??
+        `${p?.orderId ?? "order"}:${orderItemId ?? "item"}:${batchId ?? createdTs}`;
+
+      // nếu vô tình đụng key cũ (do BE tái sử dụng), thêm hậu tố thời gian để vẫn tách card
+      if (next[ticketIdResolved]) {
+        ticketIdResolved = `${ticketIdResolved}:${createdTs}`;
+      }
 
       const qty = Math.max(1, Number(raw?.qty) || 1);
       const name = raw?.name ?? "";
-      const menuItemId = raw?.menuItemId ?? raw?.menu_item_id; // BE phải gửi
+      const menuItemId = raw?.menuItemId ?? raw?.menu_item_id ?? "unknown";
 
-      next[idForUI] = {
-        id: idForUI,
+      next[ticketIdResolved] = {
+        id: ticketIdResolved,                  // 👈 UI KEY duy nhất mỗi lần notify
         orderId: p.orderId,
         table,
         createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : new Date().toLocaleString(),
         createdTs,
         items: [{ menuItemId, name, qty }],
-     itemIds: [idForUI],
+        itemIds: [ticketIdResolved],           // 👈 PATCH /kitchen/tickets/status dùng ticketIds
         priority: p.priority ? "high" : "normal",
         note: p.note ?? undefined,
         justArrived: true,
       };
+
+      createdIds.push(ticketIdResolved);
     }
+
     return next;
   });
 
+  // 2) clear "NEW" cho đúng các id vừa tạo (không phụ thuộc tính toán lại)
   setTimeout(() => {
     setSocketTickets(prev => {
       const next = { ...prev };
-      for (const raw of items) {
-        const idForUI = raw?.ticketId ?? raw?.orderItemId;
-        if (idForUI && next[idForUI]) next[idForUI] = { ...next[idForUI], justArrived: false };
+      for (const id of createdIds) {
+        if (next[id]) next[id] = { ...next[id], justArrived: false };
       }
       return next;
     });
-  }, JUST_MS);
+  }, 15_000);
 
   qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
-  toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", { description: `Bàn ${table}`, duration: 3500 });
+  toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", {
+    description: `Bàn ${table}`,
+    duration: 3500,
+  });
 };
+
 
 
   // --- listen Notify từ thu ngân ---
@@ -498,7 +518,7 @@ const idForUI = orderItemId ?? raw?.ticketId;
 
 
 
-  
+
 const onVoided = (p: {
   orderId: string;
   ticketIds?: string[]; // == danh sách orderItemId (id UI)
@@ -571,11 +591,9 @@ const onVoided = (p: {
 // }, [qNewRows.data]); // ✅ chỉ 1 dep
 
 useEffect(() => {
-  const apiIds = new Set(
-    (qNewRows.data ?? []).map((r: ApiOrderItemExt) => r.orderItemId ?? r.id)
-  );
+  // API ids = kitchen_tickets.id
+  const apiIds = new Set((qNewRows.data ?? []).map((r: ApiOrderItemExt) => r.id));
 
-  // ⚠️ NEW: giữ thêm những id đã void/hide
   const keepAlso = new Set<string>([
     ...Array.from(voidedIds),
     ...Array.from(hiddenIds),
@@ -584,38 +602,41 @@ useEffect(() => {
   setSocketTickets(prev => {
     const next: typeof prev = {};
     for (const [id, t] of Object.entries(prev)) {
-      if (apiIds.has(id) || keepAlso.has(id)) {
-        next[id] = t; // ✅ giữ nếu còn trên API hoặc đã void/hide
-      }
+      if (apiIds.has(id) || keepAlso.has(id)) next[id] = t;
     }
-    const same = Object.keys(next).length === Object.keys(prev).length &&
-                 Object.keys(next).every(k => prev[k] === next[k]);
+    const same =
+      Object.keys(next).length === Object.keys(prev).length &&
+      Object.keys(next).every(k => prev[k] === next[k]);
     return same ? prev : next;
   });
-}, [qNewRows.data, voidedIds, hiddenIds]); // 👈 thêm deps
+}, [qNewRows.data, voidedIds, hiddenIds]);
 
 
 
 
 
-function reconcileNewTickets(apiNewRows: ApiOrderItemExt[], socketMap: Record<string, Ticket>, voidedIds: Set<string>, hiddenIds: Set<string>): Ticket[] {
+function reconcileNewTickets(
+  apiNewRows: ApiOrderItemExt[],
+  socketMap: Record<string, Ticket>,
+  voidedIds: Set<string>,
+  hiddenIds: Set<string>
+): Ticket[] {
   const out: Ticket[] = [];
   const covered = new Set<string>();
-  const apiIds = new Set(apiNewRows.map((r) => r.orderItemId ?? r.id));
+  const apiIds = new Set(apiNewRows.map(r => r.id)); // dùng ticket.id
 
   for (const [id, t] of Object.entries(socketMap)) {
-    if (hiddenIds.has(id)) continue;                    // ✅ bỏ nếu user đã ẩn
-    if (apiIds.has(id) || voidedIds.has(id)) {
-      out.push(t); covered.add(id);
-    }
+    if (hiddenIds.has(id)) continue;
+    if (apiIds.has(id) || voidedIds.has(id)) { out.push(t); covered.add(id); }
   }
   for (const r of apiNewRows) {
-    const id = r.orderItemId ?? r.id;
-    if (covered.has(id) || hiddenIds.has(id)) continue; // ✅
+    const id = r.id;
+    if (covered.has(id) || hiddenIds.has(id)) continue;
     out.push(mapRowsToTickets([r])[0]!);
   }
   return out.sort((a, b) => b.createdTs - a.createdTs);
 }
+
 
 
 // useEffect(() => {
@@ -633,11 +654,12 @@ function reconcileNewTickets(apiNewRows: ApiOrderItemExt[], socketMap: Record<st
     }
   };
 
-  const startCooking = async (t: Ticket) => {
-    const [orderItemId] = t.itemIds;
-    if (!orderItemId) return toast.error("Thiếu itemIds");
-    await moveWholeRow(orderItemId, "PREPARING", "Bắt đầu nấu (toàn bộ)");
-  };
+ const startCooking = async (t: Ticket) => {
+  const [ticketId] = t.itemIds;
+  if (!ticketId) return toast.error("Thiếu ticketId");
+  await moveWholeRow(ticketId, "PREPARING", "Bắt đầu nấu (toàn bộ)");
+};
+
   const markReady = async (t: Ticket) => {
     const [orderItemId] = t.itemIds;
     await moveWholeRow(orderItemId, "READY", "Đã nấu xong (toàn bộ)");
