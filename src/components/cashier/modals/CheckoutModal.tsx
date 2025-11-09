@@ -25,6 +25,7 @@ import api from "@/lib/axios";
 import { Percent, ReceiptText } from "lucide-react";
 import { useCashierStore } from "@/store/cashier";
 import PromotionPicker from "./PromotionPicker";
+import { useInvoiceSocket } from "@/hooks/cashier/socket/useInvoiceSocket";
 
 type PayMethod = "cash" | "card" | "vnpay" | "vietqr";
 
@@ -223,6 +224,18 @@ if (invItems.length) {
     [lines]
   );
 
+
+
+
+
+
+
+
+
+
+
+
+  
   // Discount hiển thị phía FE; sẽ sync từ BE nếu BE có
   const [discount, setDiscount] = useState(0);
 
@@ -647,6 +660,41 @@ useEffect(() => {
       .filter(Boolean)
       .join(", ") ||
     (discount > 0 ? "Giảm thủ công" : null);
+
+
+
+
+
+const invoiceId = invoice?.id ?? null;
+
+// 2) Lắng nghe socket: PAID / PARTIAL
+useInvoiceSocket(invoiceId, {
+  extraInvalidate: [
+    { key: ["order.detail.byTable", table.id] },     // tableId -> table.id
+    { key: ["kitchen-progress-by-order"] },
+  ],
+  onPaid: ({ amount, method }) => {
+    toast.success("Đã thanh toán thành công", {
+      description: `${(amount ?? 0).toLocaleString("vi-VN")} đ · ${method || "BANK"}`
+    });
+    // Đóng modal -> danh sách bàn/đơn tự refetch theo extraInvalidate
+    onClose();                                       // onOpenChange(false) -> onClose()
+  },
+  onPartial: ({ amount, remaining }) => {
+    toast.info("Đã nhận thanh toán một phần", {
+      description: `Nhận: ${(amount ?? 0).toLocaleString("vi-VN")} đ, còn lại: ${(remaining ?? 0).toLocaleString("vi-VN")} đ`,
+    });
+  },
+});
+
+
+
+
+
+
+
+
+
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
