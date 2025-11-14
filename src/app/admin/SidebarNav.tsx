@@ -96,6 +96,8 @@ const NAV: NavItem[] = [
       { label: "Bán hàng", href: "/admin/report/sale" },
       { label: "Cuối ngày", href: "/admin/report/closing" },
       { label: "Nhân viên", href: "/admin/report/staff" },
+      { label: "Nhà cung cấp", href: "/admin/report/supplier" },
+      { label: "Khách hàng", href: "/admin/report/customer" },
       { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
       { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
       { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },

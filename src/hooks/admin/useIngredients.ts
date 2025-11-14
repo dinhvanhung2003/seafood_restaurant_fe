@@ -22,9 +22,9 @@ export type ListQuery = {
 
 /** Tạo REST hooks cho resource Ingredients */
 const base = createRestHooks<any, IngredientDTO, ListQuery, any, any>({
-  key: "ingredients",
+  key: "ingredients", 
   list: { path: "/inventoryitems/list-ingredients" },
-  create: { path: "/inventoryitems/stockin-ingredients", method: "post" },
+  create: { path: "/inventoryitems/create", method: "post" },
 });
 
 export const { useCreateMutation: useStockInIngredient } = base;

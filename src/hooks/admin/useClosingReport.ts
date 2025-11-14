@@ -39,16 +39,33 @@ export function useClosingReport() {
     const [cashbookSummary, setCashbookSummary] = useState<{ receipt: number; payment: number; totalCount: number } | undefined>(undefined);
     const [cancelSummary, setCancelSummary] = useState<{ cancelQty: number; cancelValue: number; totalCount: number } | undefined>(undefined);
     const [page, setPage] = useState<number>(1);
-    const [limit, setLimit] = useState<number>(10);
+    // BE default limit 20, set same to avoid client trimming
+    const [limit, setLimit] = useState<number>(20);
     const [meta, setMeta] = useState<{ total: number; page: number; limit: number; pages: number } | undefined>(undefined);
 
-    // Reset pagination when filter set changes
+    // Reset pagination and clear transient data when filter set changes
     useEffect(() => {
         setPage(1);
+        // Clear rows quickly to avoid rendering old-shape rows when switching mode
+        setRows([]);
+        setSalesSummary(undefined);
+        setCashbookSummary(undefined);
+        setCancelSummary(undefined);
     }, [dateFrom, dateTo, mode, paymentMethod, areaId, tableId]);
+
+    // Auto refetch when page/limit changes (for server pagination)
+    useEffect(() => {
+        // Avoid double requests: only trigger when user changes page/limit
+        // Other filters already reset page to 1 and user can also hit fetchReport
+        fetchReport();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, limit]);
 
     const fetchReport = useCallback(async () => {
         setLoading(true);
+        // Abort previous request if any to avoid race when users switch tabs fast
+        const controller = new AbortController();
+        const signal = controller.signal;
         try {
             const params: Record<string, string> = { dateFrom };
             if (dateTo) params.dateTo = dateTo;
@@ -69,29 +86,47 @@ export function useClosingReport() {
                         : (paymentMethod as any);
                 params.paymentMethod = apiPayment;
             }
-            const res = await api.get(endpoint, { params });
+            const res = await api.get(endpoint, { params, signal } as any);
             const body = res?.data ?? {};
             const payload = body?.data ?? body;
             let list: any[] = [];
+            let hasServerSummary = false; // track if API already returned summary for totals
             if (Array.isArray(payload.rows)) list = payload.rows;
             else if (Array.isArray(payload.groups)) {
                 list = payload.groups.flatMap((g: any) => g?.rows ?? []);
                 // summary extraction
                 if (mode === "sales") {
-                    const sum = payload.groups?.[0]?.sum;
-                    if (sum) {
+                    // Prefer top-level summary (grand total for date range) if present
+                    const grand = (payload as any)?.summary ?? (payload as any)?.totalSum;
+                    if (grand && (grand.goodsAmount != null || grand.revenue != null)) {
                         setSalesSummary({
-                            goodsAmount: Number(sum.goodsAmount ?? 0),
-                            invoiceDiscount: Number(sum.invoiceDiscount ?? 0),
-                            revenue: Number(sum.revenue ?? 0),
-                            otherIncome: Number(sum.otherIncome ?? 0),
-                            tax: Number(sum.tax ?? 0),
-                            returnFee: Number(sum.returnFee ?? 0),
-                            paid: Number(sum.paid ?? 0),
-                            debt: Number(sum.debt ?? 0),
+                            goodsAmount: Number(grand.goodsAmount ?? 0),
+                            invoiceDiscount: Number(grand.invoiceDiscount ?? 0),
+                            revenue: Number(grand.revenue ?? 0),
+                            otherIncome: Number(grand.otherIncome ?? 0),
+                            tax: Number(grand.tax ?? 0),
+                            returnFee: Number(grand.returnFee ?? 0),
+                            paid: Number(grand.paid ?? 0),
+                            debt: Number(grand.debt ?? 0),
                         });
+                        hasServerSummary = true;
                     } else {
-                        setSalesSummary(undefined);
+                        // Fallback: use first group's sum (page slice) – not ideal but keeps UI functional
+                        const sum = payload.groups?.[0]?.sum;
+                        if (sum) {
+                            setSalesSummary({
+                                goodsAmount: Number(sum.goodsAmount ?? 0),
+                                invoiceDiscount: Number(sum.invoiceDiscount ?? 0),
+                                revenue: Number(sum.revenue ?? 0),
+                                otherIncome: Number(sum.otherIncome ?? 0),
+                                tax: Number(sum.tax ?? 0),
+                                returnFee: Number(sum.returnFee ?? 0),
+                                paid: Number(sum.paid ?? 0),
+                                debt: Number(sum.debt ?? 0),
+                            });
+                        } else {
+                            setSalesSummary(undefined);
+                        }
                     }
                 } else if (mode === "cancel") {
                     const g0 = payload.groups?.[0];
@@ -105,15 +140,41 @@ export function useClosingReport() {
                         setCancelSummary(undefined);
                     }
                 } else if (mode === 'cashbook') {
-                    const g0 = payload.groups?.[0];
-                    if (g0?.sum) {
+                    // 1) Ưu tiên tổng từ payload.summary (tổng toàn bộ theo bộ lọc)
+                    const sumAll = (payload as any)?.summary;
+                    if (sumAll && (sumAll.totalReceipt != null || sumAll.totalPayment != null)) {
                         setCashbookSummary({
-                            receipt: Number(g0.sum.receipt ?? 0),
-                            payment: Number(g0.sum.payment ?? 0),
-                            totalCount: Number(g0.totalCount ?? list.length ?? 0),
+                            // set cả 2 dạng field để component dùng linh hoạt
+                            receipt: Number(sumAll.totalReceipt ?? sumAll.receipt ?? 0),
+                            payment: Number(sumAll.totalPayment ?? sumAll.payment ?? 0),
+                            totalCount: Number(sumAll.voucherCount ?? list.length ?? 0),
                         });
+                        hasServerSummary = true;
                     } else {
-                        setCashbookSummary(undefined);
+                        // 2) Fallback: Một số BE có thể trả nhiều group -> cộng dồn các group
+                        const groups = Array.isArray(payload.groups) ? payload.groups : [];
+                        const aggregate = groups.reduce(
+                            (acc: { receipt: number; payment: number; count: number }, g: any) => {
+                                if (g?.sum) {
+                                    acc.receipt += Number(g.sum.totalReceipt ?? g.sum.receipt ?? 0);
+                                    acc.payment += Number(g.sum.totalPayment ?? g.sum.payment ?? 0);
+                                    acc.count += Number(g.totalCount ?? g.sum.totalCount ?? 0);
+                                }
+                                return acc;
+                            },
+                            { receipt: 0, payment: 0, count: 0 }
+                        );
+                        if (aggregate.receipt || aggregate.payment || aggregate.count) {
+                            setCashbookSummary({
+                                receipt: aggregate.receipt,
+                                payment: aggregate.payment,
+                                totalCount: aggregate.count || list.length,
+                            });
+                            hasServerSummary = true;
+                        } else {
+                            // defer summary, will compute below after mapping (and possibly fetch-all)
+                            setCashbookSummary(undefined);
+                        }
                     }
                 }
             } else if (Array.isArray(payload.data)) list = payload.data;
@@ -137,23 +198,67 @@ export function useClosingReport() {
                 }));
                 setRows(mapped);
             } else if (mode === "cashbook") {
-                // Normalize cashbook: compute signed amount and keep helpful fields
-                const mapped = list.map((r: any) => {
-                    const receipt = r.receipt != null ? parseFloat(String(r.receipt)) : 0;
-                    const payment = r.payment != null ? parseFloat(String(r.payment)) : 0;
-                    const amount = receipt ? receipt : payment ? -payment : Number(r.amount ?? r.value ?? r.total ?? 0);
-                    const partner = r.counterparty ?? "Khách lẻ";
-                    return {
-                        ...r,
-                        amount,
-                        tableName: r.tableName ?? r.table ?? undefined,
-                        areaName: r.areaName ?? r.area ?? undefined,
-                        occurredAt: r.occurredAt ?? r.createdAt ?? undefined,
-                        description:
-                            r.note ?? r.description ?? r.content ?? [r.cashType, partner].filter(Boolean).join(" - "),
-                    };
-                });
+                // helper to normalize and summarize cashbook items
+                const normalize = (rows: any[]) =>
+                    rows.map((r: any) => {
+                        const receipt = r.receipt != null ? parseFloat(String(r.receipt)) : 0;
+                        const payment = r.payment != null ? parseFloat(String(r.payment)) : 0;
+                        const amount = receipt ? receipt : payment ? -payment : Number(r.amount ?? r.value ?? r.total ?? 0);
+                        const partner = r.counterparty ?? "Khách lẻ";
+                        return {
+                            ...r,
+                            amount,
+                            tableName: r.tableName ?? r.table ?? undefined,
+                            areaName: r.areaName ?? r.area ?? undefined,
+                            occurredAt: r.occurredAt ?? r.createdAt ?? undefined,
+                            description:
+                                r.note ?? r.description ?? r.content ?? [r.cashType, partner].filter(Boolean).join(" - "),
+                        };
+                    });
+                const summarize = (rows: any[]) =>
+                    rows.reduce(
+                        (acc: { receipt: number; payment: number; totalCount: number }, it: any) => {
+                            const amt = Number(it.amount ?? 0);
+                            if (amt >= 0) acc.receipt += amt;
+                            else acc.payment += -amt;
+                            acc.totalCount += 1;
+                            return acc;
+                        },
+                        { receipt: 0, payment: 0, totalCount: 0 }
+                    );
+
+                const mapped = normalize(list);
                 setRows(mapped as any);
+
+                // If server didn't provide summary, compute across ALL filtered rows (not just current page)
+                if (!hasServerSummary) {
+                    const metaObj = body?.meta;
+                    const total = Number(metaObj?.total ?? mapped.length ?? 0);
+                    const hasMore = total > mapped.length;
+                    if (hasMore && total <= 5000) {
+                        // Fetch once with a big limit to aggregate client-side; guard with upper bound
+                        const fullParams = { ...params, page: "1", limit: String(total) } as Record<string, string>;
+                        try {
+                            const r2 = await api.get(endpoint, { params: fullParams });
+                            const b2 = r2?.data ?? {};
+                            const p2 = b2?.data ?? b2;
+                            let all: any[] = [];
+                            if (Array.isArray(p2.rows)) all = p2.rows;
+                            else if (Array.isArray(p2.groups)) all = p2.groups.flatMap((g: any) => g?.rows ?? []);
+                            else if (Array.isArray(p2.data)) all = p2.data;
+                            const mappedAll = normalize(all);
+                            const sumAll = summarize(mappedAll);
+                            setCashbookSummary(sumAll);
+                        } catch (e) {
+                            // Fallback to current-page aggregation if fetch-all fails
+                            const sumPage = summarize(mapped);
+                            setCashbookSummary(sumPage);
+                        }
+                    } else {
+                        const sum = summarize(mapped);
+                        setCashbookSummary(sum);
+                    }
+                }
             } else { // cancel mode raw rows
                 const mapped = list.map((r: any) => ({
                     ...r,
@@ -174,7 +279,11 @@ export function useClosingReport() {
             } else {
                 setMeta(undefined);
             }
-        } catch (e) {
+        } catch (e: any) {
+            if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") {
+                // request aborted -> ignore silently
+                return;
+            }
             console.error("Fetch closing report failed", e);
             setRows([]);
             setSalesSummary(undefined);

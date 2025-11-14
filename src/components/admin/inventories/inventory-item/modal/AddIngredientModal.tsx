@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +61,8 @@ export default function AddIngredientModal({
   }, [open]);
 
   const submit = async () => {
-    if (!form.name.trim()) return toast.error("Tên nguyên liệu không được trống");
+    if (!form.name.trim())
+      return toast.error("Tên nguyên liệu không được trống");
     if (!form.unit.trim()) return toast.error("Đơn vị không được trống");
     if (Number.isNaN(+form.quantity) || +form.quantity < 0) {
       return toast.error("Số lượng không hợp lệ");
@@ -74,11 +79,14 @@ export default function AddIngredientModal({
         alertThreshold: +form.alertThreshold,
         description: form.description?.trim() || undefined,
       });
-      toast.success("Đã nhập kho nguyên liệu");
+      // BE trả về dạng ResponseCommon => lấy res.data
+      const data = (res as any)?.data ?? res;
+      toast.success("Đã tạo nguyên liệu mới");
       onOpenChange(false);
-      onSaved?.({ id: (res as any).id, name: (res as any).name, unit: (res as any).unit });
+      // unit: truyền mã UOM code để set default cho dòng nhập
+      onSaved?.({ id: data?.id, name: data?.name, unit: data?.baseUom?.code });
     } catch {
-      toast.error("Nhập kho thất bại");
+      toast.error("Tạo nguyên liệu thất bại");
     }
   };
 
@@ -102,7 +110,9 @@ export default function AddIngredientModal({
             <Field label="Đơn vị">
               <Input
                 value={form.unit}
-                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, unit: e.target.value }))
+                }
                 placeholder="kg, chai, thùng…"
               />
             </Field>
@@ -125,7 +135,10 @@ export default function AddIngredientModal({
                 value={form.alertThreshold}
                 min={0}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, alertThreshold: Number(e.target.value) }))
+                  setForm((f) => ({
+                    ...f,
+                    alertThreshold: Number(e.target.value),
+                  }))
                 }
               />
             </Field>
@@ -139,7 +152,9 @@ export default function AddIngredientModal({
           <Field label="Mô tả">
             <Textarea
               value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
               placeholder="Ghi chú chất lượng, lô nhập, ..."
             />
           </Field>
