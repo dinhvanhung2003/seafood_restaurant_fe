@@ -58,7 +58,6 @@ export default function ClosingReportPage() {
         setPage={r.setPage}
         limit={r.limit}
         setLimit={r.setLimit}
-        fetchReport={r.fetchReport}
       />
     </div>
   );
