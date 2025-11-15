@@ -36,6 +36,7 @@ const NAV: NavItem[] = [
       { label: "Thực đơn", href: "/admin/product/menu" },
       { label: "Danh mục", href: "/admin/product/category" },
       { label: "Combo", href: "/admin/product/combo" },
+      { label: "Đơn vị tính", href: "/admin/product/uom" },
       { label: "Khuyến mãi", href: "/admin/product/promotion" },
     ],
   },
