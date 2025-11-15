@@ -8,7 +8,19 @@ import type { PaymentMethod as FilterPaymentMethod } from "@/components/admin/re
 
 export default function ClosingReportPage() {
   const r = useClosingReport();
-
+  React.useEffect(() => {
+    r.fetchReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    r.mode,
+    r.dateFrom,
+    r.dateTo,
+    r.paymentMethod,
+    r.areaId,
+    r.tableId,
+    r.page,
+    r.limit,
+  ]);
   return (
     <div className="p-6 space-y-6">
       <Card>

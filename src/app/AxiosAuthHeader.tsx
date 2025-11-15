@@ -23,7 +23,15 @@ export default function AxiosAuth() {
         const original = err.config as any;
         if (err?.response?.status !== 401 || original?._retry) throw err;
         original._retry = true;
-        await getSession(); // NextAuth sẽ refresh trên server nếu cần
+        // Thử gọi getSession để NextAuth refresh token phía server
+        const session = await getSession().catch((e) => {
+          console.warn("[auth] getSession failed", e);
+          return null;
+        });
+        if (!session?.accessToken) {
+          await signOut({ callbackUrl: "/auth/login" });
+          throw err;
+        }
         return api(original).catch(async (e) => {
           await signOut({ callbackUrl: "/auth/login" });
           throw e;
@@ -33,7 +41,8 @@ export default function AxiosAuth() {
 
     return () => {
       if (reqId.current !== null) api.interceptors.request.eject(reqId.current);
-      if (resId.current !== null) api.interceptors.response.eject(resId.current);
+      if (resId.current !== null)
+        api.interceptors.response.eject(resId.current);
     };
   }, []);
 

@@ -25,7 +25,11 @@ import {
 } from "@/hooks/admin/usePurchase";
 import type { PRCreatePayload } from "@/hooks/admin/usePurchase";
 
-export default function PurchaseUpsertClient({ editingId }: { editingId?: string }) {
+export default function PurchaseUpsertClient({
+  editingId,
+}: {
+  editingId?: string;
+}) {
   const router = useRouter();
   const isEdit = !!editingId;
 
@@ -173,7 +177,9 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
           },
           onError: (e: any) =>
             toast.error(
-              e?.response?.data?.message || e?.message || "Cập nhật nháp thất bại"
+              e?.response?.data?.message ||
+                e?.message ||
+                "Cập nhật nháp thất bại"
             ),
         }
       );
@@ -217,7 +223,9 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
     } else {
       createFinalMu.mutate(buildPayload(), {
         onSuccess: (res) => {
-          toast.success("Đã tạo phiếu (HOÀN THÀNH)", { description: res?.code });
+          toast.success("Đã tạo phiếu (HOÀN THÀNH)", {
+            description: res?.code,
+          });
           router.push("/admin/inventories/purchase");
         },
         onError: (e: any) =>
@@ -234,9 +242,14 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
   const isLotDuplicate = (tmpId: string, lot?: string, uom?: string) => {
     const me = lines.find((x) => x.tmpId === tmpId);
     if (!me) return false;
-    const key = (it: { itemId: string; receivedUomCode?: string; lotNumber?: string }) =>
-      `${it.itemId}|${norm(it.receivedUomCode)}|${norm(it.lotNumber)}`;
-    const myKey = `${me.itemId}|${norm(uom ?? me.receivedUomCode)}|${norm(lot ?? me.lotNumber)}`;
+    const key = (it: {
+      itemId: string;
+      receivedUomCode?: string;
+      lotNumber?: string;
+    }) => `${it.itemId}|${norm(it.receivedUomCode)}|${norm(it.lotNumber)}`;
+    const myKey = `${me.itemId}|${norm(uom ?? me.receivedUomCode)}|${norm(
+      lot ?? me.lotNumber
+    )}`;
     if (!norm(lot ?? me.lotNumber)) return false;
     return lines.some((l) => l.tmpId !== tmpId && key(l) === myKey);
   };
@@ -245,7 +258,9 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
     <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">
-          {isEdit ? `Sửa phiếu ${detail?.code ? `— ${detail.code}` : ""}` : "Tạo phiếu nhập"}
+          {isEdit
+            ? `Sửa phiếu ${detail?.code ? `— ${detail.code}` : ""}`
+            : "Tạo phiếu nhập"}
         </h1>
         <div className="text-sm text-muted-foreground">
           Cần trả NCC: <b className="text-black">{currency(grandTotal)}</b>
@@ -271,12 +286,25 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
         setShippingFee={setShippingFee}
         amountPaid={amountPaid}
         setAmountPaid={setAmountPaid}
-        renderTotals={<TotalsBar subTotal={Math.max(0, subTotal)} grandTotal={Math.max(0, grandTotal)} />}
+        renderTotals={
+          <TotalsBar
+            subTotal={Math.max(0, subTotal)}
+            grandTotal={Math.max(0, grandTotal)}
+          />
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <IngredientPicker onAdd={addLine} onOpenAddIngredient={setOpenAddIngredient} />
-        <SupplierPicker supplierId={supplierId} setSupplierId={setSupplierId} onOpenAddSupplier={setOpenAddSupplier} />
+        <IngredientPicker
+          supplierId={supplierId}
+          onAdd={addLine}
+          onOpenAddIngredient={setOpenAddIngredient}
+        />
+        <SupplierPicker
+          supplierId={supplierId}
+          setSupplierId={setSupplierId}
+          onOpenAddSupplier={setOpenAddSupplier}
+        />
       </div>
 
       <LinesTable
@@ -307,21 +335,42 @@ export default function PurchaseUpsertClient({ editingId }: { editingId?: string
           onClick={handleSaveDraft}
           disabled={isNotDraft || createDraftMu.isPending || updateMu.isPending}
         >
-          {isEdit ? (updateMu.isPending ? "Đang lưu nháp…" : "Cập nhật nháp")
-                 : (createDraftMu.isPending ? "Đang lưu nháp…" : "Lưu nháp")}
+          {isEdit
+            ? updateMu.isPending
+              ? "Đang lưu nháp…"
+              : "Cập nhật nháp"
+            : createDraftMu.isPending
+            ? "Đang lưu nháp…"
+            : "Lưu nháp"}
         </Button>
 
         <Button
           onClick={handleComplete}
           disabled={isNotDraft || createFinalMu.isPending || updateMu.isPending}
         >
-          {isEdit ? (updateMu.isPending ? "Đang ghi sổ…" : "Ghi sổ (Hoàn thành)")
-                 : (createFinalMu.isPending ? "Đang lưu…" : "Hoàn thành")}
+          {isEdit
+            ? updateMu.isPending
+              ? "Đang ghi sổ…"
+              : "Ghi sổ (Hoàn thành)"
+            : createFinalMu.isPending
+            ? "Đang lưu…"
+            : "Hoàn thành"}
         </Button>
       </div>
 
-      <AddSupplierModal open={openAddSupplier} onOpenChange={setOpenAddSupplier} />
-      <AddIngredientModal open={openAddIngredient} onOpenChange={setOpenAddIngredient} />
+      <AddSupplierModal
+        open={openAddSupplier}
+        onOpenChange={setOpenAddSupplier}
+      />
+      <AddIngredientModal
+        open={openAddIngredient}
+        onOpenChange={setOpenAddIngredient}
+        onSaved={(ing) => {
+          // Khi tạo mới thành công, thêm ngay 1 dòng vào bảng hàng
+          // ing.unit chứa mã UOM (code) để set default receivedUomCode
+          addLine(ing.id, ing.name, ing.unit);
+        }}
+      />
     </div>
   );
 }
