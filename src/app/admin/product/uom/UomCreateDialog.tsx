@@ -54,11 +54,14 @@ export function UomCreateDialog({ onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   // Lấy danh sách UOM để chọn mục chuyển đổi
-  const { data: listData } = useUomsQuery({ page: 1, limit: 200 });
-  const sameDimensionUoms: UnitOfMeasure[] = useMemo(
-    () => (listData?.data || []).filter((u) => u.dimension === form.dimension),
-    [listData, form.dimension]
-  );
+  const { data: listData } = useUomsQuery({ page: 1, limit: 100 });
+
+  const sameDimensionUoms: UnitOfMeasure[] = useMemo(() => {
+    const want = String(form.dimension || "").toLowerCase();
+    return (listData?.data || []).filter(
+      (u) => String(u.dimension || "").toLowerCase() === want
+    );
+  }, [listData, form.dimension]);
 
   const createUomMut = useCreateUomMutation({
     onError: (e) => toast.error("Tạo đơn vị thất bại", (e as Error)?.message),

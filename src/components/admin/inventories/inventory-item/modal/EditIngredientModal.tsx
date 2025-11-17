@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useStockInIngredient } from "@/hooks/admin/useIngredients";
+import { useUpdateIngredient } from "@/hooks/admin/useIngredients";
 import { toast } from "sonner";
 import { useCategoriesQuery } from "@/hooks/admin/useCategory";
 import {
@@ -22,8 +22,6 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import { useUomsQuery } from "@/hooks/admin/useUnitsOfMeasure";
-import { UomPicker } from "./UomPicker";
 
 function Field({
   label,
@@ -40,88 +38,83 @@ function Field({
   );
 }
 
-export type AddIngredientModalProps = {
+export type EditIngredientModalProps = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onSaved?: (ing: { id: string; name: string; unit: string }) => void;
-  defaults?: Partial<{
+  id: string;
+  defaults: {
     name: string;
-    unit: string;
     alertThreshold: number;
-    description: string;
-    categoryId: string;
-  }>;
+    description?: string | null;
+    categoryId?: string | null;
+  };
+  onSaved?: () => void;
+  categoriesProp?: Array<{ id: string; name: string; type?: string }>; // optional preloaded categories
 };
 
-export default function AddIngredientModal({
+export default function EditIngredientModal({
   open,
   onOpenChange,
-  onSaved,
+  id,
   defaults,
-}: AddIngredientModalProps) {
-  const stockIn = useStockInIngredient();
-  const { data: uomList } = useUomsQuery({
-    page: 1,
-    limit: 10,
-    sortBy: "code",
-    sortDir: "ASC",
-  });
-  const { data: catList } = useCategoriesQuery({
-    type: "INGREDIENT",
-    isActive: "true",
-    page: 1,
-    limit: 10,
-  });
+  onSaved
+}: EditIngredientModalProps) {
+  const updateMut = useUpdateIngredient();
+  const qCat = useCategoriesQuery({ type: "INGREDIENT", page: 1, limit: 10 });
+  const categories = qCat.data?.data ?? [];
+
   const [form, setForm] = React.useState({
-    name: defaults?.name ?? "",
-    unit: (defaults?.unit ?? "").toUpperCase(),
-    alertThreshold: String(defaults?.alertThreshold ?? 0),
-    description: defaults?.description ?? "",
-    categoryId: (defaults?.categoryId as string | undefined) ?? undefined,
+    name: defaults.name ?? "",
+    alertThreshold: String(defaults.alertThreshold ?? 0),
+    description: defaults.description ?? "",
+    categoryId: (defaults.categoryId as string | undefined) ?? undefined,
   });
 
   React.useEffect(() => {
     if (open) {
       setForm({
-        name: defaults?.name ?? "",
-        unit: (defaults?.unit ?? "").toUpperCase(),
-        alertThreshold: String(defaults?.alertThreshold ?? 0),
-        description: defaults?.description ?? "",
-        categoryId: (defaults?.categoryId as string | undefined) ?? undefined,
+        name: defaults.name ?? "",
+        alertThreshold: String(defaults.alertThreshold ?? 0),
+        description: defaults.description ?? "",
+        categoryId: (defaults.categoryId as string | undefined) ?? undefined,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  React.useEffect(() => {
-    if (open && !form.unit && (uomList?.data?.length ?? 0) > 0) {
-      setForm((f) => ({ ...f, unit: uomList!.data[0].code }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, uomList]);
+  }, [open, defaults]);
 
   const submit = async () => {
     if (!form.name.trim())
       return toast.error("Tên nguyên liệu không được trống");
-    if (!form.unit.trim()) return toast.error("Đơn vị không được trống");
     const alertNum = parseFloat(form.alertThreshold);
     if (Number.isNaN(alertNum) || alertNum < 0)
       return toast.error("Ngưỡng cảnh báo không hợp lệ");
 
     try {
-      const res = await stockIn.mutateAsync({
+      const payload = {
         name: form.name.trim(),
-        unit: form.unit.trim(),
         alertThreshold: alertNum,
-        description: form.description?.trim() || undefined,
-        categoryId: form.categoryId,
-      });
-      const data = (res as any)?.data ?? res;
-      toast.success("Đã tạo nguyên liệu mới");
+        description: form.description?.trim() || null,
+        categoryId: form.categoryId ?? null,
+      };
+      // debug: log payload
+      // eslint-disable-next-line no-console
+      console.debug("Update ingredient payload:", { id, payload });
+
+      const res = await updateMut.mutateAsync({ args: { id }, data: payload });
+      // eslint-disable-next-line no-console
+      console.debug("Update ingredient response:", res);
+      toast.success("Đã cập nhật nguyên liệu");
       onOpenChange(false);
-      onSaved?.({ id: data?.id, name: data?.name, unit: data?.baseUom?.code });
-    } catch {
-      toast.error("Tạo nguyên liệu thất bại");
+      onSaved?.();
+    } catch (e: any) {
+      // show detailed error when possible
+      // eslint-disable-next-line no-console
+      console.error("Update ingredient error:", e);
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Cập nhật thất bại";
+      toast.error(String(msg));
     }
   };
 
@@ -129,7 +122,7 @@ export default function AddIngredientModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nhập kho nguyên liệu</DialogTitle>
+          <DialogTitle>Cập nhật nguyên liệu</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4">
@@ -142,32 +135,36 @@ export default function AddIngredientModal({
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Đơn vị">
-              <UomPicker
-                value={form.unit}
-                onChange={(code) => setForm((f) => ({ ...f, unit: code }))}
-              />
-            </Field>
             <Field label="Loại nguyên liệu">
               <Select
                 value={form.categoryId}
                 onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Chọn loại" />
+                  <SelectValue
+                    placeholder={
+                      categories.length === 0
+                        ? "Không có loại phù hợp"
+                        : "Chọn loại"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {(catList?.data || []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                  {categories.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      Chưa có danh mục để chọn
                     </SelectItem>
-                  ))}
+                  ) : (
+                    categories.map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </Field>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <Field label="Ngưỡng cảnh báo">
               <Input
                 type="text"
@@ -181,16 +178,11 @@ export default function AddIngredientModal({
                 placeholder="VD: 5, 10, 0.5"
               />
             </Field>
-            <div className="flex items-end">
-              <span className="text-xs text-muted-foreground">
-                Báo động khi tồn &le; ngưỡng
-              </span>
-            </div>
           </div>
 
           <Field label="Mô tả">
             <Textarea
-              value={form.description}
+              value={form.description || ""}
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
@@ -203,8 +195,8 @@ export default function AddIngredientModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Huỷ
           </Button>
-          <Button onClick={submit} disabled={stockIn.isPending}>
-            {stockIn.isPending ? "Đang lưu..." : "Lưu"}
+          <Button onClick={submit} disabled={updateMut.status === "pending"}>
+            {updateMut.status === "pending" ? "Đang lưu..." : "Lưu"}
           </Button>
         </DialogFooter>
       </DialogContent>
