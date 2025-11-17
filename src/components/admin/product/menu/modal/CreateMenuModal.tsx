@@ -67,7 +67,7 @@ async function fetchCategoryOptions(): Promise<CategoryOption[]> {
 
 async function fetchInventoryOptions(): Promise<InventoryItemOption[]> {
   const res = await api.get("/inventoryitems/list-ingredients", {
-    params: { limit: 200, sort: "name:ASC", isActive: true },
+    params: { limit: 10, sort: "name:ASC", isActive: true },
   });
   const list: any[] = res.data?.data ?? res.data ?? [];
   return list.map(i => ({
