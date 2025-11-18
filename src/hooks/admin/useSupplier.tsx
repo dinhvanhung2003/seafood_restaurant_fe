@@ -15,12 +15,16 @@ import type {
 } from "@/types/types";
 
 type ListResp = {
+  code: number;
+  success: boolean;
+  message: string;
   data: Supplier[];
-  total: number;
-  page: number;
-  limit: number;
-
-  
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
 };
 
 const clean = (p: Record<string, any>) => {
@@ -130,6 +134,47 @@ export function useUpdateSupplier() {
     },
     onError: (e: any) => {
       toast.error(e?.response?.data?.message ?? "Cập nhật thất bại");
+    },
+  });
+}
+
+// Xoá hoặc ngừng hợp tác theo nghiệp vụ BE: nếu đã có giao dịch -> INACTIVE, nếu chưa -> xoá
+export function useRemoveSupplier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // giả định endpoint DELETE; điều chỉnh nếu BE khác
+      const { data } = await api.delete(`/supplier/delete-supplier/${id}`);
+      return data; // { message: SUPPLIER_DEACTIVATED_BECAUSE_HAS_TRANSACTIONS | SUPPLIER_DELETED_SUCCESSFULLY, ... }
+    },
+    onSuccess: (res: any, id) => {
+      let msg = res?.message;
+      switch (msg) {
+        case "SUPPLIER_DEACTIVATED_BECAUSE_HAS_TRANSACTIONS":
+          toast.info(
+            "Không xoá được vì đã có giao dịch. Nhà cung cấp đã được chuyển sang trạng thái ngừng hoạt động.",
+            { id: `supplier-remove-${id}` }
+          );
+          break;
+        case "SUPPLIER_DELETED_SUCCESSFULLY":
+          toast.success("Đã xoá nhà cung cấp", {
+            id: `supplier-remove-${id}`,
+          });
+          break;
+        default:
+          toast.success("Thao tác xoá nhà cung cấp hoàn tất", {
+            id: `supplier-remove-${id}`,
+          });
+      }
+      qc.invalidateQueries({ queryKey: ["supplier", id] });
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
+    },
+    onError: (e: any, id) => {
+      toast.error(
+        e?.response?.data?.message ??
+          "Không thể xoá / ngừng hợp tác nhà cung cấp",
+        { id: `supplier-remove-${id}` }
+      );
     },
   });
 }

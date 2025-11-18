@@ -39,7 +39,8 @@ const qk = {
 function getErrMsg(err: any) {
   const d = err?.response?.data;
   if (typeof d === "string") return d;
-  if (d?.message) return Array.isArray(d.message) ? d.message.join(", ") : String(d.message);
+  if (d?.message)
+    return Array.isArray(d.message) ? d.message.join(", ") : String(d.message);
   return err?.message || "Có lỗi xảy ra";
 }
 
@@ -134,7 +135,7 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.error(`Tạo nhóm thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
+      qc.invalidateQueries({ queryKey: ["supplierGroups"] });
     },
   });
 
@@ -176,7 +177,7 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.error(`Cập nhật thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
+      qc.invalidateQueries({ queryKey: ["supplierGroups"] });
     },
   });
 
@@ -211,6 +212,63 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       toast.error(`Thao tác thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
     },
     onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["supplierGroups"] });
+    },
+  });
+
+  /* -------- REMOVE (delete with business rules) -------- */
+  const removeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // RESTful giả định: DELETE /suppliergroup/:id
+      const { data } = await api.delete<{ success: boolean; message?: string }>(
+        `/suppliergroup/${id}`
+      );
+      return data;
+    },
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: qk.supplierGroups(norm) });
+      const key = qk.supplierGroups(norm);
+      const prev = qc.getQueryData<SupplierGroup[]>(key);
+      if (prev) {
+        // Optimistic: tạm thời bỏ khỏi danh sách
+        qc.setQueryData<SupplierGroup[]>(
+          key,
+          prev.filter((g) => g.id !== id)
+        );
+      }
+      const tid = toast.loading("Đang xoá nhóm…");
+      return { prev, tid };
+    },
+    onSuccess: (res, _vars, ctx) => {
+      let msg = res?.message;
+      switch (msg) {
+        case "SUPPLIER_GROUP_DELETED_SUCCESSFULLY":
+          msg = "Đã xoá nhóm thành công";
+          break;
+        case "SUPPLIER_GROUP_DELETED_AND_SUPPLIERS_UNLINKED":
+          msg = "Đã xoá nhóm và bỏ liên kết các nhà cung cấp";
+          break;
+        default:
+          msg = "Xoá nhóm thành công";
+      }
+      toast.success(msg, { id: ctx?.tid });
+    },
+    onError: (e: any, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(qk.supplierGroups(norm), ctx.prev);
+      const backendCode = e?.response?.data?.message;
+      if (
+        backendCode ===
+        "GROUP_HAS_SUPPLIERS_WITH_TRANSACTIONS_DEACTIVATION_RECOMMENDED"
+      ) {
+        toast.error(
+          "Không thể xoá: nhóm có NCC đã phát sinh giao dịch. Vui lòng ngừng hoạt động thay thế.",
+          { id: ctx?.tid }
+        );
+      } else {
+        toast.error(`Xoá nhóm thất bại: ${getErrMsg(e)}`, { id: ctx?.tid });
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: qk.supplierGroups(norm) });
     },
   });
@@ -243,6 +301,12 @@ export function useSupplierGroups(params?: SupplierGroupListParams) {
       isPending: deactivateMutation.isPending,
       isSuccess: deactivateMutation.isSuccess,
       error: (deactivateMutation.error as Error) ?? null,
+    },
+    removeGroup: removeMutation.mutateAsync,
+    removeStatus: {
+      isPending: removeMutation.isPending,
+      isSuccess: removeMutation.isSuccess,
+      error: (removeMutation.error as Error) ?? null,
     },
   };
 }

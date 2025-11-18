@@ -18,8 +18,8 @@ import type { SupplierGroup } from "@/hooks/admin/useSupplierGroup";
 
 type Props = {
   group: SupplierGroup | null;
-  open: boolean;                          // ✅ controlled
-  onOpenChange: (v: boolean) => void;     // ✅ controlled
+  open: boolean; // ✅ controlled
+  onOpenChange: (v: boolean) => void; // ✅ controlled
   disabled?: boolean;
   onUpdated?: (g: SupplierGroup) => void;
   onDeactivated?: (id: string) => void;
@@ -33,8 +33,14 @@ export default function EditSupplierGroupModal({
   onUpdated,
   onDeactivated,
 }: Props) {
-  const { updateGroup, deactivateGroup, updateStatus, deactivateStatus } =
-    useSupplierGroups({ limit: 10 });
+  const {
+    updateGroup,
+    deactivateGroup,
+    removeGroup,
+    updateStatus,
+    deactivateStatus,
+    removeStatus,
+  } = useSupplierGroups({ limit: 10 });
 
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -61,12 +67,52 @@ export default function EditSupplierGroupModal({
     onOpenChange(false);
   };
 
-  const deactivate = async () => {
+  // Toggle hoạt động / ngừng hoạt động
+  const toggleActive = async () => {
     if (!group) return;
-    if (!confirm("Ngừng hoạt động nhóm này?")) return;
-    await deactivateGroup(group.id);
-    onDeactivated?.(group.id);
+    // Nếu đang ACTIVE -> hỏi và gọi API ngừng hoạt động
+    if (group.status === "ACTIVE") {
+      if (!confirm("Ngừng hoạt động nhóm này?")) return;
+      await deactivateGroup(group.id);
+      onDeactivated?.(group.id);
+      onOpenChange(false);
+      return;
+    }
+    // Nếu đang INACTIVE -> kích hoạt lại bằng update status
+    const updated = (await updateGroup({
+      id: group.id,
+      data: { status: "ACTIVE" },
+    })) as SupplierGroup;
+    onUpdated?.(updated);
     onOpenChange(false);
+  };
+
+  const remove = async () => {
+    if (!group) return;
+    if (
+      !confirm(
+        "Bạn chắc chắn muốn XOÁ nhóm này? Nếu nhóm có NCC đã phát sinh giao dịch sẽ không xoá được."
+      )
+    )
+      return;
+    try {
+      await removeGroup(group.id);
+      onDeactivated?.(group.id); // reuse callback to refresh selection
+      onOpenChange(false);
+    } catch (e: any) {
+      const code = e?.response?.data?.message;
+      if (
+        code ===
+        "GROUP_HAS_SUPPLIERS_WITH_TRANSACTIONS_DEACTIVATION_RECOMMENDED"
+      ) {
+        // offer quick deactivate fallback
+        if (confirm("Không xoá được. Ngừng hoạt động thay thế?")) {
+          await deactivateGroup(group.id);
+          onDeactivated?.(group.id);
+          onOpenChange(false);
+        }
+      }
+    }
   };
 
   // Nếu lỡ được mở mà chưa có group -> hiển thị thông báo nhẹ
@@ -97,25 +143,58 @@ export default function EditSupplierGroupModal({
         <div className="space-y-3">
           <div>
             <Label htmlFor="name">Tên nhóm</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="desc">Ghi chú</Label>
-            <Textarea id="desc" value={desc} onChange={(e) => setDesc(e.target.value)} />
+            <Textarea
+              id="desc"
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+            />
           </div>
         </div>
 
-        <DialogFooter className="gap-2 justify-between">
-          <Button
-            variant="destructive"
-            onClick={deactivate}
-            disabled={disabled || deactivateStatus.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            {deactivateStatus.isPending ? "Đang xử lý…" : "Xóa / Ngừng"}
-          </Button>
-          <div className="space-x-2">
-            <Button onClick={submit} disabled={!name.trim() || updateStatus.isPending}>
+        <DialogFooter className="gap-2 flex-col sm:flex-row sm:justify-between">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              variant="destructive"
+              onClick={remove}
+              disabled={
+                disabled || removeStatus.isPending || deactivateStatus.isPending
+              }
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {removeStatus.isPending ? "Đang xoá…" : "Xoá nhóm"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={toggleActive}
+              disabled={
+                disabled ||
+                deactivateStatus.isPending ||
+                removeStatus.isPending ||
+                updateStatus.isPending
+              }
+            >
+              {group.status === "ACTIVE"
+                ? deactivateStatus.isPending
+                  ? "Đang xử lý…"
+                  : "Ngừng hoạt động"
+                : updateStatus.isPending
+                ? "Đang kích hoạt…"
+                : "Hoạt động lại"}
+            </Button>
+          </div>
+          <div className="space-x-2 self-end sm:self-auto">
+            <Button
+              onClick={submit}
+              disabled={!name.trim() || updateStatus.isPending}
+            >
               {updateStatus.isPending ? "Đang lưu…" : "Lưu"}
             </Button>
           </div>
