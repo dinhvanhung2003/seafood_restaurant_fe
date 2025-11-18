@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Popover,
@@ -12,50 +13,58 @@ import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
 
-type Mode = "revenue" | "items";
+// Chế độ hiển thị: Phiếu nhập | Phiếu trả | Ròng NCC
+type Mode = "purchase" | "return" | "net";
 
-interface ReportFilterProps {
+interface Props {
   date: DateRange | undefined;
-  setDate: (value: DateRange | undefined) => void;
+  setDate: (d: DateRange | undefined) => void;
   mode: Mode;
-  setMode: (value: Mode) => void;
-  onFetch: () => void; // parent fetch
+  setMode: (m: Mode) => void;
+  supplierQ: string;
+  setSupplierQ: (q: string) => void;
   loading: boolean;
+  onFetch: () => void;
 }
 
-export function ReportFilter({
+export function SupplierFilter({
   date,
   setDate,
   mode,
   setMode,
-  onFetch,
+  supplierQ,
+  setSupplierQ,
   loading,
-}: ReportFilterProps) {
-  // Auto fetch (debounce 300ms) khi filter thay đổi
+  onFetch,
+}: Props) {
   React.useEffect(() => {
     const t = setTimeout(() => onFetch(), 300);
     return () => clearTimeout(t);
-  }, [date?.from?.toISOString?.(), date?.to?.toISOString?.(), mode, onFetch]);
+  }, [
+    date?.from?.toISOString?.(),
+    date?.to?.toISOString?.(),
+    mode,
+    supplierQ,
+    onFetch,
+  ]);
 
-  // Quick range helpers
   const today = () => {
     const d = new Date();
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     setDate({ from: start, to: start });
   };
-  const yesterday = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    setDate({ from: start, to: start });
+  const last7 = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    setDate({ from: start, to: end });
   };
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/* Date range */}
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -87,39 +96,51 @@ export function ReportFilter({
         </PopoverContent>
       </Popover>
 
-      {/* Quick picks */}
       <div className="flex gap-2">
         <Button variant="secondary" size="sm" onClick={today}>
           Hôm nay
         </Button>
-        <Button variant="secondary" size="sm" onClick={yesterday}>
-          Hôm qua
+        <Button variant="secondary" size="sm" onClick={last7}>
+          7 ngày
         </Button>
       </div>
 
-      {/* Mode */}
+      <Input
+        placeholder="Tìm NCC (mã, tên, sđt)"
+        value={supplierQ}
+        onChange={(e) => setSupplierQ(e.target.value)}
+        className="w-56"
+      />
+
+      {/* Bỏ chọn số top (tự cố định Top 10 cho biểu đồ) */}
+
       <RadioGroup
-        className="flex gap-4 rounded-md border px-3 py-2"
+        className="flex gap-5 rounded-md border px-4 py-2 bg-white shadow-sm"
         value={mode}
         onValueChange={(v) => setMode(v as Mode)}
       >
-        <label className="flex items-center gap-2">
-          <RadioGroupItem value="revenue" id="revenue" />
-          <span>Doanh thu</span>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <RadioGroupItem value="purchase" />
+          <span>Phiếu nhập</span>
         </label>
-        <label className="flex items-center gap-2">
-          <RadioGroupItem value="items" id="items" />
-          <span>Hàng bán</span>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <RadioGroupItem value="return" />
+          <span>Phiếu trả</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <RadioGroupItem value="net" />
+          <span>Ròng NCC</span>
         </label>
       </RadioGroup>
 
-      {/* Loading chip */}
       {loading && (
         <div className="flex items-center gap-2 text-slate-500 text-sm">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border border-slate-400 border-t-transparent" />
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border border-slate-400 border-t-transparent" />{" "}
           Đang tải...
         </div>
       )}
     </div>
   );
 }
+
+export default SupplierFilter;

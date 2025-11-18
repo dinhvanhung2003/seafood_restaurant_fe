@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { type Dispatch, type SetStateAction } from "react";
 import { currency } from "@/utils/money";
 import { format } from "date-fns";
 import {
@@ -83,9 +83,14 @@ interface Meta {
   pages: number;
 }
 interface CashbookSummary {
-  receipt: number;
-  payment: number;
-  totalCount: number;
+  openingBalance?: number;
+  totalReceipt?: number; // BE field
+  totalPayment?: number; // BE field
+  closingBalance?: number;
+  // legacy fallback fields
+  receipt?: number;
+  payment?: number;
+  totalCount?: number;
 }
 
 export default function ClosingTable({
@@ -99,7 +104,6 @@ export default function ClosingTable({
   setPage,
   limit,
   setLimit,
-  fetchReport,
 }: {
   mode: Mode;
   rows: any[];
@@ -108,10 +112,9 @@ export default function ClosingTable({
   cashbookSummary?: CashbookSummary;
   meta?: Meta;
   page?: number;
-  setPage?: (p: number) => void;
+  setPage?: Dispatch<SetStateAction<number>>;
+  setLimit?: Dispatch<SetStateAction<number>>;
   limit?: number;
-  setLimit?: (n: number) => void;
-  fetchReport?: () => void | Promise<void>;
 }) {
   if (!rows?.length) {
     return (
@@ -122,16 +125,20 @@ export default function ClosingTable({
   }
 
   if (mode === "sales") {
+    // Use server-side pagination
     const list = rows as ClosingRow[];
     const sum = salesSummary;
-    // client-side pagination for sales
-    const [page, setPage] = React.useState(1);
-    const pageSize = 10;
-    const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
-    const start = (page - 1) * pageSize;
-    const pageRows = list.slice(start, start + pageSize);
-    const goPrev = () => setPage((p) => Math.max(1, p - 1));
-    const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
+    const currentPage = page || meta?.page || 1;
+    const pages = meta?.pages || 1;
+    const perPage = limit || meta?.limit || list.length;
+    // rows are already paginated from server; don't slice if meta is present
+    const start = (currentPage - 1) * perPage;
+    const pageRows = meta ? list : list.slice(start, start + perPage);
+
+    const goPrev = () => setPage?.((p) => Math.max(1, (p ?? currentPage) - 1));
+    const goNext = () =>
+      setPage?.((p) => Math.min(pages, (p ?? currentPage) + 1));
+
     // payment method distribution by revenue
     const pmAgg = list.reduce<Record<string, number>>((acc, r) => {
       const key = payMethodLabel(r.payMethod || "-");
@@ -150,6 +157,7 @@ export default function ClosingTable({
       "#8b5cf6",
       "#64748b",
     ];
+
     return (
       <div className="rounded-xl border overflow-auto">
         {sum && (
@@ -174,7 +182,9 @@ export default function ClosingTable({
             </div>
             <div className="rounded-lg border bg-white p-4 shadow-sm">
               <div className="text-sm text-slate-500">Hóa đơn</div>
-              <div className="mt-1 text-lg font-semibold">{list.length}</div>
+              <div className="mt-1 text-lg font-semibold">
+                {meta?.total ?? list.length}
+              </div>
             </div>
             <div className="col-span-1 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-lg border bg-white p-3 shadow-sm">
@@ -293,11 +303,14 @@ export default function ClosingTable({
                   e.preventDefault();
                   goPrev();
                 }}
+                className={
+                  currentPage <= 1 ? "pointer-events-none opacity-50" : ""
+                }
               />
             </PaginationItem>
             <PaginationItem>
               <PaginationLink href="#" isActive>
-                {page} / {totalPages}
+                {currentPage} / {pages}
               </PaginationLink>
             </PaginationItem>
             <PaginationItem>
@@ -307,6 +320,9 @@ export default function ClosingTable({
                   e.preventDefault();
                   goNext();
                 }}
+                className={
+                  currentPage >= pages ? "pointer-events-none opacity-50" : ""
+                }
               />
             </PaginationItem>
           </PaginationContent>
@@ -321,40 +337,24 @@ export default function ClosingTable({
     const pages = meta?.pages || 1;
     const perPage = limit || meta?.limit || rows.length;
     const start = (currentPage - 1) * perPage;
-    const pageRows = rows.slice(start, start + perPage);
-    const goPrev = () => {
-      setPage?.(Math.max(1, currentPage - 1));
-      fetchReport?.();
-    };
-    const goNext = () => {
-      setPage?.(Math.min(pages, currentPage + 1));
-      fetchReport?.();
-    };
+    // rows from server are already paginated; don't slice if meta is present
+    const pageRows = meta ? rows : rows.slice(start, start + perPage);
 
-    const totals =
-      cashbookSummary ||
-      rows.reduce(
-        (acc: { receipt: number; payment: number }, r: any) => {
-          const receipt = r.receipt != null ? parseFloat(String(r.receipt)) : 0;
-          const payment = r.payment != null ? parseFloat(String(r.payment)) : 0;
-          const amount =
-            r.amount != null
-              ? Number(r.amount)
-              : receipt
-              ? receipt
-              : payment
-              ? -payment
-              : 0;
-          if (amount >= 0) acc.receipt += amount;
-          else acc.payment += -amount;
-          return acc;
-        },
-        { receipt: 0, payment: 0 }
-      );
-    const net = (totals as any).receipt - (totals as any).payment;
+    const goPrev = () => setPage?.((p) => Math.max(1, (p ?? currentPage) - 1));
+    const goNext = () =>
+      setPage?.((p) => Math.min(pages, (p ?? currentPage) + 1));
+
+    // Prefer server summary fields if present
+    const receiptValue = (cashbookSummary?.totalReceipt ??
+      cashbookSummary?.receipt ??
+      0) as number;
+    const paymentValue = (cashbookSummary?.totalPayment ??
+      cashbookSummary?.payment ??
+      0) as number;
+    const net = receiptValue - paymentValue;
     const chartData = [
-      { name: "Thu", value: (totals as any).receipt },
-      { name: "Chi", value: (totals as any).payment },
+      { name: "Thu", value: receiptValue },
+      { name: "Chi", value: paymentValue },
     ];
 
     return (
@@ -363,13 +363,13 @@ export default function ClosingTable({
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Tổng thu</div>
             <div className="mt-1 text-lg font-semibold text-emerald-600">
-              {currency(totals.receipt)}
+              {currency(receiptValue)}
             </div>
           </div>
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Tổng chi</div>
             <div className="mt-1 text-lg font-semibold text-rose-600">
-              {currency(totals.payment)}
+              {currency(paymentValue)}
             </div>
           </div>
           <div className="rounded-lg border bg-white p-4 shadow-sm">
@@ -385,7 +385,7 @@ export default function ClosingTable({
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Số phiếu</div>
             <div className="mt-1 text-lg font-semibold">
-              {cashbookSummary?.totalCount ?? rows.length}
+              {meta?.total ?? cashbookSummary?.totalCount ?? rows.length}
             </div>
           </div>
           <div className="rounded-lg border bg-white p-2 shadow-sm">
@@ -481,6 +481,9 @@ export default function ClosingTable({
                   e.preventDefault();
                   goPrev();
                 }}
+                className={
+                  currentPage <= 1 ? "pointer-events-none opacity-50" : ""
+                }
               />
             </PaginationItem>
             <PaginationItem>
@@ -495,6 +498,9 @@ export default function ClosingTable({
                   e.preventDefault();
                   goNext();
                 }}
+                className={
+                  currentPage >= pages ? "pointer-events-none opacity-50" : ""
+                }
               />
             </PaginationItem>
           </PaginationContent>
@@ -506,17 +512,18 @@ export default function ClosingTable({
   // cancel (server-side pagination & analytics)
   const isCancel = mode === "cancel";
   if (isCancel) {
-    // fallback meta values
     const currentPage = page || meta?.page || 1;
     const pages = meta?.pages || 1;
     const perPage = limit || meta?.limit || rows.length;
     const total = meta?.total || rows.length;
+
     // Chart distribution by cancel value (top items)
     const chartSource = rows.slice(0, 8).map((r: any) => ({
       name: r.itemName || r.name || "N/A",
       value: Number(r.cancelValue || r.amount || r.total || 0),
     }));
     const totalCancelValue = chartSource.reduce((a, c) => a + c.value, 0);
+
     return (
       <div className="rounded-xl border">
         {cancelSummary && (
@@ -684,10 +691,11 @@ export default function ClosingTable({
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    const np = Math.max(1, currentPage - 1);
-                    setPage?.(np);
-                    fetchReport?.();
+                    setPage?.((p) => Math.max(1, (p ?? currentPage) - 1));
                   }}
+                  className={
+                    currentPage <= 1 ? "pointer-events-none opacity-50" : ""
+                  }
                 />
               </PaginationItem>
               <PaginationItem>
@@ -700,10 +708,11 @@ export default function ClosingTable({
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    const np = Math.min(pages, currentPage + 1);
-                    setPage?.(np);
-                    fetchReport?.();
+                    setPage?.((p) => Math.min(pages, (p ?? currentPage) + 1));
                   }}
+                  className={
+                    currentPage >= pages ? "pointer-events-none opacity-50" : ""
+                  }
                 />
               </PaginationItem>
             </PaginationContent>

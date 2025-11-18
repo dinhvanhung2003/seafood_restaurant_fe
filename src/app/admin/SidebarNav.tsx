@@ -36,6 +36,7 @@ const NAV: NavItem[] = [
       { label: "Thực đơn", href: "/admin/product/menu" },
       { label: "Danh mục", href: "/admin/product/category" },
       { label: "Combo", href: "/admin/product/combo" },
+      { label: "Đơn vị tính", href: "/admin/product/uom" },
       { label: "Khuyến mãi", href: "/admin/product/promotion" },
     ],
   },
@@ -82,6 +83,7 @@ const NAV: NavItem[] = [
     icon: Boxes,
     children: [
       { label: "Danh sách tồn kho", href: "/admin/inventories/list" },
+      { label: "Nguyên liệu", href: "/admin/inventories/ingredients" },
       { label: "Nhập kho", href: "/admin/inventories/purchase" },
       { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
       { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
@@ -97,7 +99,8 @@ const NAV: NavItem[] = [
       { label: "Bán hàng", href: "/admin/report/sale" },
       { label: "Cuối ngày", href: "/admin/report/closing" },
       { label: "Nhân viên", href: "/admin/report/staff" },
-     
+      { label: "Nhà cung cấp", href: "/admin/report/supplier" },
+      { label: "Khách hàng", href: "/admin/report/customer" },
     ],
   },
 ];

@@ -50,13 +50,13 @@ export function ClosingFilter({
   loading: boolean;
 }) {
   // Auto-run report whenever filters change (debounced)
-  React.useEffect(() => {
-    const t = setTimeout(() => {
-      fetchReport();
-    }, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo, mode, paymentMethod, areaId, tableId]);
+  // React.useEffect(() => {
+  //   const t = setTimeout(() => {
+  //     fetchReport();
+  //   }, 300);
+  //   return () => clearTimeout(t);
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [dateFrom, dateTo, mode, paymentMethod, areaId, tableId]);
 
   // Fetch areas (with tables) for cascading selects
   const { data: areas = [], isLoading: loadingAreas } = useAreas();

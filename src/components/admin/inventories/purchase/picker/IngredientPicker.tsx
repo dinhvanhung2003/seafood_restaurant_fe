@@ -10,7 +10,7 @@ import type { StockFilter } from "@/hooks/admin/useIngredients";
 
 export default function IngredientPicker({
   supplierId,
-  onAdd,                // (id, name, unitCode?)
+  onAdd, // (id, name, unitCode?)
   onOpenAddIngredient,
 }: {
   supplierId?: string;
@@ -21,6 +21,7 @@ export default function IngredientPicker({
   const [limit] = useState(50);
   const [search, setSearch] = useState("");
   const [stock] = useState<StockFilter>("ALL");
+  // Bỏ lọc theo NCC theo yêu cầu: luôn hiển thị toàn bộ nguyên liệu
 
   const ingQuery = useIngredients(
     page,
@@ -28,19 +29,14 @@ export default function IngredientPicker({
     search,
     stock,
     undefined,
-    supplierId
+    undefined
   );
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div className="flex flex-col">
           <CardTitle>Chọn nguyên liệu</CardTitle>
-          {supplierId && (
-            <span className="text-xs text-slate-500">
-              Đang lọc theo NCC: <b>{supplierId}</b>
-            </span>
-          )}
         </div>
         <Button variant="outline" onClick={() => onOpenAddIngredient(true)}>
           + Thêm nguyên liệu
@@ -60,7 +56,10 @@ export default function IngredientPicker({
           ) : (
             <ul className="divide-y">
               {(ingQuery.data ?? []).map((it) => (
-                <li key={it.id} className="px-3 py-2 flex items-center justify-between">
+                <li
+                  key={it.id}
+                  className="px-3 py-2 flex items-center justify-between"
+                >
                   <div>
                     <div className="font-medium">{it.name}</div>
                     <div className="text-xs text-slate-500">
@@ -78,8 +77,8 @@ export default function IngredientPicker({
                 </li>
               ))}
               {(ingQuery.data ?? []).length === 0 && (
-                <li className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  Không có kết quả
+                <li className="px-3 py-6 text-center text-sm text-muted-foreground space-y-2">
+                  <div>Không có kết quả</div>
                 </li>
               )}
             </ul>

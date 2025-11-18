@@ -5,7 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useSuppliers } from "@/hooks/admin/useSupplier";
 
-type Option = { value: string; label: string; phone?: string|null; code?: string|null };
+type Option = {
+  value: string;
+  label: string;
+  phone?: string | null;
+  code?: string | null;
+};
 
 export default function SupplierPicker({
   supplierId,
@@ -27,22 +32,32 @@ export default function SupplierPicker({
 
   // gọi BE – gửi cả q & search để tương thích
   const params = useMemo(
-    () => ({ q: kw || undefined, search: kw || undefined, status: "ACTIVE" } as any),
+    () =>
+      ({
+        q: kw || undefined,
+        search: kw || undefined,
+        status: "ACTIVE",
+      } as any),
     [kw]
   );
   const query = useSuppliers(1, 20, params);
-  const items =
-  Array.isArray((query.data as any)?.items)
+  const items = Array.isArray((query.data as any)?.items)
     ? (query.data as any).items
-    : ((query.data as any)?.data ?? []);
+    : (query.data as any)?.data ?? [];
 
   const options: Option[] = useMemo(
-    () => items.map((s: any) => ({ value: s.id, label: s.name, phone: s.phone, code: s.code })),
+    () =>
+      items.map((s: any) => ({
+        value: s.id,
+        label: s.name,
+        phone: s.phone,
+        code: s.code,
+      })),
     [items]
   );
 
   const value = useMemo(
-    () => options.find(o => o.value === supplierId) ?? null,
+    () => options.find((o) => o.value === supplierId) ?? null,
     [options, supplierId]
   );
 
@@ -54,7 +69,9 @@ export default function SupplierPicker({
 
   const styles: StylesConfig<Option, false> = {
     control: (b, s) => ({
-      ...b, minHeight: 40, borderRadius: 8,
+      ...b,
+      minHeight: 40,
+      borderRadius: 8,
       borderColor: s.isFocused ? "hsl(221,83%,53%)" : "hsl(214,32%,91%)",
       boxShadow: s.isFocused ? "0 0 0 2px hsl(221 83% 53% / .2)" : "none",
     }),
@@ -74,15 +91,23 @@ export default function SupplierPicker({
           onInputChange={onInputChange}
           isLoading={query.isFetching}
           placeholder="Nhập tên/SĐT/mã để tìm NCC…"
-          noOptionsMessage={() => (kw ? "Không có kết quả" : "Gõ để tìm nhà cung cấp")}
+          noOptionsMessage={() =>
+            kw ? "Không có kết quả" : "Gõ để tìm nhà cung cấp"
+          }
           // không lọc client vì đã lọc server
           filterOption={() => true}
           styles={styles}
           isClearable
+          // Cố định ID để tránh hydration mismatch (SSR vs client)
+          instanceId="supplier-select"
+          inputId="supplier-select-input"
+          classNamePrefix="supplier-select"
         />
 
         {value ? (
-          <div className="text-xs text-slate-600">Đã chọn: <b>{value.label}</b></div>
+          <div className="text-xs text-slate-600">
+            Đã chọn: <b>{value.label}</b>
+          </div>
         ) : (
           <div className="text-xs text-amber-700">Chưa chọn NCC</div>
         )}

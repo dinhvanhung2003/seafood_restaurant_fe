@@ -10,8 +10,8 @@ export default function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60_000,          // dữ liệu “tươi” 1 phút
-            gcTime: 5 * 60_000,         // giữ cache 5 phút
+            staleTime: 60_000, // dữ liệu “tươi” 1 phút
+            gcTime: 5 * 60_000, // giữ cache 5 phút
             refetchOnWindowFocus: false,
             retry: 2,
           },
@@ -23,9 +23,8 @@ export default function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false} refetchInterval={0}>
       <QueryClientProvider client={client}>
-        
         {children}
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>

@@ -4,6 +4,7 @@ import {
   keepPreviousData, useMutation, UseMutationOptions,
   useQuery, UseQueryOptions, useQueryClient,
 } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
 import { api } from "@/lib/axios";
 
 type Endpoint<P = any> = string | ((p: P) => string);
@@ -12,9 +13,9 @@ const resolvePath = <P = any>(path: Endpoint<P>, params?: P) =>
 
 export type RestConfig<TList, TItem, TListQuery = any, TCreateDto = any, TUpdateDto = any> = {
   key: string;
-  list?:   { path: Endpoint };
+  list?: { path: Endpoint };
   detail?: { path: Endpoint };
-  create?: { path: Endpoint; method?: "post" | "put";  mapPayload?: (dto: TCreateDto) => any };
+  create?: { path: Endpoint; method?: "post" | "put"; mapPayload?: (dto: TCreateDto) => any };
   update?: { path: Endpoint; method?: "patch" | "put"; mapPayload?: (dto: TUpdateDto) => any };
   remove?: { path: Endpoint; method?: "delete" };
   staleTime?: number;
@@ -27,7 +28,7 @@ export function createRestHooks<TList, TItem, TListQuery = any, TCreateDto = any
   const staleTime = cfg.staleTime ?? 30_000;
   const pick = cfg.extract ?? ((x: any) => x); // không generic
 
-  const useListQuery = (params: TListQuery, options?: UseQueryOptions<TList, Error>) =>
+  const useListQuery = (params: TListQuery, options?: Partial<UseQueryOptions<TList, Error>>) =>
     useQuery<TList, Error>({
       queryKey: [cfg.key, "list", params],
       queryFn: async () => {
@@ -41,7 +42,7 @@ export function createRestHooks<TList, TItem, TListQuery = any, TCreateDto = any
       enabled: options?.enabled ?? true,
     });
 
-  const useDetailQuery = (args: any, options?: UseQueryOptions<TItem, Error>) =>
+  const useDetailQuery = (args: any, options?: Partial<UseQueryOptions<TItem, Error>>) =>
     useQuery<TItem, Error>({
       queryKey: [cfg.key, "detail", args],
       queryFn: async () => {
@@ -96,8 +97,21 @@ export function createRestHooks<TList, TItem, TListQuery = any, TCreateDto = any
       mutationFn: async (args) => {
         const url = resolvePath(cfg.remove!.path, args);
         const method = cfg.remove!.method ?? "delete";
-        const res = await api.request({ url, method });
-        return (pick as (v: unknown) => unknown)(res.data);
+        try {
+          console.debug("[rq] remove mutation calling", { url, method, args });
+          const res = await api.request({ url, method });
+          console.debug("[rq] remove mutation response", { status: res.status, data: res.data });
+          return (pick as (v: unknown) => unknown)(res.data);
+        } catch (err) {
+          const axErr = err as AxiosError<any>;
+          console.error("[rq] remove mutation failed", { url, method, args, message: axErr?.message });
+          if (axErr?.response) {
+            console.error("[rq] remove mutation response data:", axErr.response.data);
+            const remoteMsg = (axErr.response.data && (axErr.response.data.message || axErr.response.data)) || axErr.response.statusText;
+            throw new Error(`Remove mutation failed: ${remoteMsg}`);
+          }
+          throw err;
+        }
       },
       onSuccess: (...a) => {
         qc.invalidateQueries({ queryKey: [cfg.key] });
