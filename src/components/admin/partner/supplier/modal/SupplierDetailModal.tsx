@@ -3,7 +3,11 @@
 
 import * as React from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +17,15 @@ import {
   useSupplierDetail,
   useChangeSupplierStatus,
   useUpdateSupplier,
+  useRemoveSupplier,
 } from "@/hooks/admin/useSupplier";
 import { useSupplierGroups } from "@/hooks/admin/useSupplierGroup";
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
 } from "@/components/ui/select";
 import CreateSupplierGroupModal from "@/components/admin/partner/supplier/supplier-group/modal/CreaGroupSupplier";
 
@@ -27,10 +36,16 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
   const { data, isLoading } = useSupplierDetail(id, open);
   const changeStatus = useChangeSupplierStatus();
   const update = useUpdateSupplier();
+  const remove = useRemoveSupplier();
   const { groups, isLoading: loadingGroups } = useSupplierGroups({ limit: 10 });
 
   const [edit, setEdit] = React.useState(false);
   const [form, setForm] = React.useState<any>({});
+  const [errors, setErrors] = React.useState<{
+    name?: string;
+    phone?: string;
+    email?: string;
+  }>({});
 
   React.useEffect(() => {
     if (data && open) {
@@ -51,13 +66,48 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
         status: data.status,
       });
       setEdit(false);
+      setErrors({});
     }
   }, [data, open]);
 
   const set = (k: string, v: any) => setForm((s: any) => ({ ...s, [k]: v }));
 
+  const validate = (): boolean => {
+    const next: { name?: string; phone?: string; email?: string } = {};
+
+    const name = (form.name ?? "").trim();
+    if (!name) {
+      next.name = "Tên nhà cung cấp là bắt buộc";
+    } else if (name.length > 50) {
+      next.name = "Tên nhà cung cấp tối đa 50 ký tự";
+    }
+
+    const phone = (form.phone ?? "").trim();
+    if (!phone) {
+      next.phone = "Số điện thoại là bắt buộc";
+    } else {
+      const phoneRegex = /^(0|\+84)[0-9]{9,10}$/;
+      if (!phoneRegex.test(phone)) {
+        next.phone =
+          "Số điện thoại không hợp lệ (bắt đầu 0 hoặc +84, 10–11 số)";
+      }
+    }
+
+    const email = (form.email ?? "").trim();
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        next.email = "Email không hợp lệ";
+      }
+    }
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const save = async () => {
     if (!id) return;
+    if (!validate()) return;
     const body: any = {};
     Object.entries(form).forEach(([k, v]) => {
       if (v !== "" && v !== undefined) body[k] = v;
@@ -75,7 +125,8 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
   // tên nhóm để hiển thị (ưu tiên data.supplierGroup, fallback tra theo id từ list groups)
   const groupName =
     data?.supplierGroup?.name ??
-    groups.find((g) => g.id === (form.supplierGroupId ?? data?.supplierGroupId))?.name ??
+    groups.find((g) => g.id === (form.supplierGroupId ?? data?.supplierGroupId))
+      ?.name ??
     "-";
 
   return (
@@ -85,8 +136,12 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
           <DialogTitle className="flex items-center gap-3">
             <span>Chi tiết nhà cung cấp</span>
             {data && (
-              <Badge variant={data.status === "ACTIVE" ? "default" : "secondary"}>
-                {data.status === "ACTIVE" ? "Đang hoạt động" : "Ngừng hoạt động"}
+              <Badge
+                variant={data.status === "ACTIVE" ? "default" : "secondary"}
+              >
+                {data.status === "ACTIVE"
+                  ? "Đang hoạt động"
+                  : "Ngừng hoạt động"}
               </Badge>
             )}
           </DialogTitle>
@@ -101,8 +156,35 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
                 Mã: <b>{data.code}</b>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={toggleStatus} disabled={changeStatus.isPending}>
+                <Button
+                  variant="outline"
+                  onClick={toggleStatus}
+                  disabled={changeStatus.isPending}
+                >
                   {data.status === "ACTIVE" ? "Ngừng hoạt động" : "Kích hoạt"}
+                </Button>
+                {/* Xoá / Ngừng hợp tác theo nghiệp vụ BE */}
+                <Button
+                  variant="destructive"
+                  disabled={remove.isPending || changeStatus.isPending}
+                  onClick={async () => {
+                    if (!id) return;
+                    const confirmMsg =
+                      data.status === "ACTIVE"
+                        ? "Xoá nhà cung cấp này? Nếu đã có giao dịch sẽ chỉ chuyển sang trạng thái ngừng hoạt động."
+                        : "Xoá nhà cung cấp này khỏi hệ thống?";
+                    if (!confirm(confirmMsg)) return;
+                    await remove.mutateAsync(id);
+                    if (!remove.isError) {
+                      onOpenChange(false); // đóng modal sau thao tác
+                    }
+                  }}
+                >
+                  {remove.isPending
+                    ? "Đang xử lý…"
+                    : data.status === "ACTIVE"
+                    ? "Xoá / Ngừng hợp tác"
+                    : "Xoá nhà cung cấp"}
                 </Button>
                 {!edit ? (
                   <Button variant="outline" onClick={() => setEdit(true)}>
@@ -118,11 +200,24 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
 
             <div className="grid grid-cols-2 gap-4">
               {fields.map((f) => (
-                <Field key={f.key} label={f.label}>
+                <Field
+                  key={f.key}
+                  label={f.label}
+                  required={f.key === "name" || f.key === "phone"}
+                  error={(errors as any)[f.key]}
+                >
                   {edit ? (
                     <Input
                       value={form[f.key] ?? ""}
-                      onChange={(e) => set(f.key, e.target.value)}
+                      maxLength={maxLen[f.key as keyof typeof maxLen]}
+                      onChange={(e) => {
+                        set(f.key, e.target.value);
+                        if ((errors as any)[f.key])
+                          setErrors((er) => ({ ...er, [f.key]: undefined }));
+                      }}
+                      className={
+                        (errors as any)[f.key] ? "border-destructive" : ""
+                      }
                     />
                   ) : (
                     <div className="h-9 px-3 flex items-center rounded-md border bg-muted/20">
@@ -146,7 +241,10 @@ export default function SupplierDetailModal({ open, onOpenChange, id }: Props) {
                       <SelectTrigger className="w-[340px]">
                         <SelectValue placeholder="Chọn nhóm" />
                       </SelectTrigger>
-                      <SelectContent position="popper" className="z-[10000] max-h-64">
+                      <SelectContent
+                        position="popper"
+                        className="z-[10000] max-h-64"
+                      >
                         <SelectItem value={ALL}>Không gán nhóm</SelectItem>
                         {groups.map((g) => (
                           <SelectItem key={g.id} value={g.id}>
@@ -212,15 +310,26 @@ function Field({
   label,
   children,
   className,
+  error,
+  required,
 }: {
   label: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  error?: string;
+  required?: boolean;
 }) {
+  const labelCls = ["text-[13px] flex items-center gap-0.5"];
+  if (error) labelCls.push("text-destructive");
+
   return (
     <div className={["space-y-1", className].filter(Boolean).join(" ")}>
-      <Label className="text-[13px]">{label}</Label>
+      <Label className={labelCls.join(" ")}>
+        {label}
+        {required && <span className="text-destructive">*</span>}
+      </Label>
       {children}
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
   );
 }
@@ -252,3 +361,17 @@ function displayValue(v: any) {
   }
   return String(v);
 }
+
+// giới hạn độ dài tương tự form Thêm mới
+const maxLen: Record<string, number | undefined> = {
+  name: 50,
+  company: 100,
+  taxCode: 20,
+  phone: 15,
+  email: 100,
+  address: 255,
+  city: 100,
+  district: 100,
+  ward: 100,
+  note: 255,
+};
