@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useQuery,
   useMutation,
@@ -113,7 +116,8 @@ function TicketCard({
   onComplete,
   onServe,
   onDelete,
-  onClear
+  onClear,
+   onVoidFromKitchen, 
 }: {
   t: Ticket;
   variant: "new" | "preparing" | "ready";
@@ -123,6 +127,8 @@ function TicketCard({
   onServe?: (t: Ticket) => void;
   onDelete?: (t: Ticket) => void;
   onClear?: (t: Ticket) => void;
+  onVoidFromKitchen?: (t: Ticket) => void;
+  
 }) {
   return (
    <div
@@ -200,10 +206,23 @@ function TicketCard({
 
           <div className="mt-3 flex items-center gap-2">
             {variant === "new" && (
-              <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
+              <>
+                 <Button size="sm" className="h-8" onClick={() => onStart?.(t)}>
                 <ChefHat className="mr-2 h-4 w-4" />
                 Bắt đầu nấu (toàn bộ)
               </Button>
+                <Button
+                size="sm"
+                variant="destructive"
+                className="h-8"
+                onClick={() => onVoidFromKitchen?.(t)}
+              >
+                <BanIcon className="mr-2 h-4 w-4" />
+                Hủy món
+              </Button>
+              </>
+           
+              
             )}
             {variant === "preparing" && (
               <Button
@@ -246,6 +265,25 @@ const [listReady,  setListReady]  = useState<Ticket[]>([]);
   const processedBatchIdsRef = useRef<Set<string>>(new Set());
   const [voidedIds, setVoidedIds] = useState<Set<string>>(new Set());
 const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+const [voidModalOpen, setVoidModalOpen] = useState(false);
+const [voidTicket, setVoidTicket] = useState<Ticket | null>(null);
+
+
+
+const openVoidModal = (t: Ticket) => {
+  setVoidTicket(t);
+  setVoidModalOpen(true);
+};
+
+const handleConfirmVoid = async (qty: number, reason: string) => {
+  if (!voidTicket) return;
+  await voidFromKitchen(voidTicket, qty, reason);
+  setVoidModalOpen(false);
+  setVoidTicket(null);
+};
+
+
+
   /* =============== Queries =============== */
   const COMMON_Q = {
     staleTime: 15_000,
@@ -290,27 +328,48 @@ const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   });
 
 
-  /* =============== Socket =============== */
-// ===== helper: trừ dồn theo menuItemId, xoá card nếu qty về 0 =====
-function consumeByMenu(tickets: Ticket[], menuItemId: string, qty: number): { tickets: Ticket[]; remain: number } {
-  if (qty <= 0) return { tickets, remain: 0 };
+const voidFromKitchen = async (t: Ticket, qty?: number, reason?: string) => {
+  const [ticketId] = t.itemIds;
+  if (!ticketId) {
+    toast.error("Thiếu ticketId để hủy");
+    return;
+  }
 
-  let need = qty;
-  const next = tickets.map(t => {
-    const items = t.items.map(it => {
-      if (it.menuItemId !== menuItemId) return it;
-      const take = Math.min(it.qty, need);
-      need -= take;
-      return { ...it, qty: it.qty - take };
-    }).filter(it => it.qty > 0);
-    return { ...t, items };
-  }).filter(t => t.items.length > 0);
+  const qtyToVoid = qty ?? t.items?.[0]?.qty ?? 1;
+  const reasonMsg = reason?.trim() || "Bếp hủy món";
 
-  return { tickets: next, remain: need };
-}
-useEffect(() => {
-  setListNew(reconcileNewTickets(qNewRows.data ?? [], socketTickets, voidedIds, hiddenIds));
-}, [qNewRows.data, socketTickets, voidedIds, hiddenIds]);
+  try {
+    await api.patch(`/kitchen/tickets/${ticketId}/cancel-from-kitchen`, {
+      qtyToVoid,            // 👈 số lượng muốn hủy
+      reason: reasonMsg,    // 👈 lý do
+    });
+
+    toast.success("Đã hủy món và thông báo cho thu ngân");
+
+    // refetch 3 cột để thấy phần còn lại
+    qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
+    qc.invalidateQueries({ queryKey: ["items", "PREPARING"] });
+    qc.invalidateQueries({ queryKey: ["items", "READY"] });
+  } catch (e: any) {
+    const msg =
+      e?.response?.data?.message ||
+      e?.message ||
+      "Không thể hủy món từ bếp";
+    toast.error("Lỗi khi hủy món", { description: msg });
+  }
+};
+
+
+
+
+
+
+// useEffect(() => {
+//   if (!qNewRows.data) return;
+//   // chỉ map thẳng từ API cho cột "Mới / Đã xác nhận"
+//   setListNew(mapRowsToTickets(qNewRows.data));
+// }, [qNewRows.data]);
+
 
 
 useEffect(() => {
@@ -358,197 +417,178 @@ useEffect(() => {
   s.connected ? onConnect() : s.once("connect", onConnect);
   s.on("disconnect", onDisconnect);
 
-  const JUST_MS = 15_000;
-
   // toast helpers
-  const summarize = (p: any) => {
-    const items = Array.isArray(p?.items) ? p.items : [];
-    const head = items.slice(0, 3).map((it: any) => `${it.name} x${it.qty}`).join(" • ");
-    return head + (items.length > 3 ? ` +${items.length - 3}` : "");
-  };
   const getTableName = (p: any) =>
     p?.tableName || p?.table?.name || p?.table || p?.order?.table?.name || "—";
 
   // --- chuẩn hoá payload & nhét từng ticket vào state socketTickets ---
   const pushTicketPayload = (p: any) => {
-  const items = Array.isArray(p?.items) ? p.items : [];
-  if (!items.length) return;
+    const items = Array.isArray(p?.items) ? p.items : [];
+    if (!items.length) return;
 
-  const batchId = p?.batchId;
-  if (batchId && processedBatchIdsRef.current.has(batchId)) return;
-  if (batchId) processedBatchIdsRef.current.add(batchId);
+    const batchId = p?.batchId;
+    if (batchId && processedBatchIdsRef.current.has(batchId)) return;
+    if (batchId) processedBatchIdsRef.current.add(batchId);
 
-  const createdTs = Date.parse(p?.createdAt || "") || Date.now();
-  const table = getTableName(p);
+    const createdTs = Date.parse(p?.createdAt || "") || Date.now();
+    const table = getTableName(p);
 
-  // thu thập các id vừa tạo để tắt "NEW" sau 15s
-  const createdIds: string[] = [];
+    const createdIds: string[] = [];
 
-  setSocketTickets(prev => {
-    const next = { ...prev };
-
-    for (const raw of items) {
-      const orderItemId = raw?.orderItemId as string | undefined;
-
-      // 1) ticketId DÙNG LÀM UI KEY và PATCH
-      //    Ưu tiên id từ BE (ticketId/id). Nếu BE chưa có id duy nhất cho mỗi lần notify,
-      //    tạo fallback có batchId/createdTs để KHÔNG bị gộp lần 1 và lần 2.
-      let ticketIdResolved =
-        (raw as any)?.ticketId ??
-        (raw as any)?.id ??
-        `${p?.orderId ?? "order"}:${orderItemId ?? "item"}:${batchId ?? createdTs}`;
-
-      // nếu vô tình đụng key cũ (do BE tái sử dụng), thêm hậu tố thời gian để vẫn tách card
-      if (next[ticketIdResolved]) {
-        ticketIdResolved = `${ticketIdResolved}:${createdTs}`;
-      }
-
-      const qty = Math.max(1, Number(raw?.qty) || 1);
-      const name = raw?.name ?? "";
-      const menuItemId = raw?.menuItemId ?? raw?.menu_item_id ?? "unknown";
-
-      next[ticketIdResolved] = {
-        id: ticketIdResolved,                  // 👈 UI KEY duy nhất mỗi lần notify
-        orderId: p.orderId,
-        table,
-        createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : new Date().toLocaleString(),
-        createdTs,
-        items: [{ menuItemId, name, qty }],
-        itemIds: [ticketIdResolved],           // 👈 PATCH /kitchen/tickets/status dùng ticketIds
-        priority: p.priority ? "high" : "normal",
-        note: p.note ?? undefined,
-        justArrived: true,
-      };
-
-      createdIds.push(ticketIdResolved);
-    }
-
-    return next;
-  });
-
-  // 2) clear "NEW" cho đúng các id vừa tạo (không phụ thuộc tính toán lại)
-  setTimeout(() => {
     setSocketTickets(prev => {
       const next = { ...prev };
-      for (const id of createdIds) {
-        if (next[id]) next[id] = { ...next[id], justArrived: false };
+
+      for (const raw of items) {
+        const orderItemId = raw?.orderItemId as string | undefined;
+
+        let ticketIdResolved =
+          (raw as any)?.ticketId ??
+          (raw as any)?.id ??
+          `${p?.orderId ?? "order"}:${orderItemId ?? "item"}:${batchId ?? createdTs}`;
+
+        if (next[ticketIdResolved]) {
+          ticketIdResolved = `${ticketIdResolved}:${createdTs}`;
+        }
+
+        const qty = Math.max(1, Number(raw?.qty) || 1);
+        const name = raw?.name ?? "";
+        const menuItemId = raw?.menuItemId ?? raw?.menu_item_id ?? "unknown";
+
+        next[ticketIdResolved] = {
+          id: ticketIdResolved,
+          orderId: p.orderId,
+          table,
+          createdAt: p.createdAt
+            ? new Date(p.createdAt).toLocaleString()
+            : new Date().toLocaleString(),
+          createdTs,
+          items: [{ menuItemId, name, qty }],
+          itemIds: [ticketIdResolved],
+          priority: p.priority ? "high" : "normal",
+          note: p.note ?? undefined,
+          justArrived: true,
+        };
+
+        createdIds.push(ticketIdResolved);
       }
+
       return next;
     });
-  }, 15_000);
 
-  qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
-  toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", {
-    description: `Bàn ${table}`,
-    duration: 3500,
-  });
-};
+    setTimeout(() => {
+      setSocketTickets(prev => {
+        const next = { ...prev };
+        for (const id of createdIds) {
+          if (next[id]) next[id] = { ...next[id], justArrived: false };
+        }
+        return next;
+      });
+    }, 15_000);
 
+    qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
 
+    toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", {
+      description: `Bàn ${table}`,
+      duration: 3500,
+    });
+  };
 
   // --- listen Notify từ thu ngân ---
   const onSingle = (p: any) => pushTicketPayload(p);
-  const onBatch  = (p: any) => pushTicketPayload(p);
+  const onBatch = (p: any) => pushTicketPayload(p);
   const onKitchenNotify = (p: any) => pushTicketPayload(p);
   s.on("cashier:notify_item", onSingle);
   s.on("cashier:notify_items", onBatch);
   s.on("kitchen:notify", onKitchenNotify);
 
-  // --- hủy ticket: toàn bộ (ticketIds) & một phần (items[{menuItemId, qty}]) ---
-// const onVoided = (p: {
-//   orderId: string;
-//   ticketIds?: string[]; // === danh sách orderItemId ===
-//   tableName?: string;
-//   by?: string;
-//   items?: Array<{ menuItemId: string; qty: number; reason?: string }>;
-// }) => {
-//   // ✅ FULL cancel theo ticketIds (key UI = orderItemId)
-//   if (p.ticketIds?.length) {
-//     const ids = new Set(p.ticketIds);
-//     setSocketTickets(prev => {
-//       const next = { ...prev };
-//       for (const id of ids) delete next[id];
-//       return next;
-//     });
-//     setListNew(prev => prev.filter(t => !ids.has(t.id)));
-//     setListCooking(prev => prev.filter(t => !ids.has(t.id)));
-//     setListReady(prev => prev.filter(t => !ids.has(t.id)));
-//   }
-
-//   // ✅ PARTIAL cancel theo menuItemId/qty (giữ nguyên logic bạn đã có)
-//   const items = p.items ?? [];
-//   if (items.length) {
-//     setListNew(prev => {
-//       let cur = prev;
-//       const remain = new Map<string, number>();
-//       for (const { menuItemId, qty } of items) {
-//         const res = consumeByMenu(cur, menuItemId, qty);
-//         cur = res.tickets;
-//         if (res.remain > 0) remain.set(menuItemId, (remain.get(menuItemId) ?? 0) + res.remain);
-//       }
-//       setListCooking(prevCook => {
-//         let curCook = prevCook;
-//         const remain2 = new Map(remain);
-//         for (const [menuItemId, qtyLeft] of remain2) {
-//           const res = consumeByMenu(curCook, menuItemId, qtyLeft);
-//           curCook = res.tickets;
-//           remain2.set(menuItemId, res.remain);
-//         }
-//         setListReady(prevReady => {
-//           let curReady = prevReady;
-//           for (const [menuItemId, qtyLeft] of remain2) {
-//             if (qtyLeft > 0) curReady = consumeByMenu(curReady, menuItemId, qtyLeft).tickets;
-//           }
-//           return curReady;
-//         });
-//         return curCook;
-//       });
-//       return cur;
-//     });
-//   }
-
-//   // đồng bộ query
-//   const hit = (k: string) => qc.invalidateQueries({ queryKey: ["items", k] });
-//   hit("NEW_ROWS"); hit("PREPARING"); hit("READY");
-// };
 
 
-
-
-
-
-
-
-const onVoided = (p: {
+ const onVoidedFromNewGateway = (p: {
   orderId: string;
-  ticketIds?: string[]; // == danh sách orderItemId (id UI)
-  tableName?: string;
-  by?: string;
-  items?: Array<{ menuItemId: string; qty: number; reason?: string }>;
+  menuItemId: string;
+  qty: number;
+  reason?: string;
+  by?: "cashier" | "kitchen";
 }) => {
-  // ✅ FULL cancel: chỉ mark voided, KHÔNG xóa khỏi state
-  if (p.ticketIds?.length) {
-    setVoidedIds(prev => {
-      const s = new Set(prev);
-      for (const id of p.ticketIds!) s.add(id);
-      return s;
+  console.log("[kitchen:void_synced] payload = ", p);
+
+  const applyVoid = (
+    setter: (updater: (prev: Ticket[]) => Ticket[]) => void
+  ) => {
+    setter((prev) => {
+      const next: Ticket[] = [];
+
+      for (const t of prev) {
+        const it = t.items[0];
+
+        // chỉ đụng tới ticket thuộc order + món này
+        if (t.orderId === p.orderId && it?.menuItemId === p.menuItemId) {
+          const originalQty = it.qty;
+          const cancelled = Math.min(originalQty, p.qty);  // phần bị hủy
+          const remain = originalQty - cancelled;          // phần còn lại
+
+          const voidTicketId = `${t.id}:void:${Date.now()}`;
+
+          // Ticket bị gạch (phiếu hủy)
+          const voidTicket: Ticket = {
+            ...t,
+            id: voidTicketId, // id riêng để không trùng React key
+            items: [
+              {
+                ...it,
+                qty: cancelled,
+              },
+            ],
+          };
+          next.push(voidTicket);
+
+          // đánh dấu ticket này là void → TicketCard sẽ gạch đỏ
+          // (dùng Set<voidedIds> sẵn có)
+          setVoidedIds((old) => {
+            const s = new Set(old);
+            s.add(voidTicketId);
+            return s;
+          });
+
+          // Ticket phần còn lại (nếu còn)
+          if (remain > 0) {
+            const remainTicket: Ticket = {
+              ...t,
+              items: [
+                {
+                  ...it,
+                  qty: remain,
+                },
+              ],
+            };
+            next.push(remainTicket);
+          }
+
+        } else {
+          // ticket khác giữ nguyên
+          next.push(t);
+        }
+      }
+
+      return next;
     });
-    // 👉 Không delete khỏi socketTickets/listNew/listCooking/listReady
-  }
+  };
 
-  // ✅ PARTIAL giữ nguyên logic trừ dồn như bạn đang có
-  const items = p.items ?? [];
-  if (items.length) {
-    // ... (giữ nguyên consumeByMenu cho NEW / COOKING / READY)
-  }
+  // áp dụng cho cả 3 cột
+  applyVoid(setListNew);
+  applyVoid(setListCooking);
+  applyVoid(setListReady);
 
-  // Đồng bộ query
-  const hit = (k: string) => qc.invalidateQueries({ queryKey: ["items", k] });
-  hit("NEW_ROWS"); hit("PREPARING"); hit("READY");
+  const who = p.by === "kitchen" ? "Bếp" : "Thu ngân";
+  toast.error(`${who} đã hủy món`, {
+    description: p.reason || undefined,
+  });
 };
 
 
-  s.on("kitchen:tickets_voided", onVoided);
+
+
+  s.on("kitchen:void_synced", onVoidedFromNewGateway);
 
   // --- thay đổi trạng thái ticket (PREPARING/READY/SERVED) ---
   const onStatusChanged = (_p: any) => {
@@ -563,7 +603,8 @@ const onVoided = (p: {
     s.off("cashier:notify_item", onSingle);
     s.off("cashier:notify_items", onBatch);
     s.off("kitchen:notify", onKitchenNotify);
-    s.off("kitchen:tickets_voided", onVoided);
+
+    s.off("kitchen:void_synced", onVoidedFromNewGateway);
     s.off("kitchen:ticket_status_changed", onStatusChanged);
     s.off("connect", onConnect);
     s.off("disconnect", onDisconnect);
@@ -571,24 +612,6 @@ const onVoided = (p: {
 }, [qc]);
 
 
-
-
-  /* =============== Merge NEW tickets =============== */
-// useEffect(() => {
-//   const apiIds = new Set(
-//     (qNewRows.data ?? []).map((r: ApiOrderItemExt) => r.orderItemId ?? r.id)
-//   );
-
-//   setSocketTickets(prev => {
-//     const next: typeof prev = {};
-//     for (const [id, t] of Object.entries(prev)) {
-//       if (apiIds.has(id)) next[id] = t; // chỉ giữ cái còn xuất hiện trong API
-//     }
-//     const same = Object.keys(next).length === Object.keys(prev).length &&
-//                  Object.keys(next).every(k => prev[k] === next[k]);
-//     return same ? prev : next;
-//   });
-// }, [qNewRows.data]); // ✅ chỉ 1 dep
 
 useEffect(() => {
   // API ids = kitchen_tickets.id
@@ -612,36 +635,23 @@ useEffect(() => {
 }, [qNewRows.data, voidedIds, hiddenIds]);
 
 
+useEffect(() => {
+  if (!qNewRows.data) return;
 
+  const apiTickets = mapRowsToTickets(qNewRows.data);
 
+  setListNew(prev => {
+    const apiIds = new Set(apiTickets.map(t => t.id));
 
-function reconcileNewTickets(
-  apiNewRows: ApiOrderItemExt[],
-  socketMap: Record<string, Ticket>,
-  voidedIds: Set<string>,
-  hiddenIds: Set<string>
-): Ticket[] {
-  const out: Ticket[] = [];
-  const covered = new Set<string>();
-  const apiIds = new Set(apiNewRows.map(r => r.id)); // dùng ticket.id
+    // giữ lại các ticket đã bị void (voidedIds) mà API không trả nữa
+    const preservedVoided = prev.filter(
+      t => voidedIds.has(t.id) && !apiIds.has(t.id)
+    );
 
-  for (const [id, t] of Object.entries(socketMap)) {
-    if (hiddenIds.has(id)) continue;
-    if (apiIds.has(id) || voidedIds.has(id)) { out.push(t); covered.add(id); }
-  }
-  for (const r of apiNewRows) {
-    const id = r.id;
-    if (covered.has(id) || hiddenIds.has(id)) continue;
-    out.push(mapRowsToTickets([r])[0]!);
-  }
-  return out.sort((a, b) => b.createdTs - a.createdTs);
-}
-
-
-
-// useEffect(() => {
-//   setListNew(reconcileNewTickets(qNewRows.data ?? [], socketTickets, voidedIds, hiddenIds));
-// }, [qNewRows.data, socketTickets, voidedIds, hiddenIds]);
+    // ticket thường lấy từ API, ticket đã void lấy từ prev
+    return [...preservedVoided, ...apiTickets];
+  });
+}, [qNewRows.data, voidedIds]);
 
 
   /* =============== Actions =============== */
@@ -725,6 +735,7 @@ function reconcileNewTickets(
                       voided={voidedIds.has(t.id)}
                       onStart={startCooking}
                       onClear={clearTicket} 
+                       onVoidFromKitchen={openVoidModal}
                      onDelete={(t) => {
   // không xóa khỏi socketTickets để lần sau vẫn khôi phục nếu muốn;
   // chỉ đánh dấu hidden để ẩn khỏi 3 list hiện hành
@@ -833,6 +844,92 @@ function reconcileNewTickets(
           </div>
         </div>
       </div>
+      {voidTicket && (
+  <Dialog open={voidModalOpen} onOpenChange={setVoidModalOpen}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Hủy món từ bếp</DialogTitle>
+      </DialogHeader>
+
+      <div className="space-y-3">
+        <div className="text-sm">
+          <div>Bàn: <span className="font-semibold">{voidTicket.table}</span></div>
+          <div>
+            Món:{" "}
+            <span className="font-semibold">
+              {voidTicket.items[0]?.name} (x{voidTicket.items[0]?.qty})
+            </span>
+          </div>
+        </div>
+
+        {/* form nhỏ: số lượng + lý do */}
+        <VoidForm
+          maxQty={voidTicket.items[0]?.qty ?? 1}
+          onCancel={() => {
+            setVoidModalOpen(false);
+            setVoidTicket(null);
+          }}
+          onConfirm={handleConfirmVoid}
+        />
+      </div>
+    </DialogContent>
+  </Dialog>
+)}
+
     </div>
+  );
+}
+function VoidForm({
+  maxQty,
+  onCancel,
+  onConfirm,
+}: {
+  maxQty: number;
+  onCancel: () => void;
+  onConfirm: (qty: number, reason: string) => void;
+}) {
+  const [qty, setQty] = useState<number>(maxQty || 1);
+  const [reason, setReason] = useState<string>("Bếp hủy món");
+
+  const handleSubmit = () => {
+    const safeQty = Math.max(1, Math.min(maxQty || 1, qty || 1));
+    onConfirm(safeQty, reason);
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Số lượng cần hủy</label>
+        <Input
+          type="number"
+          min={1}
+          max={maxQty || 1}
+          value={qty}
+          onChange={(e) => setQty(Number(e.target.value) || 1)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Tối đa: {maxQty} phần.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Lý do bếp hủy</label>
+        <Textarea
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="VD: Khách đổi món, hết nguyên liệu..."
+        />
+      </div>
+
+      <DialogFooter className="mt-4">
+        <Button variant="outline" onClick={onCancel}>
+          Đóng
+        </Button>
+        <Button variant="destructive" onClick={handleSubmit}>
+          Xác nhận hủy
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

@@ -221,7 +221,11 @@ export default function POSPage() {
           onCheckout={M.handleCheckout}
           onCancelOrder={M.onCancelOrder}
           canCancel={M.hasOrder}
+           kitchenVoids={M.kitchenVoids}
 
+        
+      
+          onClearKitchenVoid={M.clearKitchenVoid}
   canNotify={M.canNotify && !M.notifying}
         />
 

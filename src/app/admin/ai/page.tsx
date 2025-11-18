@@ -100,6 +100,29 @@ export default function AdminChatPanelSimple() {
 
           {/* Input row */}
           <div className="flex items-center gap-2">
+          <div className="flex gap-2 mb-2">
+  <Button
+    variant="outline"
+    onClick={() => setInput((prev) => `/rag ${prev}`)}
+  >
+    RAG
+  </Button>
+
+  <Button
+    variant="outline"
+    onClick={() => setInput((prev) => `/sql ${prev}`)}
+  >
+    SQL
+  </Button>
+
+  <Button
+    variant="outline"
+    onClick={() => setInput((prev) => `/gemini ${prev}`)}
+  >
+    Gemini
+  </Button>
+</div>
+
             <Input
               ref={inputRef}
               value={input}

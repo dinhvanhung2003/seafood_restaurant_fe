@@ -8,6 +8,7 @@ import { useEmployee } from "@/hooks/admin/useEmployee";
 import StaffTable from "@/components/admin/employee/table/StaffTable";
 import UserProfileDialog from "@/components/admin/employee/modal/UserProfileDialog";
 import CreateEmployeeDialog from "@/components/admin/employee/modal/CreateEmployeeDialog";
+import SalarySettingDialog from "@/components/admin/employee/salary/modal/SalarySettingDialog";
 
 export default function StaffPage() {
   const [page, setPage] = useState(1);
@@ -16,9 +17,13 @@ export default function StaffPage() {
 
   const { rows, meta, isLoading } = useEmployee(page, limit, q);
 
-  // profile dialog state
+  // profile dialog
   const [openProfile, setOpenProfile] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>();
+
+  // salary dialog
+  const [openSalary, setOpenSalary] = useState(false);
+  const [salaryUserId, setSalaryUserId] = useState<string | undefined>();
 
   const canPrev = meta.page > 1;
   const canNext = meta.page < meta.pages;
@@ -37,18 +42,17 @@ export default function StaffPage() {
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
-              setPage(1); // reset về trang 1 khi search
+              setPage(1);
             }}
           />
         </div>
 
-        {/* Page size (tuỳ chọn) */}
         <select
           className="border rounded px-2 py-1 text-sm"
           value={limit}
           onChange={(e) => {
             setLimit(Number(e.target.value));
-            setPage(1); // đổi page size -> về trang 1
+            setPage(1);
           }}
         >
           <option value={5}>5</option>
@@ -60,20 +64,23 @@ export default function StaffPage() {
 
       <Card className="overflow-hidden">
         <StaffTable
-          rows={rows} // ❗ dùng dữ liệu từ server, không lọc client
+          rows={rows}
           isLoading={isLoading}
           onOpenProfile={(id) => {
             setSelectedUserId(id);
             setOpenProfile(true);
           }}
+          onOpenSalary={(id) => {
+            setSalaryUserId(id);
+            setOpenSalary(true);
+          }}
         />
       </Card>
 
-      {/* Pagination controls */}
+      {/* Pagination */}
       <div className="flex items-center justify-between text-sm">
         <div>
-          Tổng: <b>{meta.total}</b> • Trang <b>{meta.page}</b>/
-          <b>{meta.pages}</b>
+          Tổng: <b>{meta.total}</b> • Trang <b>{meta.page}</b>/<b>{meta.pages}</b>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -101,7 +108,16 @@ export default function StaffPage() {
         onOpenChange={(v) => {
           setOpenProfile(v);
           if (!v) setSelectedUserId(undefined);
-        }} 
+        }}
+      />
+
+      <SalarySettingDialog
+        staffId={salaryUserId}
+        open={openSalary}
+        onOpenChange={(v) => {
+          setOpenSalary(v);
+          if (!v) setSalaryUserId(undefined);
+        }}
       />
     </div>
   );

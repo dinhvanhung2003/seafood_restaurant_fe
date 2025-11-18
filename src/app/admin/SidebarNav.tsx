@@ -69,6 +69,7 @@ const NAV: NavItem[] = [
       { label: "Danh sách nhân viên", href: "/admin/employee/list" },
       { label: "Lịch làm việc", href: "/admin/employee/shift" },
       { label: "Bảng chấm công", href: "/admin/employee/attendance" },
+       { label: "Bảng lương", href: "/admin/employee/payroll" },
       {
         label: "Thiết lập chấm công",
         href: "/admin/employee/attendance-setting",
@@ -100,9 +101,6 @@ const NAV: NavItem[] = [
       { label: "Nhân viên", href: "/admin/report/staff" },
       { label: "Nhà cung cấp", href: "/admin/report/supplier" },
       { label: "Khách hàng", href: "/admin/report/customer" },
-      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
-      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
-      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
     ],
   },
 ];
