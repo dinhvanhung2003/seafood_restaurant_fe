@@ -16,11 +16,12 @@ type Row = {
 };
 
 export default function StaffTable({
-  rows, isLoading, onOpenProfile,
+  rows, isLoading, onOpenProfile,onOpenSalary,
 }: {
   rows: Row[];
   isLoading: boolean;
   onOpenProfile: (userId: string) => void;
+  onOpenSalary: (userId: string) => void;
 }) {
   return (
     <Table>
@@ -51,6 +52,12 @@ export default function StaffTable({
                 <Button variant="outline" size="sm" onClick={() => onOpenProfile(r.id)}>
                   <UserIcon className="h-4 w-4 mr-1" /> Xem/Sửa
                 </Button>
+                 <Button
+    size="sm"
+    onClick={() => onOpenSalary(r.id)}
+  >
+    Thiết lập lương
+  </Button>
               </TableCell>
             </TableRow>
           ))

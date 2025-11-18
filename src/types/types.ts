@@ -175,6 +175,9 @@ export type EmployeeRow = {
   username: string;
   phoneNumber: string;
   role: Role;
+    profile?: {
+    fullName: string | null;
+  } | null;
 };
 
 

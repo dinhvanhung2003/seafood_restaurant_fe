@@ -1,6 +1,6 @@
 // src/components/cashier/modals/CancelOneItemModal.tsx
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export type CancelTarget = { orderItemId: string; name: string; qty: number };
@@ -11,8 +11,8 @@ type ReasonKey = (typeof REASONS)[number];
 export default function CancelOneItemModal({
   open,
   onClose,
-  item,                         
-  onConfirm,                   
+  item,
+  onConfirm,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,9 +20,19 @@ export default function CancelOneItemModal({
   onConfirm: (p: { qty: number; reason: string }) => Promise<void> | void;
 }) {
   const max = useMemo(() => item?.qty ?? 0, [item]);
+
   const [qty, setQty] = useState(1);
   const [reasonKey, setReasonKey] = useState<ReasonKey>("Khác");
   const [reasonOther, setReasonOther] = useState("");
+
+  // ✅ Mỗi lần mở modal với item mới → set qty = max
+  useEffect(() => {
+    if (open && item) {
+      setQty(item.qty || 1);        // muốn luôn 2/2 thì để item.qty
+      setReasonKey("Khác");
+      setReasonOther("");
+    }
+  }, [open, item]);
 
   if (!open || !item) return null;
 

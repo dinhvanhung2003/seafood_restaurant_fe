@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, X, CookingPot } from "lucide-react";
 import { currency } from "@/utils/money";
 import { ItemNoteModal } from "@/components/cashier/modals/ItemNoteModal";
 import type { OrderItem, CatalogItem } from "@/types/types";
-import { CookingPot } from "lucide-react";
+
 type Props = {
   index: number;
   item: CatalogItem;
@@ -14,6 +14,11 @@ type Props = {
   onChangeQty: (id: string, delta: number) => void;
   onUpdateNote?: (id: string, note: string) => void;
   cooked?: number; // READY + SERVED
+
+  // thông tin bếp hủy
+  voidQty?: number;
+  voidReason?: string;
+  onClearVoid?: () => void;
 };
 
 export function OrderItemCard({
@@ -23,8 +28,15 @@ export function OrderItemCard({
   onChangeQty,
   onUpdateNote,
   cooked = 0,
+  voidQty = 0,
+  voidReason,
+  onClearVoid,
 }: Props) {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+
+  // món đã bị bếp huỷ hết nhưng vẫn để lại dòng cho thu ngân
+  const isFullyCancelled = order.qty === 0 && voidQty > 0;
+
   const displayPrice = (item as any).priceAfterDiscount ?? item.price;
   const originPrice = item.price ?? 0;
   const hasPromo = Number((item as any).discountAmount ?? 0) > 0;
@@ -36,19 +48,55 @@ export function OrderItemCard({
       : null);
 
   return (
-    <div className={hasPromo ? "rounded-md bg-emerald-50/40 p-2" : ""}>
-      {/* Tên món */}
+    <div
+      className={
+        (hasPromo ? "rounded-md bg-emerald-50/40 p-2 " : "") +
+        (isFullyCancelled ? "opacity-70" : "")
+      }
+    >
+      {/* 🔴 Phần đã bị bếp huỷ – gạch riêng số phần đã huỷ */}
+      {voidQty > 0 && (
+        <div className="mb-1 flex items-center justify-between rounded-md bg-red-50 px-2 py-1 text-xs text-red-600">
+          <div className="flex flex-col">
+            <span className="font-medium">
+              <span className="line-through mr-1">
+                {item.name} x{voidQty}
+              </span>
+              — Đã hủy từ bếp
+            </span>
+            {voidReason && (
+              <span className="text-[11px] opacity-80">
+                Lý do: {voidReason}
+              </span>
+            )}
+          </div>
 
+          {onClearVoid && (
+            <button
+              type="button"
+              className="ml-2 rounded-full p-1 hover:bg-red-100"
+              onClick={onClearVoid}
+              title="Ẩn thông tin hủy món này"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tên món – nếu huỷ hết thì gạch luôn tên; còn lại thì bình thường */}
       <div className="flex items-center justify-between font-semibold text-base">
         <div className="flex items-center gap-2">
-          <span>
+          <span className={isFullyCancelled ? "line-through" : ""}>
             {index + 1}. {item.name}
           </span>
+
           {hasPromo && promoBadge && (
             <span className="inline-flex items-center ml-2 rounded-full bg-emerald-600 text-white px-2 py-0.5 text-xs font-semibold">
               KM {promoBadge}
             </span>
           )}
+
           {cooked > 0 && (
             <span
               className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
@@ -59,11 +107,10 @@ export function OrderItemCard({
             </span>
           )}
         </div>
-        {/* giá đơn vị bên phải (giữ nguyên nếu bạn muốn) */}
       </div>
+
       {/* Ghi chú & controls */}
       <div className="flex items-center justify-between mt-1">
-        {/* Ghi chú / mở modal */}
         <button
           className="text-sm text-muted-foreground hover:underline"
           onClick={() => setNoteModalOpen(true)}
@@ -77,20 +124,25 @@ export function OrderItemCard({
               variant="ghost"
               size="icon"
               onClick={() => onChangeQty(order.id, -1)}
+              disabled={order.qty <= 0} // không cho trừ dưới 0
             >
               <Minus className="w-4 h-4" />
             </Button>
+
+            {/* 👉 đây là phần còn lại sau khi bếp huỷ: thu ngân vẫn thấy & vẫn gọi lại được */}
             <div className="w-8 text-center text-sm font-medium">
               {order.qty}
             </div>
+
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onChangeQty(order.id, +1)}
+              onClick={() => onChangeQty(order.id, +1)} // gọi lại phần mới
             >
               <Plus className="w-4 h-4" />
             </Button>
           </div>
+
           <div className="text-right w-28 text-sm text-muted-foreground">
             {hasPromo ? (
               <div>
@@ -102,18 +154,16 @@ export function OrderItemCard({
                 </div>
               </div>
             ) : (
-              <div className="text-sm font-medium">
-                {currency(displayPrice)}
-              </div>
+              <div className="text-sm font-medium">{currency(displayPrice)}</div>
             )}
           </div>
+
           <div className="text-right w-24 text-sm font-semibold">
             {currency(lineTotal)}
           </div>
         </div>
       </div>
 
-      {/* Modal ghi chú */}
       <ItemNoteModal
         open={noteModalOpen}
         itemName={item.name}

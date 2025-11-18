@@ -16,6 +16,7 @@ import type { Catalog as CatalogType, Table as TableType } from "@/types/types";
 import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 import { useKitchenHistory } from "@/hooks/cashier/useKitchenHistory";
 import { useCancelSocketLive } from "@/hooks/cashier/socket/useCacelSocket";
+import { useKitchenVoids } from "@/hooks/cashier/socket/useKitchenVoids";
 export type CancelTarget = { orderItemId: string; name: string; qty: number };
 
 export function usePosPage() {
@@ -151,16 +152,99 @@ export function usePosPage() {
   const [selectedTable, setSelectedTable] = useState<TableType | null>(null);
   // current order info
   const currentOrderId = selectedTable ? orderIds[selectedTable.id] : undefined;
-  useCancelSocketLive(currentOrderId);
-  // lấy progress từ server cho order hiện tại
-  const { data: progress = [] } = useKitchenProgress(currentOrderId);
+  // useCancelSocketLive(currentOrderId);
 
-  // map: menuItemId -> tổng đã báo bếp (notified từ BE)
-  const notifiedMap = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of progress) m.set(r.menuItemId, r.notified);
-    return m;
-  }, [progress]);
+useEffect(() => {
+  const s = getSocket();
+
+  const onVoidSynced = async (p: {
+    orderId: string;
+    menuItemId: string;
+    qty: number;
+    reason?: string;
+    ticketId?: string;
+    by?: string;
+  }) => {
+    // luôn sync lại danh sách đơn đang mở ở thu ngân
+    await activeOrdersQuery.refetch();
+
+    // nếu không phải order đang xem thì thôi, khỏi toast / refetch thêm
+    if (!currentOrderId || p.orderId !== currentOrderId) return;
+
+    const who =
+      p.by === "kitchen"
+        ? "Bếp"
+        : p.by === "cashier"
+        ? "Thu ngân"
+        : "Hệ thống";
+
+    // (nếu muốn đẹp hơn thì map menuItemId -> name, tạm để vậy cũng được)
+    toast.error(`🍳 ${who} đã hủy ${p.qty} phần món ${p.menuItemId}`, {
+      description: p.reason,
+    });
+
+    // refetch lại progress + history của đúng order đang mở
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["kitchen-progress", p.orderId] }),
+      qc.invalidateQueries({ queryKey: ["kitchen-history", p.orderId] }),
+    ]);
+
+    // huỷ từ bếp thì không coi là "justChanged" nữa → không bật nút Thông báo
+    setJustChanged(false);
+  };
+
+  s.on("kitchen:void_synced", onVoidSynced);
+  return () => {
+    s.off("kitchen:void_synced", onVoidSynced);
+  };
+}, [currentOrderId, qc, activeOrdersQuery]);
+
+
+
+    // Nghe bếp hủy món cho đúng order đang mở
+  const { kitchenVoids, clearKitchenVoid, clearAllKitchenVoids } = useKitchenVoids(currentOrderId);
+  // lấy progress từ server cho order hiện tại
+const { data: progress = [] } = useKitchenProgress(currentOrderId);
+
+// tổng đã báo bếp (mọi trạng thái: PENDING + CONFIRMED + PREPARING + READY + SERVED)
+
+const notifiedMap = useMemo(() => {
+  const m = new Map<string, number>();
+  for (const r of progress as any[]) {
+    const prev = m.get(r.menuItemId) ?? 0;
+    m.set(r.menuItemId, prev + (Number(r.notified) || 0));
+  }
+  return m;
+}, [progress]);
+
+const cancellableMap = useMemo(() => {
+  const m = new Map<string, number>();
+  for (const r of progress as any[]) {
+    const notified  = Number(r.notified)  || 0;
+    const preparing = Number(r.preparing) || 0;
+    const ready     = Number(r.ready)     || 0;
+    const served    = Number(r.served)    || 0;
+
+    const cancelable = Math.max(0, notified - preparing - ready - served);
+    const prev = m.get(r.menuItemId) ?? 0;
+    m.set(r.menuItemId, prev + cancelable);
+  }
+  return m;
+}, [progress]);
+
+const sentQty = (menuItemId: string) => notifiedMap.get(menuItemId) ?? 0;
+const cancellableQty = (menuItemId: string) => cancellableMap.get(menuItemId) ?? 0;
+
+// 2) log tách riêng
+useEffect(() => {
+  console.log("progress raw =", progress);
+  console.log("notifiedMap =", Object.fromEntries(notifiedMap));
+  console.log("cancellableMap =", Object.fromEntries(cancellableMap));
+}, [progress, notifiedMap, cancellableMap]);
+
+// 1 dòng coi là "đã gửi" nếu còn phần có thể huỷ
+const wasSentToKitchen = (it: any) => cancellableQty(it.id) > 0;
+
 
   const tableList = useMemo(() => {
     const priceMap = new Map(menuItems.map(i => [i.id, i.price]));
@@ -248,14 +332,15 @@ export function usePosPage() {
 
 
   const deltaItems = useMemo(() => {
-    if (!currentOrderId) return [];
-    return activeItems
-      .map(i => {
-        const sent = notifiedMap.get(i.id) ?? 0;
-        return { menuItemId: i.id, delta: Math.max(0, i.qty - sent) };
-      })
-      .filter(d => d.delta > 0);
-  }, [activeItems, notifiedMap, currentOrderId]);
+  if (!currentOrderId) return [];
+  return activeItems
+    .map((i) => {
+      const sent = sentQty(i.id); // dùng helper
+      return { menuItemId: i.id, delta: Math.max(0, i.qty - sent) };
+    })
+    .filter((d) => d.delta > 0);
+}, [activeItems, currentOrderId, progress]);
+
 
 
   const onCancelOrder = async () => {
@@ -300,26 +385,18 @@ export function usePosPage() {
   // const canNotify = !!currentOrderId && deltaItems.length > 0;
   const hasOrder = !!(selectedTable && orderIds[selectedTable.id]);
 
-  // helper
-  // tổng đã báo bếp theo menuItemId
-  const sentQty = (menuItemId: string) => notifiedMap.get(menuItemId) ?? 0;
 
-  // 1 dòng trên OrderList (gộp) được coi là "đã gửi" nếu có ít nhất 1 phần đã báo
-  const wasSentToKitchen = (it: any) => sentQty(it.id) > 0;
 
   // USINGGGGGGGGGGGGGGGGGGGGGGGGG
   const confirmCancelOne = async ({ qty, reason }: { qty: number; reason: string }) => {
   if (!cancelOne) return;
   try {
-    if (qty >= cancelOne.qty) {
-      await api.patch(`/orderitems/cancel`, { itemIds: [cancelOne.orderItemId], reason });
-    } else {
-      await api.patch(`/orderitems/cancel-partial`, {
-        itemId: cancelOne.orderItemId,
-        qty,
-        reason,
-      });
-    }
+    // LUÔN dùng cancel-partial để không lỡ tay huỷ cả dòng lẫn phần đang chế
+    await api.patch(`/orderitems/cancel-partial`, {
+      itemId: cancelOne.orderItemId,
+      qty,
+      reason,
+    });
 
     // invalidate tất cả liên quan
     await Promise.all([
@@ -329,14 +406,13 @@ export function usePosPage() {
 
     toast.success("Đã huỷ món");
 
-    // ✅ refetch lại kitchen-progress để cập nhật notifiedMap
+    // refetch lại kitchen-progress để cập nhật progress / cancellable
     if (currentOrderId) {
       await qc.invalidateQueries({ queryKey: ["kitchen-progress", currentOrderId] });
     }
 
-    // ✅ bật lại cờ "vừa thay đổi" → nút Báo bếp sáng lại
+    // bật lại cờ "vừa thay đổi" → nút Báo bếp sáng lại
     setJustChanged(true);
-
   } catch (e: any) {
     toast.error("Huỷ món thất bại", { description: e?.response?.data?.message || e.message });
   } finally {
@@ -345,49 +421,60 @@ export function usePosPage() {
   }
 };
 
+
   const onChangeQty = async (menuItemId: string, delta: number) => {
-    if (!selectedTable) return;
+  if (!selectedTable) return;
 
-    const it = activeItems.find(x => x.id === menuItemId);
-    const cur = it?.qty ?? 0;
-    const next = Math.max(0, cur + delta);
+  const it = activeItems.find((x) => x.id === menuItemId);
+  const cur = it?.qty ?? 0;                // tổng đang hiển thị trên hóa đơn
+  const next = Math.max(0, cur + delta);   // số lượng user mong muốn
 
-    // chưa có dòng -> chỉ cho tăng
-    if (!it) {
-      if (delta > 0) await addOne(selectedTable.id, menuItemId);
-       setJustChanged(true);   
-      return;
+  if (!it) {
+    if (delta > 0) await addOne(selectedTable.id, menuItemId);
+    setJustChanged(true);
+    return;
+  }
+
+  const totalSent = sentQty(menuItemId);         // tổng đã gửi bếp (4)
+  const cancelable = cancellableQty(menuItemId); // phần còn huỷ được (2)
+  const nonSent = Math.max(0, cur - totalSent);  // phần chưa gửi bếp
+
+  if (delta > 0) {
+    await addOne(selectedTable.id, menuItemId);
+    setJustChanged(true);
+    return;
+  }
+
+  // delta < 0
+  if (next >= totalSent) {
+    // chỉ đụng phần chưa gửi bếp
+    const reducible = nonSent;
+    const apply = Math.max(delta, -reducible);
+    if (apply !== 0) {
+      await changeQty(selectedTable.id, menuItemId, apply, activeItems);
+      setJustChanged(true);
     }
+    return;
+  }
 
-    const sent = sentQty(menuItemId); // tổng đã báo bếp của món này
+  // next < totalSent → đã đụng vào phần đã gửi bếp
+const allow = cancelable;  // luôn cho chọn TỐI ĐA phần còn huỷ được
 
-    if (delta > 0) {
-      // thêm mới luôn là row mới (để lần báo sau vẫn ra batch riêng)
-      await addOne(selectedTable.id, menuItemId);
-       setJustChanged(true);   
-      return;
-    }
+if (allow <= 0) {
+  toast.error("Không thể huỷ thêm vì món đang được chế biến.");
+  return;
+}
 
-    // delta < 0: muốn giảm
-    if (next >= sent) {
-      // còn đủ phần "chưa gửi" để giảm → update qty bình thường
-      // (giảm tối đa đến ngưỡng 'sent')
-      const reducible = cur - sent;          // phần chưa gửi
-      const apply = Math.max(delta, -reducible);
-      if (apply !== 0) await changeQty(selectedTable.id, menuItemId, apply, activeItems);
-       setJustChanged(true);   
-      return;
-    }
+setCancelOne({
+  orderItemId: it.rowId!,
+  name: menuItems.find((m) => m.id === it.id)?.name ?? "",
+  qty: allow,   // ví dụ cancelable = 2 → modal hiển thị 2 / 2
+});
+setCancelOneOpen(true);
 
-    // next < sent ⇒ phải hủy phần đã gửi
-    const needCancel = sent - next; // số lượng tối thiểu cần hủy
-    setCancelOne({
-      orderItemId: it.rowId!,
-      name: menuItems.find(m => m.id === it.id)?.name ?? "",
-      qty: sent, // ✅ cho phép chọn tới toàn bộ phần đã báo bếp
-    });
-    setCancelOneOpen(true);
-  };
+};
+
+
 
   // init socket + local startedAt snapshot
   useEffect(() => {
@@ -411,16 +498,30 @@ export function usePosPage() {
   }, [orderIds, activeOrdersQuery.data]);
 
 
-  const onDelete = (it: any) => {
-    const sent = sentQty(it.id);
-    if (sent === 0) {
-      changeQty(selectedTable!.id, it.id, -it.qty, activeItems);
-    } else {
-      setCancelOne({ orderItemId: it.rowId!, name: it.name, qty: it.qty });
-      setCancelOne({ orderItemId: it.rowId!, name: it.name, qty: sent });
-      setCancelOneOpen(true);
-    }
-  };
+const onDelete = (it: any) => {
+  const allow = cancellableQty(it.id);
+  console.log("onDelete item", {
+    name: it.name,
+    menuItemId: it.id,
+    curQty: it.qty,
+    sent: sentQty(it.id),
+    allow,
+  });
+
+  if (allow === 0) {
+    changeQty(selectedTable!.id, it.id, -it.qty, activeItems);
+  } else {
+    setCancelOne({
+      orderItemId: it.rowId!,
+      name: it.name,
+      qty: allow,
+    });
+    setCancelOneOpen(true);
+  }
+};
+
+
+
 
 
 
@@ -605,5 +706,9 @@ useEffect(() => {
 
 
     justChanged,
+    kitchenVoids,
+       // kitchen voids cho UI
+    clearKitchenVoid,
+    clearAllKitchenVoids,
   };
 }
