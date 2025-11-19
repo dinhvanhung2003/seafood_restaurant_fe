@@ -25,13 +25,11 @@ import { toast } from "sonner";
 import { useCreateSupplier } from "@/hooks/admin/useSupplier";
 import { useSupplierGroups } from "@/hooks/admin/useSupplierGroup";
 import CreateSupplierGroupModal from "@/components/admin/partner/supplier/supplier-group/modal/CreaGroupSupplier";
-// (tuỳ bạn có muốn cho sửa ngay trong form không thì import EditSupplierGroupModal)
 
 type Props = { open: boolean; onOpenChange: (v: boolean) => void };
 
 type Form = {
   name: string;
-  code?: string;
   company?: string;
   taxCode?: string;
   phone?: string;
@@ -40,9 +38,15 @@ type Form = {
   city?: string;
   district?: string;
   ward?: string;
-  supplierGroupId?: string; // để undefined khi chọn "Tất cả/không gán"
+  supplierGroupId?: string;
   note?: string;
   status: "ACTIVE" | "INACTIVE";
+};
+
+type Errors = {
+  name?: string;
+  phone?: string;
+  email?: string;
 };
 
 const ALL = "__ALL__";
@@ -55,20 +59,63 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
     name: "",
     status: "ACTIVE",
   });
+  const [errors, setErrors] = React.useState<Errors>({});
+
+  const resetForm = () => {
+    setForm({ name: "", status: "ACTIVE" });
+    setErrors({});
+  };
+
+  React.useEffect(() => {
+    if (!open) resetForm();
+  }, [open]);
 
   const set = (k: keyof Form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      toast.info("Tên nhà cung cấp là bắt buộc");
-      return;
+  const validate = (): boolean => {
+    const nextErrors: Errors = {};
+
+    const name = form.name.trim();
+    if (!name) {
+      nextErrors.name = "Tên nhà cung cấp là bắt buộc";
+    } else if (name.length > 50) {
+      nextErrors.name = "Tên nhà cung cấp tối đa 50 ký tự";
     }
 
-    // lọc field rỗng
-    const payload: any = { name: form.name.trim(), status: form.status };
+    // Phone: BẮT BUỘC nhập
+    const phone = (form.phone ?? "").trim();
+    if (!phone) {
+      nextErrors.phone = "Số điện thoại là bắt buộc";
+    } else {
+      const phoneRegex = /^(0|\+84)[0-9]{9,10}$/;
+      if (!phoneRegex.test(phone)) {
+        nextErrors.phone =
+          "Số điện thoại không hợp lệ (bắt đầu 0 hoặc +84, 10–11 số)";
+      }
+    }
+
+    const email = form.email?.trim();
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        nextErrors.email = "Email không hợp lệ";
+      }
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+
+    const payload: any = {
+      name: form.name.trim(),
+      status: form.status,
+    };
+
     (
       [
-        "code",
         "company",
         "taxCode",
         "phone",
@@ -81,14 +128,20 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
         "note",
       ] as (keyof Form)[]
     ).forEach((k) => {
-      const v = form[k];
-      if (v !== undefined && v !== "") (payload as any)[k] = v;
+      const raw = form[k];
+      const v = typeof raw === "string" ? raw.trim() : raw;
+      if (v !== undefined && v !== "") {
+        payload[k] = v;
+      }
     });
 
-    await create.mutateAsync(payload);
-    if (!create.isError) {
+    try {
+      await create.mutateAsync(payload);
+      toast.success("Tạo nhà cung cấp thành công");
       onOpenChange(false);
-      setForm({ name: "", status: "ACTIVE" });
+      resetForm();
+    } catch (e: any) {
+      // lỗi đã được hook xử lý toast, ở đây chỉ đảm bảo không crash
     }
   };
 
@@ -99,58 +152,74 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
           <DialogTitle>Thêm nhà cung cấp</DialogTitle>
         </DialogHeader>
 
-        {/* layout 2 cột gọn gàng */}
+        {/* layout 2 cột */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Tên nhà cung cấp *">
+          <Field label="Tên nhà cung cấp" error={errors.name} required>
             <Input
               value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-            />
-          </Field>
-          <Field label="Mã NCC">
-            <Input
-              placeholder="Tự gen nếu để trống"
-              value={form.code ?? ""}
-              onChange={(e) => set("code", e.target.value)}
+              maxLength={50}
+              onChange={(e) => {
+                set("name", e.target.value);
+                if (errors.name)
+                  setErrors((er) => ({ ...er, name: undefined }));
+              }}
+              className={errors.name ? "border-destructive" : ""}
             />
           </Field>
 
           <Field label="Công ty">
             <Input
               value={form.company ?? ""}
+              maxLength={100}
               onChange={(e) => set("company", e.target.value)}
             />
           </Field>
           <Field label="Mã số thuế">
             <Input
               value={form.taxCode ?? ""}
+              maxLength={20}
               onChange={(e) => set("taxCode", e.target.value)}
             />
           </Field>
 
-          <Field label="Điện thoại">
+          <Field label="Điện thoại" error={errors.phone} required>
             <Input
               value={form.phone ?? ""}
-              onChange={(e) => set("phone", e.target.value)}
+              maxLength={15}
+              required
+              onChange={(e) => {
+                set("phone", e.target.value);
+                if (errors.phone)
+                  setErrors((er) => ({ ...er, phone: undefined }));
+              }}
+              className={errors.phone ? "border-destructive" : ""}
             />
           </Field>
-          <Field label="Email">
+          <Field label="Email" error={errors.email}>
             <Input
               type="email"
               value={form.email ?? ""}
-              onChange={(e) => set("email", e.target.value)}
+              maxLength={100}
+              onChange={(e) => {
+                set("email", e.target.value);
+                if (errors.email)
+                  setErrors((er) => ({ ...er, email: undefined }));
+              }}
+              className={errors.email ? "border-destructive" : ""}
             />
           </Field>
 
           <Field label="Địa chỉ">
             <Input
               value={form.address ?? ""}
+              maxLength={255}
               onChange={(e) => set("address", e.target.value)}
             />
           </Field>
           <Field label="Thành phố">
             <Input
               value={form.city ?? ""}
+              maxLength={100}
               onChange={(e) => set("city", e.target.value)}
             />
           </Field>
@@ -158,12 +227,14 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
           <Field label="Quận / Huyện">
             <Input
               value={form.district ?? ""}
+              maxLength={100}
               onChange={(e) => set("district", e.target.value)}
             />
           </Field>
           <Field label="Phường / Xã">
             <Input
               value={form.ward ?? ""}
+              maxLength={100}
               onChange={(e) => set("ward", e.target.value)}
             />
           </Field>
@@ -172,7 +243,6 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
           <Field label="Nhóm NCC" className="col-span-2">
             <div className="flex items-center gap-2">
               <Select
-                // dùng "__ALL__" cho không chọn
                 value={form.supplierGroupId ?? ALL}
                 onValueChange={(v) =>
                   set("supplierGroupId", v === ALL ? undefined : v)
@@ -182,7 +252,6 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
                 <SelectTrigger className="w-[320px]">
                   <SelectValue placeholder="Chọn nhóm" />
                 </SelectTrigger>
-                {/* tránh “z mờ” trong Dialog */}
                 <SelectContent position="popper" className="z-[10000] max-h-64">
                   <SelectItem value={ALL}>Không gán nhóm</SelectItem>
                   {groups.map((g) => (
@@ -193,11 +262,9 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
                 </SelectContent>
               </Select>
 
-              {/* Thêm nhóm nhanh */}
               <CreateSupplierGroupModal
-                triggerAs="button" // hoặc "icon" nếu bạn đã làm
+                triggerAs="button"
                 onSuccess={(newId) => {
-                  // chọn luôn nhóm vừa tạo
                   if (newId) set("supplierGroupId", newId);
                 }}
               />
@@ -207,6 +274,7 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
           <Field label="Ghi chú" className="col-span-2">
             <Input
               value={form.note ?? ""}
+              maxLength={255}
               onChange={(e) => set("note", e.target.value)}
             />
           </Field>
@@ -229,7 +297,12 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              onOpenChange(false);
+            }}
+          >
             Bỏ qua
           </Button>
           <Button onClick={handleSubmit} disabled={create.isPending}>
@@ -244,16 +317,27 @@ export default function AddSupplierModal({ open, onOpenChange }: Props) {
 function Field({
   label,
   children,
+  error,
+  required,
   className,
 }: {
   label: React.ReactNode;
   children: React.ReactNode;
+  error?: string;
+  required?: boolean;
   className?: string;
 }) {
+  const labelCls = ["text-[13px] flex items-center gap-0.5"];
+  if (error) labelCls.push("text-destructive");
+
   return (
     <div className={["space-y-1", className].filter(Boolean).join(" ")}>
-      <Label className="text-[13px]">{label}</Label>
+      <Label className={labelCls.join(" ")}>
+        {label}
+        {required && <span className="text-destructive">*</span>}
+      </Label>
       {children}
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
   );
 }
