@@ -74,11 +74,33 @@ export function useOrders() {
         const prevActive = prev[tid]?.activeId;
         const prevHasTab = prev[tid]?.orders?.some(t => t.id === prevActive);
         const activeId = prevHasTab ? prevActive : tabId;
+         const guestCount: number | null =
+          typeof o.guestCount === "number"
+            ? o.guestCount
+            : o.guest_count ?? null;
 
-        next[tid] = {
-          activeId,
-          orders: [{ id: tabId, label: "1", items }],
-        };
+        const rawCus = o.customer ?? o.customer_id ?? o.invoice?.customer;
+        const customer = rawCus
+          ? {
+              id: rawCus.id,
+              name: rawCus.name,
+              phone: rawCus.phone ?? null,
+            }
+          : null;
+
+       next[tid] = {
+  activeId,
+  orders: [
+    {
+      id: tabId,
+      label: "1",
+      items,
+      guestCount,
+      customer,
+    },
+  ],
+};
+
       }
 
       // cập nhật cả orderIds cho mutations
@@ -89,6 +111,21 @@ export function useOrders() {
 
 
   /* ----------------------- Mutations ----------------------- */
+  const updateMetaMu = useMutation({
+    mutationFn: async (arg: {
+      orderId: string;
+      guestCount?: number;
+      customerId?: string | null;
+    }) => {
+      const body: any = {};
+      if (arg.guestCount !== undefined) body.guestCount = arg.guestCount;
+      if (arg.customerId !== undefined) body.customerId = arg.customerId;
+
+      const res = await api.patch(`/orders/${arg.orderId}/meta`, body);
+      return res.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
+  });
 
   const createOrderMu = useMutation({
     mutationFn: async (payload: {
@@ -234,6 +271,17 @@ export function useOrders() {
     }
   }
 
+  async function setGuestCount(tableId: string, value: number) {
+    const oid = orderIds[tableId];
+    if (!oid) return toast.error("Chưa có đơn để set số khách");
+    await updateMetaMu.mutateAsync({ orderId: oid, guestCount: value });
+  }
+
+  async function setOrderCustomer(tableId: string, customerId: string | null) {
+    const oid = orderIds[tableId];
+    if (!oid) return toast.error("Chưa có đơn để chọn khách");
+    await updateMetaMu.mutateAsync({ orderId: oid, customerId });
+  }
 
 
   // Thêm nhiều món trong 1 lần báo (gom cùng batchId)
@@ -365,5 +413,7 @@ export function useOrders() {
     confirm,
     pay: payByCash,
     cancel,
+      setGuestCount,
+    setOrderCustomer,
   };
 }

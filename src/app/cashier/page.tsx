@@ -224,6 +224,10 @@ export default function POSPage() {
            kitchenVoids={M.kitchenVoids}
 
         
+             guestCount={M.guestCount}
+  customer={M.customer}
+  onChangeGuestCount={M.onChangeGuestCount}
+  onChangeCustomer={M.onChangeCustomer}
       
           onClearKitchenVoid={M.clearKitchenVoid}
   canNotify={M.canNotify && !M.notifying}
@@ -238,6 +242,7 @@ export default function POSPage() {
             catalog={M.menuCatalog}
             onSuccess={M.handleCheckoutSuccess}
             orderId={M.currentOrderId ?? null}
+
           />
         )}
 <CancelOneItemModal
