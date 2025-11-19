@@ -503,14 +503,22 @@ useEffect(() => {
 
 
 
- const onVoidedFromNewGateway = (p: {
+const onVoidedFromNewGateway = (p: {
   orderId: string;
   menuItemId: string;
   qty: number;
   reason?: string;
-  by?: "cashier" | "kitchen";
+  by?: string;
 }) => {
   console.log("[kitchen:void_synced] payload = ", p);
+
+  const by = p.by ?? "cashier";
+
+  // 🔥 Nếu chính bếp bấm "Hủy món" thì bỏ qua
+  // UI bếp đã được cập nhật bằng refetch trong voidFromKitchen()
+  if (by === "kitchen") {
+    return;
+  }
 
   const applyVoid = (
     setter: (updater: (prev: Ticket[]) => Ticket[]) => void
@@ -521,51 +529,34 @@ useEffect(() => {
       for (const t of prev) {
         const it = t.items[0];
 
-        // chỉ đụng tới ticket thuộc order + món này
         if (t.orderId === p.orderId && it?.menuItemId === p.menuItemId) {
           const originalQty = it.qty;
-          const cancelled = Math.min(originalQty, p.qty);  // phần bị hủy
-          const remain = originalQty - cancelled;          // phần còn lại
+          const cancelled = Math.min(originalQty, p.qty);
+          const remain = originalQty - cancelled;
 
           const voidTicketId = `${t.id}:void:${Date.now()}`;
 
-          // Ticket bị gạch (phiếu hủy)
           const voidTicket: Ticket = {
             ...t,
-            id: voidTicketId, // id riêng để không trùng React key
-            items: [
-              {
-                ...it,
-                qty: cancelled,
-              },
-            ],
+            id: voidTicketId,
+            items: [{ ...it, qty: cancelled }],
           };
           next.push(voidTicket);
 
-          // đánh dấu ticket này là void → TicketCard sẽ gạch đỏ
-          // (dùng Set<voidedIds> sẵn có)
           setVoidedIds((old) => {
             const s = new Set(old);
             s.add(voidTicketId);
             return s;
           });
 
-          // Ticket phần còn lại (nếu còn)
           if (remain > 0) {
             const remainTicket: Ticket = {
               ...t,
-              items: [
-                {
-                  ...it,
-                  qty: remain,
-                },
-              ],
+              items: [{ ...it, qty: remain }],
             };
             next.push(remainTicket);
           }
-
         } else {
-          // ticket khác giữ nguyên
           next.push(t);
         }
       }
@@ -574,16 +565,16 @@ useEffect(() => {
     });
   };
 
-  // áp dụng cho cả 3 cột
+  // ❗ Quan trọng: huỷ từ cashier/waiter CHỈ tác động tới PENDING/CONFIRMED
+  // nên chỉ apply cho listNew, KHÔNG động vào listCooking/listReady
   applyVoid(setListNew);
-  applyVoid(setListCooking);
-  applyVoid(setListReady);
 
-  const who = p.by === "kitchen" ? "Bếp" : "Thu ngân";
+  const who = by === "kitchen" ? "Bếp" : "Thu ngân";
   toast.error(`${who} đã hủy món`, {
     description: p.reason || undefined,
   });
 };
+
 
 
 

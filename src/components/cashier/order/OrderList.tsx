@@ -13,7 +13,6 @@ import { GuestCountModal } from "@/components/cashier/modals/GuestCountModal";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import type { UIOrderItem } from "@/lib/cashier/pos-helpers";
-import { useCashierStore } from "@/store/cashier";
 import AddCustomerModal from "@/components/admin/partner/customer/modal/AddCustomerModal";
 import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 import { useKitchenHistory } from "@/hooks/cashier/useKitchenHistory";
@@ -49,17 +48,18 @@ export function OrderList({
   onChangeQty,
   onCheckout,
   onNotify,
-  onClear,
-  orderTabs,
-  onAddOrder,
-  onSwitchOrder,
-  onCloseOrder,
   canCancel,
   onCancelOrder,
   canNotify,
   justChanged,
   kitchenVoids,
   onClearKitchenVoid,
+
+  // thêm các props 
+   guestCount,
+  customer,
+  onChangeGuestCount,
+  onChangeCustomer,
 }: {
   orderId?: string;
   table: Table | null;
@@ -80,6 +80,14 @@ export function OrderList({
   onCloseOrder?: (id: string) => void;
   kitchenVoids?: KitchenVoidsMap;
   onClearKitchenVoid?: (menuItemId: string) => void;
+  // them các hàm 
+   guestCount: number;
+  customer: { id: string; name: string; phone?: string | null } | null;
+  onChangeGuestCount: (value: number) => void | Promise<void>;
+  onChangeCustomer: (
+    c: { id: string; name: string; phone?: string | null }
+  ) => void | Promise<void>;
+
 }) {
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
   const tableName = table?.name ?? "Chưa chọn bàn";
@@ -92,18 +100,14 @@ export function OrderList({
   const [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const guestCount = useCashierStore((s) => s.guestCount);
-  const setGuestCount = useCashierStore((s) => s.setGuestCount);
-
-  const selectedCus = useCashierStore((s) => s.selectedCustomer);
-  const setSelectedCus = useCashierStore((s) => s.setSelectedCustomer);
-
+ 
+const selectedCus = customer;
   const [q, setQ] = useState("");
   const { data: results = [] } = useCustomer(q);
 
-  const handleSelectCustomer = (c: any) => {
+ const handleSelectCustomer = async (c: any) => {
     if (!orderId) return toast.error("Chưa có đơn để chọn khách.");
-    setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
+    await onChangeCustomer?.({ id: c.id, name: c.name, phone: c.phone });
     setQ("");
     toast.success("Đã chọn khách");
   };
@@ -219,8 +223,13 @@ const mergedWithPhantom = useMemo(() => {
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedCus(null);
+                onClick={async () => {
+                  // clear customer: truyền id rỗng, BE sẽ map thành null
+                  await onChangeCustomer?.({
+                    id: "",
+                    name: "",
+                    phone: null,
+                  });
                   setQ("");
                 }}
                 className="ml-auto grid h-7 w-7 place-items-center rounded-full hover:bg-slate-100"
@@ -364,9 +373,13 @@ const mergedWithPhantom = useMemo(() => {
       <AddCustomerModal
         open={openCustomerModal}
         onOpenChange={setOpenCustomerModal}
-        onCreated={(c) => {
+        onCreated={async (c) => {
           if (c?.id) {
-            setSelectedCus({ id: c.id, name: c.name, phone: c.phone });
+            await onChangeCustomer?.({
+              id: c.id,
+              name: c.name,
+              phone: c.phone,
+            });
             toast.success("Đã tạo & chọn khách");
           }
         }}
@@ -375,7 +388,9 @@ const mergedWithPhantom = useMemo(() => {
       <GuestCountModal
         open={guestModalOpen}
         onClose={() => setGuestModalOpen(false)}
-        onSubmit={(count) => setGuestCount(count)}
+        onSubmit={async (count) => {
+          await onChangeGuestCount(count);
+        }}
       />
 
       <NotifyHistoryDrawer

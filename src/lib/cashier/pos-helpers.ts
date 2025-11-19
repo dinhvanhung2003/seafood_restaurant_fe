@@ -1,21 +1,38 @@
 // src/lib/cashier/pos-helpers.ts
 import type { ItemStatus } from "@/types/types";
 
+export type CustomerLite = {
+  id: string;
+  name: string;
+  phone?: string | null;
+};
+
 export type UIOrderItem = {
   id: string;          // menuItemId
   qty: number;
   rowId?: string;      // orderItemId
   status?: ItemStatus;
   createAt?: string;
-    name?: string;
-  price?: number;    // đơn giá tại thời điểm order
+  name?: string;
+  price?: number;
   image?: string;
 };
 
+// 🔹 Tab của 1 order (meta nằm ở đây)
+export type UIOrderTab = {
+  id: string;
+  label: string;
+  items: UIOrderItem[];
+
+  guestCount?: number | null;
+  customer?: CustomerLite | null;
+};
+
 export type OrdersByTable = Record<
-  string,
-  { activeId: string; orders: { id: string; label: string; items: UIOrderItem[] }[] }
+  string, // tableId
+  { activeId: string; orders: UIOrderTab[] }
 >;
+
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 

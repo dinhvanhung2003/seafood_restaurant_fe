@@ -386,6 +386,31 @@ const wasSentToKitchen = (it: any) => cancellableQty(it.id) > 0;
   const hasOrder = !!(selectedTable && orderIds[selectedTable.id]);
 
 
+  const guestCount = currentOrderRow?.guestCount ?? 0;
+const customer =
+  currentOrderRow?.customer
+    ? {
+        id: currentOrderRow.customer.id,
+        name: currentOrderRow.customer.name,
+        phone: currentOrderRow.customer.phone ?? null,
+      }
+    : null;
+
+// hàm update meta order (giống mobile)
+const updateOrderMeta = async (body: { guestCount?: number; customerId?: string | null }) => {
+  if (!currentOrderId) return;
+  await api.patch(`/orders/${currentOrderId}/meta`, body);
+  await activeOrdersQuery.refetch(); // sync lại danh sách orders
+};
+
+const onChangeGuestCount = async (value: number) => {
+  await updateOrderMeta({ guestCount: value });
+};
+
+const onChangeCustomer = async (c: { id: string; name: string; phone?: string | null }) => {
+  await updateOrderMeta({ customerId: c.id });
+};
+
 
   // USINGGGGGGGGGGGGGGGGGGGGGGGGG
   const confirmCancelOne = async ({ qty, reason }: { qty: number; reason: string }) => {
@@ -623,7 +648,16 @@ useEffect(() => {
     const onChanged = (p: { orderId: string; tableId: string; reason: string }) => hit(p.orderId);
     const onMerged = (_: { toOrderId: string; fromOrderId: string }) => hit(currentOrderId);
     const onSplit = (_: { toOrderId: string; fromOrderId: string }) => hit(currentOrderId);
+  const onMetaUpdated = (p: {
+    orderId: string;
+    tableId: string;
+    guestCount: number | null;
+    customer: { id: string; name: string; phone?: string | null } | null;
+  }) => {
+    hit(p.orderId); // đơn giản là refetch lại active-orders
+  };
 
+  s.on("orders:meta_updated", onMetaUpdated);
     s.on("orders:changed", onChanged);
     s.on("orders:merged", onMerged);
     s.on("orders:split", onSplit);
@@ -637,6 +671,7 @@ useEffect(() => {
       s.off("orders:changed", onChanged);
       s.off("orders:merged", onMerged);
       s.off("orders:split", onSplit);
+      s.off("orders:meta_updated", onMetaUpdated);
     };
   }, [qc, currentOrderId]);
 
@@ -710,5 +745,12 @@ useEffect(() => {
        // kitchen voids cho UI
     clearKitchenVoid,
     clearAllKitchenVoids,
+
+
+    // guest count & customer
+    guestCount,
+    customer,
+    onChangeGuestCount,
+    onChangeCustomer,
   };
 }
