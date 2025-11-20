@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useDebounce } from "use-debounce";
 import { useMenuItemsQuery } from "@/hooks/admin/useMenu";
 export type MenuItemsQuery = {
@@ -18,6 +18,7 @@ import MenuFilters from "@/components/admin/product/menu/filter/MenuFilter";
 import MenuTable from "@/components/admin/product/menu/table/MenuTable";
 import MenuItemDetailDialog from "@/components/admin/product/menu/modal/MenuItemDetalDialog";
 import CreateMenuItemDialog from "@/components/admin/product/menu/modal/CreateMenuModal";
+import { useDeleteMenuItemMutation } from "@/hooks/admin/useMenu";
 
 export default function MenuItemsPage() {
   const [page, setPage] = useState(1);
@@ -26,30 +27,64 @@ export default function MenuItemsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search, 1000);
 
-  const [isAvailable, setIsAvailable] = useState<"all" | "true" | "false">("all");
+  const [isAvailable, setIsAvailable] = useState<"all" | "true" | "false">(
+    "all"
+  );
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [sortBy, setSortBy] = useState<MenuItemsQuery["sortBy"]>("name");
   const [order, setOrder] = useState<MenuItemsQuery["order"]>("ASC");
 
-  const params = useMemo<MenuItemsQuery>(() => ({
-    page,
-    limit,
-    search: debouncedSearch || undefined,
-    isAvailable: isAvailable === "all" ? undefined : isAvailable,
-    minPrice: minPrice === "" ? undefined : Number(minPrice),
-    maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
-    sortBy,
-    order,
-  }), [page, limit, debouncedSearch, isAvailable, minPrice, maxPrice, sortBy, order]);
+  const params = useMemo<MenuItemsQuery>(
+    () => ({
+      page,
+      limit,
+      search: debouncedSearch || undefined,
+      isAvailable: isAvailable === "all" ? undefined : isAvailable,
+      minPrice: minPrice === "" ? undefined : Number(minPrice),
+      maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
+      sortBy,
+      order,
+    }),
+    [
+      page,
+      limit,
+      debouncedSearch,
+      isAvailable,
+      minPrice,
+      maxPrice,
+      sortBy,
+      order,
+    ]
+  );
 
-  const { data, isLoading, isFetching, error, refetch, isPlaceholderData } = useMenuItemsQuery(params);
+  const { data, isLoading, isFetching, error, refetch, isPlaceholderData } =
+    useMenuItemsQuery(params);
   const body = data?.body;
 
-  const [detailId, setDetailId] = useState<string | undefined>(undefined);
+  // Pagination fallback: backend might return all items in a single page.
+  const allItems = body?.data ?? [];
+  const returnedAllInOne =
+    (body?.meta?.totalPages ?? 1) === 1 && allItems.length > limit;
+  const totalItems = body?.meta?.total ?? allItems.length;
+  const pages =
+    body?.meta?.totalPages ?? Math.max(1, Math.ceil(totalItems / limit));
+  const pageItems = returnedAllInOne
+    ? allItems.slice((page - 1) * limit, page * limit)
+    : allItems;
 
-  const pages = body?.meta.totalPages ?? 1;
-  const total = body?.meta.total ?? 0;
+  const [detailId, setDetailId] = useState<string | undefined>(undefined);
+  const del = useDeleteMenuItemMutation();
+
+  // Keep page in valid range if `pages` changes
+  useEffect(() => {
+    if (page > pages) setPage(pages);
+  }, [page, pages]);
+
+  // use derived values rather than values from response when necessary
+  // (re-declared above)
+  // const pages = body?.meta.totalPages ?? 1;
+  const total = totalItems;
 
   return (
     <div className="space-y-4">
@@ -71,9 +106,9 @@ export default function MenuItemsPage() {
       />
 
       <MenuTable
-        data={body?.data}
+        data={pageItems}
         total={total}
-        page={body?.meta.page ?? page}
+        page={Math.min(page, pages)}
         pages={pages}
         isLoading={isLoading}
         isFetching={isFetching}
@@ -83,6 +118,7 @@ export default function MenuItemsPage() {
         onNext={() => setPage((p) => Math.min(pages, p + 1))}
         onRefresh={() => refetch()}
         onOpenDetail={(id) => setDetailId(id)}
+        onDelete={(id) => del.mutate(id)}
         CreateButton={<CreateMenuItemDialog onCreated={() => refetch()} />}
       />
 

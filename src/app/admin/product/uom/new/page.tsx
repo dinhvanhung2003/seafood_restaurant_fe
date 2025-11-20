@@ -49,9 +49,13 @@ export default function CreateUomPage() {
       return;
     }
     setSubmitting(true);
-    createMut.mutate(form, {
-      onSettled: () => setSubmitting(false),
-    });
+    createMut.mutate(
+      {
+        ...form,
+        baseCode: form.code.toUpperCase(),
+      },
+      { onSettled: () => setSubmitting(false) }
+    );
   };
 
   return (
