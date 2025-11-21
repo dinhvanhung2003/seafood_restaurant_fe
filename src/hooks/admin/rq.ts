@@ -104,11 +104,28 @@ export function createRestHooks<TList, TItem, TListQuery = any, TCreateDto = any
           return (pick as (v: unknown) => unknown)(res.data);
         } catch (err) {
           const axErr = err as AxiosError<any>;
-          console.error("[rq] remove mutation failed", { url, method, args, message: axErr?.message });
-          if (axErr?.response) {
-            console.error("[rq] remove mutation response data:", axErr.response.data);
-            const remoteMsg = (axErr.response.data && (axErr.response.data.message || axErr.response.data)) || axErr.response.statusText;
-            throw new Error(`Remove mutation failed: ${remoteMsg}`);
+          const resp = axErr?.response?.data;
+          const remoteCode = resp?.message ?? resp?.errorMessage ?? (typeof resp === 'string' ? resp : undefined);
+          try {
+            console.warn(
+              "[rq] remove mutation failed",
+              JSON.stringify({ url, method, args, status: axErr?.response?.status, remote: resp, message: axErr?.message }, null, 2)
+            );
+          } catch (e) {
+            // fallback to raw log
+            console.warn("[rq] remove mutation failed", { url, method, args, status: axErr?.response?.status, remote: resp, message: axErr?.message });
+          }
+          try {
+            const ajson = (axErr as any)?.toJSON?.() ?? undefined;
+            if (ajson) console.debug("[rq] axios error:", JSON.stringify(ajson, null, 2));
+          } catch (e) {
+          }
+
+          if (remoteCode) {
+            const e = new Error(String(remoteCode));
+            (e as any).response = axErr.response;
+            (e as any).status = axErr.response?.status;
+            throw e;
           }
           throw err;
         }

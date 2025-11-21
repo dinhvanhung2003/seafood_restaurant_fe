@@ -11,10 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 
@@ -42,18 +51,15 @@ export default function CreateCategoryDialog({
     register,
     control,
     handleSubmit,
+
     reset,
     formState: { errors },
   } = useForm<FormValues>({
-    defaultValues: { name: "", description: "", type: defaultType, sortOrder: 0 },
+    defaultValues: { name: "", description: "", type: defaultType },
     mode: "onTouched",
   });
 
-  const {
-    mutate,
-    isPending,
-    error,
-  } = useCreateCategoryMutation();
+  const { mutate, isPending, error } = useCreateCategoryMutation();
 
   const onSubmit = handleSubmit((values) =>
     mutate(values, {
@@ -61,7 +67,10 @@ export default function CreateCategoryDialog({
         setOpen(false);
         reset();
         // Invalidate toàn bộ list categories
-        queryClient.invalidateQueries({ queryKey: ["categories"], exact: false });
+        queryClient.invalidateQueries({
+          queryKey: ["categories"],
+          exact: false,
+        });
         onCreated?.();
       },
     })
@@ -90,12 +99,17 @@ export default function CreateCategoryDialog({
                 minLength: { value: 2, message: "Tên quá ngắn" },
               })}
             />
-            {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
+            {errors.name && (
+              <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+            )}
           </div>
 
           <div>
             <Label>Mô tả</Label>
-            <Textarea placeholder="Nhóm các món hải sản" {...register("description")} />
+            <Textarea
+              placeholder="Nhóm các món hải sản"
+              {...register("description")}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -106,35 +120,47 @@ export default function CreateCategoryDialog({
                 name="type"
                 rules={{ required: "Vui lòng chọn loại" }}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={(v) => field.onChange(v as FormValues["type"])}>
+                  <Select
+                    value={field.value}
+                    onValueChange={(v) =>
+                      field.onChange(v as FormValues["type"])
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn loại" />
                     </SelectTrigger>
                     <SelectContent>
                       {TYPE_OPTIONS.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {errors.type && <p className="text-sm text-red-500 mt-1">{errors.type.message as string}</p>}
+              {errors.type && (
+                <p className="text-sm text-red-500 mt-1">
+                  {errors.type.message as string}
+                </p>
+              )}
             </div>
 
-            <div>
-              <Label>Thứ tự</Label>
-              <Input
-                type="number"
-                {...register("sortOrder", { valueAsNumber: true, min: { value: 0, message: ">= 0" } })}
-              />
-              {errors.sortOrder && <p className="text-sm text-red-500 mt-1">{errors.sortOrder.message}</p>}
-            </div>
+            {/* Thứ tự removed per request */}
           </div>
 
-          {error && <p className="text-sm text-red-500">{(error as Error).message || "Có lỗi xảy ra"}</p>}
+          {error && (
+            <p className="text-sm text-red-500">
+              {(error as Error).message || "Có lỗi xảy ra"}
+            </p>
+          )}
 
           <DialogFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
               Hủy
             </Button>
             <Button type="submit" disabled={isPending}>
