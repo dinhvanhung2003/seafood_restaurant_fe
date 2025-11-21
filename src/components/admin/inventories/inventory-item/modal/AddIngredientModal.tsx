@@ -65,6 +65,7 @@ export default function AddIngredientModal({
     limit: 10,
     sortBy: "code",
     sortDir: "ASC",
+    isActive: true,
   });
   const { data: catList } = useCategoriesQuery({
     type: "INGREDIENT",

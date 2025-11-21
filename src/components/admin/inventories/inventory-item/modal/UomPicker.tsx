@@ -16,7 +16,10 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useUomsQuery } from "@/hooks/admin/useUnitsOfMeasure";
+import {
+  useUomsQuery,
+  useUomDetailQuery,
+} from "@/hooks/admin/useUnitsOfMeasure";
 import { ChevronDown, History } from "lucide-react";
 
 type Props = {
@@ -32,8 +35,26 @@ export function UomPicker({ value, onChange }: Props) {
     limit: 500,
     sortBy: "code",
     sortDir: "ASC",
+    isActive: true,
   });
   const all = data?.data || [];
+  // if a selected value is inactive and not in the active list, fetch it individually
+  const selectedDetail = useUomDetailQuery(
+    value ? { code: value } : (undefined as any),
+    {
+      enabled: Boolean(value && !all.some((u) => u.code === value)),
+    }
+  );
+  const listAll = React.useMemo(() => {
+    const list = [...all];
+    if (
+      selectedDetail?.data &&
+      !list.some((u) => u.code === selectedDetail.data.code)
+    ) {
+      list.push(selectedDetail.data);
+    }
+    return list;
+  }, [all, selectedDetail?.data]);
   const [open, setOpen] = React.useState(false);
   const [recent, setRecent] = React.useState<string[]>([]);
 
@@ -54,15 +75,16 @@ export function UomPicker({ value, onChange }: Props) {
     });
   };
 
-  const current = all.find((u) => u.code === value);
+  const current =
+    listAll.find((u) => u.code === value) || all.find((u) => u.code === value);
 
   // Nhóm theo dimension để dễ đọc
-  const groups: Record<string, typeof all> = {
+  const groups: Record<string, typeof listAll> = {
     count: [],
     mass: [],
     volume: [],
   };
-  all.forEach((u) => groups[u.dimension].push(u));
+  listAll.forEach((u) => groups[u.dimension].push(u));
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -92,7 +114,7 @@ export function UomPicker({ value, onChange }: Props) {
             {recent.length > 0 && (
               <CommandGroup heading="Gần đây">
                 {recent
-                  .map((code) => all.find((u) => u.code === code))
+                  .map((code) => listAll.find((u) => u.code === code))
                   .filter(Boolean)
                   .map((u) => (
                     <CommandItem

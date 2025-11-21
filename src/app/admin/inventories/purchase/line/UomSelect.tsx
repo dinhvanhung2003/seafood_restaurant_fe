@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useMemo } from "react";
-import { useItemUOMs } from "@/hooks/admin/useUom.ts";
+import { useItemUOMs } from "@/hooks/admin/useUom";
 
 export default function UomSelect({
   itemId,

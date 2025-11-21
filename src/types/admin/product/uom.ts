@@ -1,10 +1,13 @@
 // types/uom.ts
 export type UnitOfMeasure = {
-    code: string;        // e.g. "G", "KG", "CAN"
-    name: string;        // e.g. "Gram", "Kilogram"
-    dimension: "count" | "mass" | "volume"; // logical dimension
-    createdAt?: string;  // optional ISO string (if BE provides)
-    updatedAt?: string;  // optional ISO string
+    code: string;
+    name: string;
+    dimension: "mass" | "volume" | "count" | "length";
+    baseCode?: string | null;
+    // human-friendly name of the base unit
+    baseName?: string | null;
+    // whether this uom is active
+    isActive?: boolean;
 };
 
 export type UnitOfMeasureListResponse = {
@@ -23,12 +26,15 @@ export type UnitOfMeasureQuery = {
     // Sorting
     sortBy?: "code" | "name" | "dimension";
     sortDir?: "ASC" | "DESC";
+    // Filter by active state
+    isActive?: boolean;
 };
 
 export type CreateUomPayload = {
     code: string;
     name: string;
-    dimension: UnitOfMeasure["dimension"];
+    dimension: "mass" | "volume" | "count" | "length";
+    baseCode?: string | null;
 };
 
 export type UpdateUomPayload = Partial<CreateUomPayload>;

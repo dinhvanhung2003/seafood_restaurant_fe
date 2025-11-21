@@ -9,16 +9,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
-  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import CreateCategoryDialog from "@/components/admin/product/category/modal/CreateCategory";
+import EditCategoryDialog from "@/components/admin/product/category/modal/EditCategory";
 
-import { useCategoriesQuery } from "@/hooks/admin/useCategory";
+import {
+  useCategoriesQuery,
+  useRemoveCategoryMutation,
+} from "@/hooks/admin/useCategory";
+import { useToast } from "@/components/ui/use-toast";
+import mapServerError from "@/lib/mapServerError";
 import type { CategoryQuery } from "@/types/admin/product/category";
 
 export default function CategoryListPage() {
@@ -27,24 +42,40 @@ export default function CategoryListPage() {
   const [isActive, setIsActive] = useState<"all" | "true" | "false">("all");
   const [q, setQ] = useState("");
   const [debouncedQ] = useDebounce(q, 400);
-  useEffect(() => { setPage(1); }, [debouncedQ]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQ]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [sort, setSort] = useState("createdAt:DESC");
 
-  const apiParams = useMemo<CategoryQuery>(() => ({
-    type: type !== "all" ? type : undefined,
-    isActive: isActive !== "all" ? isActive : undefined,
-    q: debouncedQ || undefined,
-    page,
-    limit,
-    sort,
-  }), [type, isActive, debouncedQ, page, limit, sort]);
+  const apiParams = useMemo<CategoryQuery>(
+    () => ({
+      type: type !== "all" ? type : undefined,
+      isActive: isActive !== "all" ? isActive : undefined,
+      q: debouncedQ || undefined,
+      page,
+      limit,
+      sort,
+    }),
+    [type, isActive, debouncedQ, page, limit, sort]
+  );
 
-  const { data, isLoading, isFetching, refetch, error } = useCategoriesQuery(apiParams);
+  const { data, isLoading, isFetching, refetch, error } =
+    useCategoriesQuery(apiParams);
+  const remove = useRemoveCategoryMutation();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const pages = data?.meta.pages ?? 1;
   const total = data?.meta.total ?? 0;
+
+  // Ensure page size is fixed to 10 as requested
+  useEffect(() => {
+    setLimit(10);
+  }, []);
+
+  const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1);
 
   return (
     <div className="space-y-4">
@@ -57,8 +88,15 @@ export default function CategoryListPage() {
             defaultType="MENU"
             onCreated={() => refetch()}
           />
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+            />
             Làm mới
           </Button>
         </div>
@@ -68,13 +106,25 @@ export default function CategoryListPage() {
       <Card className="p-4 grid gap-4 md:grid-cols-5">
         <div className="md:col-span-2">
           <Label>Tìm kiếm</Label>
-          <Input placeholder="Tên hoặc mô tả" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input
+            placeholder="Tên hoặc mô tả"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
 
         <div>
           <Label>Loại</Label>
-          <Select value={type} onValueChange={(v) => { setPage(1); setType(v as any); }}>
-            <SelectTrigger><SelectValue placeholder="--" /></SelectTrigger>
+          <Select
+            value={type}
+            onValueChange={(v) => {
+              setPage(1);
+              setType(v as any);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="--" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="MENU">MENU</SelectItem>
@@ -85,8 +135,16 @@ export default function CategoryListPage() {
 
         <div>
           <Label>Trạng thái</Label>
-          <Select value={isActive} onValueChange={(v) => { setPage(1); setIsActive(v as any); }}>
-            <SelectTrigger><SelectValue placeholder="Tất cả" /></SelectTrigger>
+          <Select
+            value={isActive}
+            onValueChange={(v) => {
+              setPage(1);
+              setIsActive(v as any);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Tất cả" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="true">Đang dùng</SelectItem>
@@ -97,8 +155,16 @@ export default function CategoryListPage() {
 
         <div>
           <Label>Sắp xếp</Label>
-          <Select value={sort} onValueChange={(v) => { setPage(1); setSort(v); }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={sort}
+            onValueChange={(v) => {
+              setPage(1);
+              setSort(v);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="createdAt:DESC">Mới nhất</SelectItem>
               <SelectItem value="createdAt:ASC">Cũ nhất</SelectItem>
@@ -110,100 +176,297 @@ export default function CategoryListPage() {
           </Select>
         </div>
 
-        <div>
-          <Label>Hiển thị</Label>
-          <Select value={String(limit)} onValueChange={(v) => { setPage(1); setLimit(Number(v)); }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {[5, 10, 20, 50].map((n) => (
-                <SelectItem key={n} value={String(n)}>{n}/trang</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Hiển thị removed per request */}
       </Card>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead className="w-[42%]">Tên</TableHead>
-              <TableHead className="w-[18%]">Loại</TableHead>
-              <TableHead className="w-[14%]">Trạng thái</TableHead>
-              <TableHead className="w-[12%]">Thứ tự</TableHead>
-              <TableHead className="w-[14%]">Tạo lúc</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center">Đang tải…</TableCell>
+      {/* Table (desktop) + Card list (mobile) */}
+      <div className="relative">
+        <Card className="hidden md:block overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gradient-to-r from-slate-50 to-white">
+                <TableHead className="w-[44%]">Tên</TableHead>
+                <TableHead className="w-[18%]">Loại</TableHead>
+                <TableHead className="w-[18%]">Trạng thái</TableHead>
+                <TableHead className="w-[14%]">Tạo lúc</TableHead>
+                <TableHead className="w-[6%]">Hành động</TableHead>
               </TableRow>
-            ) : error ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-red-500">
-                  {(error as Error).message || "Có lỗi xảy ra"}
-                </TableCell>
-              </TableRow>
-            ) : (data?.data?.length ?? 0) === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
-                  Không có dữ liệu
-                </TableCell>
-              </TableRow>
-            ) : (
-              data!.data.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <div className="font-medium">{c.name}</div>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center">
+                    Đang tải…
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="py-10 text-center text-red-500"
+                  >
+                    {(error as Error).message || "Có lỗi xảy ra"}
+                  </TableCell>
+                </TableRow>
+              ) : (data?.data?.length ?? 0) === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="py-10 text-center text-muted-foreground"
+                  >
+                    Không có dữ liệu
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data!.data.map((c) => (
+                  <TableRow key={c.id} className="hover:bg-slate-50">
+                    <TableCell>
+                      <div className="font-medium text-slate-800">{c.name}</div>
+                      {c.description && (
+                        <div className="text-sm text-muted-foreground line-clamp-1">
+                          {c.description}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                          c.type === "MENU"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {c.type}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {c.isActive ? (
+                        <Badge className="bg-emerald-500 text-white">
+                          Đang dùng
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-300 text-gray-800">Ẩn</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(c.createdAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end">
+                        <div className="flex items-center gap-2">
+                          <EditCategoryDialog
+                            category={c}
+                            onUpdated={() => refetch()}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600"
+                            disabled={deletingId === c.id}
+                            title={deletingId === c.id ? "Đang xóa..." : "Xóa"}
+                            onClick={() => {
+                              if (!confirm(`Xóa danh mục "${c.name}"?`)) return;
+                              setDeletingId(c.id);
+                              remove.mutate(
+                                { id: c.id },
+                                {
+                                  onSuccess: () => {
+                                    toast({
+                                      title: "Xóa thành công",
+                                    });
+                                    refetch();
+                                    setDeletingId(null);
+                                  },
+                                  onError: (err: any) => {
+                                    const { message } = mapServerError(err);
+                                    const box = (
+                                      <div className="rounded-md bg-red-50 border border-red-100 p-2">
+                                        <div className="text-sm font-medium text-red-800">
+                                          {message}
+                                        </div>
+                                      </div>
+                                    );
+                                    toast({
+                                      title: "Không thể xóa",
+                                      description: box,
+                                    });
+                                    setDeletingId(null);
+                                  },
+                                  // --------------------
+                                }
+                              );
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+
+        {/* Mobile: stacked cards */}
+        <div className="md:hidden space-y-3">
+          {isLoading ? (
+            <div className="py-6 text-center">Đang tải…</div>
+          ) : error ? (
+            <div className="py-6 text-center text-red-500">
+              {(error as Error).message || "Có lỗi xảy ra"}
+            </div>
+          ) : (data?.data?.length ?? 0) === 0 ? (
+            <div className="py-6 text-center text-muted-foreground">
+              Không có dữ liệu
+            </div>
+          ) : (
+            data!.data.map((c) => (
+              <Card key={c.id} className="p-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-medium text-slate-800">{c.name}</div>
                     {c.description && (
-                      <div className="text-sm text-muted-foreground line-clamp-1">
+                      <div className="text-sm text-muted-foreground mt-1">
                         {c.description}
                       </div>
                     )}
-                  </TableCell>
-                  <TableCell className="uppercase">{c.type}</TableCell>
-                  <TableCell>
-                    {c.isActive ? (
-                      <Badge className="bg-emerald-600 hover:bg-emerald-700">Đang dùng</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-200">
-                        Ẩn
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>{c.sortOrder}</TableCell>
-                  <TableCell>{new Date(c.createdAt).toLocaleString()}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <div>
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                          c.type === "MENU"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {c.type}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <EditCategoryDialog
+                        category={c}
+                        onUpdated={() => refetch()}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        disabled={deletingId === c.id}
+                        title={deletingId === c.id ? "Đang xóa..." : "Xóa"}
+                        onClick={() => {
+                          if (!confirm(`Xóa danh mục "${c.name}"?`)) return;
+                          setDeletingId(c.id);
+                          remove.mutate(
+                            { id: c.id },
+                            {
+                              onSuccess: () => {
+                                toast({ title: "Xóa thành công" });
+                                refetch();
+                                setDeletingId(null);
+                              },
+                              onError: (err: any) => {
+                                const { message } = mapServerError(err);
+                                const box = (
+                                  <div className="rounded-md bg-red-50 border border-red-100 p-2">
+                                    <div className="text-sm font-medium text-red-800">
+                                      {message}
+                                    </div>
+                                  </div>
+                                );
+                                toast({
+                                  title: "Lỗi khi xóa",
+                                  description: box,
+                                });
+                                setDeletingId(null);
+                              },
+                            }
+                          );
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div>
+                      {c.isActive ? (
+                        <Badge className="bg-emerald-500 text-white">
+                          Đang dùng
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-300 text-gray-800">Ẩn</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground mt-3">
+                  Tạo lúc: {new Date(c.createdAt).toLocaleString()}
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Loading overlay when fetching (e.g., after changing filters) */}
+        {isFetching && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center">
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm" />
+            <div className="relative flex items-center gap-2 rounded px-4 py-2 bg-white/80 shadow">
+              <RefreshCw className="h-5 w-5 animate-spin text-slate-700" />
+              <span className="text-sm text-slate-700">Đang tải…</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="text-sm text-muted-foreground">
           Tổng {total} mục · Trang {page}/{pages}
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1 || isFetching}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" /> Trước
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            disabled={page >= pages || isFetching}
-          >
-            Sau <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-muted-foreground hidden sm:block">
+            1 trang = 10 mục
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || isFetching}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+            </Button>
+
+            <div className="hidden sm:flex items-center gap-1">
+              {pageNumbers.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  disabled={isFetching}
+                  className={`px-2 py-1 rounded text-sm ${
+                    n === page
+                      ? "bg-slate-800 text-white"
+                      : "bg-transparent text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(pages, p + 1))}
+              disabled={page >= pages || isFetching}
+            >
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
