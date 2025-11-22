@@ -105,21 +105,21 @@ export default function AdminChatPanelSimple() {
     variant="outline"
     onClick={() => setInput((prev) => `/rag ${prev}`)}
   >
-    RAG
+    Tài liệu quy định
   </Button>
 
   <Button
     variant="outline"
     onClick={() => setInput((prev) => `/sql ${prev}`)}
   >
-    SQL
+    Dữ liệu thật
   </Button>
 
   <Button
     variant="outline"
     onClick={() => setInput((prev) => `/gemini ${prev}`)}
   >
-    Gemini
+    Chat AI
   </Button>
 </div>
 

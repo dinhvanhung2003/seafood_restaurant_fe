@@ -85,7 +85,7 @@ export function OrderList({
   customer: { id: string; name: string; phone?: string | null } | null;
   onChangeGuestCount: (value: number) => void | Promise<void>;
   onChangeCustomer: (
-    c: { id: string; name: string; phone?: string | null }
+    c: { id: string; name: string; phone?: string | null } | null
   ) => void | Promise<void>;
 
 }) {
@@ -225,11 +225,7 @@ const mergedWithPhantom = useMemo(() => {
                 type="button"
                 onClick={async () => {
                   // clear customer: truyền id rỗng, BE sẽ map thành null
-                  await onChangeCustomer?.({
-                    id: "",
-                    name: "",
-                    phone: null,
-                  });
+                   await onChangeCustomer?.(null);
                   setQ("");
                 }}
                 className="ml-auto grid h-7 w-7 place-items-center rounded-full hover:bg-slate-100"

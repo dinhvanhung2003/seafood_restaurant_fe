@@ -9,6 +9,7 @@ import StaffTable from "@/components/admin/employee/table/StaffTable";
 import UserProfileDialog from "@/components/admin/employee/modal/UserProfileDialog";
 import CreateEmployeeDialog from "@/components/admin/employee/modal/CreateEmployeeDialog";
 import SalarySettingDialog from "@/components/admin/employee/salary/modal/SalarySettingDialog";
+import FaceEnrollDialog from "@/components/admin/employee/modal/FaceEnrollDialog";
 
 export default function StaffPage() {
   const [page, setPage] = useState(1);
@@ -24,6 +25,11 @@ export default function StaffPage() {
   // salary dialog
   const [openSalary, setOpenSalary] = useState(false);
   const [salaryUserId, setSalaryUserId] = useState<string | undefined>();
+
+  // face dialog
+  const [openFace, setOpenFace] = useState(false);
+  const [faceUserId, setFaceUserId] = useState<string | undefined>();
+  const [faceUserName, setFaceUserName] = useState<string | undefined>();
 
   const canPrev = meta.page > 1;
   const canNext = meta.page < meta.pages;
@@ -74,6 +80,11 @@ export default function StaffPage() {
             setSalaryUserId(id);
             setOpenSalary(true);
           }}
+           onOpenFace={(id, name) => {
+            setFaceUserId(id);
+            setFaceUserName(name);
+            setOpenFace(true);
+          }}
         />
       </Card>
 
@@ -117,6 +128,19 @@ export default function StaffPage() {
         onOpenChange={(v) => {
           setOpenSalary(v);
           if (!v) setSalaryUserId(undefined);
+        }}
+      />
+        {/* 👇 Dialog camera khuôn mặt */}
+      <FaceEnrollDialog
+        userId={faceUserId}
+        userName={faceUserName}
+        open={openFace}
+        onOpenChange={(v) => {
+          setOpenFace(v);
+          if (!v) {
+            setFaceUserId(undefined);
+            setFaceUserName(undefined);
+          }
         }}
       />
     </div>
