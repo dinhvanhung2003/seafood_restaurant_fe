@@ -78,13 +78,20 @@ export function UomPicker({ value, onChange }: Props) {
   const current =
     listAll.find((u) => u.code === value) || all.find((u) => u.code === value);
 
-  // Nhóm theo dimension để dễ đọc
+  // Nhóm theo dimension để dễ đọc. Một số records có thể thiếu hoặc trả giá trị lạ;
+  // tạo nhóm 'other' để chứa các giá trị không khớp.
   const groups: Record<string, typeof listAll> = {
     count: [],
     mass: [],
     volume: [],
+    other: [],
   };
-  listAll.forEach((u) => groups[u.dimension].push(u));
+
+  listAll.forEach((u) => {
+    const dim = (u?.dimension ?? "other") as string;
+    if (!groups[dim]) groups[dim] = [];
+    groups[dim].push(u);
+  });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

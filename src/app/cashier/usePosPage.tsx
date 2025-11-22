@@ -407,8 +407,8 @@ const onChangeGuestCount = async (value: number) => {
   await updateOrderMeta({ guestCount: value });
 };
 
-const onChangeCustomer = async (c: { id: string; name: string; phone?: string | null }) => {
-  await updateOrderMeta({ customerId: c.id });
+const onChangeCustomer = async (c: { id: string; name: string; phone?: string | null } |null) => {
+  await updateOrderMeta({ customerId: c?.id ?? null });
 };
 
 

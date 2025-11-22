@@ -71,14 +71,8 @@ export function UomCreateDialog({ onCreated }: Props) {
     );
   }, [listData, form.dimension]);
 
-  // Các đơn vị cơ sở cùng dimension (baseCode === code)
-  const baseCandidates = useMemo(
-    () => sameDimensionUoms.filter((u) => u.baseCode === u.code),
-    [sameDimensionUoms]
-  );
-
   // Có ít nhất 1 base UOM trong dimension này chưa?
-  const hasBaseInDimension = baseCandidates.length > 0;
+  const hasBaseInDimension = sameDimensionUoms.length > 0;
 
   const createUomMut = useCreateUomMutation({
     onError: (e: any) => {
@@ -379,7 +373,7 @@ export function UomCreateDialog({ onCreated }: Props) {
                     <SelectValue placeholder="Chọn đơn vị cơ sở" />
                   </SelectTrigger>
                   <SelectContent>
-                    {baseCandidates.map((u) => (
+                    {sameDimensionUoms.map((u) => (
                       <SelectItem key={u.code} value={u.code}>
                         {u.code} · {u.name}
                       </SelectItem>

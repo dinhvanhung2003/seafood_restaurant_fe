@@ -10,6 +10,10 @@ import {
 } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
+import {
+  getFriendlyMessageFromError,
+  mapBackendCodeToVI,
+} from "@/lib/errorMap";
 
 /* ================= Types ================= */
 
@@ -107,7 +111,9 @@ const fdUpdate = (p: UpdateComboDto) => {
 };
 
 /* ================= LIST ================= */
-export function useCombosQuery(params: ComboListQuery = { page: 1, limit: 10 }) {
+export function useCombosQuery(
+  params: ComboListQuery = { page: 1, limit: 10 }
+) {
   const page = clamp(params.page, 1, 1e9);
   const limit = clamp(params.limit, 1, 100);
   const search = params.search?.trim() || undefined;
@@ -153,7 +159,9 @@ export function useComboDetailQuery(id?: string) {
   const q = useQuery<ComboDetail>({
     queryKey: ["combo", id],
     queryFn: async () => {
-      const { data } = await api.get<ComboDetail>(`/menucomboitem/getinfo/${id}`);
+      const { data } = await api.get<ComboDetail>(
+        `/menucomboitem/getinfo/${id}`
+      );
       return data; // có components
     },
     enabled,
@@ -219,30 +227,43 @@ export function useUpdateComboMutation() {
           fdUpdate(data),
           { headers: { "Content-Type": "multipart/form-data" } }
         );
+        const maybe = (res as any)?.data;
+        if (
+          maybe &&
+          typeof maybe.success !== "undefined" &&
+          maybe.success === false
+        ) {
+          throw { response: { data: maybe } };
+        }
         return res.data;
       }
       const res = await api.patch<ComboDetail>(`/menucomboitem/${id}`, data);
+      const maybe = (res as any)?.data;
+      if (
+        maybe &&
+        typeof maybe.success !== "undefined" &&
+        maybe.success === false
+      ) {
+        throw { response: { data: maybe } };
+      }
       return res.data;
     },
     onMutate: () => ({ tid: toast.loading("Đang lưu combo…") }),
     onSuccess: (data, vars, ctx) => {
       if (ctx?.tid) toast.dismiss(ctx.tid);
 
-      const patched =
-        data.image
-          ? {
-              ...data,
-              image:
-                data.image +
-                (data.image.includes("?") ? "&" : "?") +
-                "v=" +
-                Date.now(),
-            }
-          : data;
+      const patched = data.image
+        ? {
+            ...data,
+            image:
+              data.image +
+              (data.image.includes("?") ? "&" : "?") +
+              "v=" +
+              Date.now(),
+          }
+        : data;
 
-      const id = ("id" in vars ? vars.id : vars.args?.id) as
-        | string
-        | undefined;
+      const id = ("id" in vars ? vars.id : vars.args?.id) as string | undefined;
       if (id && isUUID(id)) {
         qc.setQueryData(["combo", id], patched);
       }
@@ -252,7 +273,7 @@ export function useUpdateComboMutation() {
     },
     onError: (e, _v, ctx) => {
       if (ctx?.tid) toast.dismiss(ctx.tid);
-      toast.error("Cập nhật combo thất bại", { description: errMsg(e) });
+      qc.invalidateQueries({ queryKey: ["combos"] });
     },
   });
 }
@@ -262,8 +283,18 @@ export function useDeleteComboMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/menucomboitem/delete/${id}`);
-      return id;
+      // Inspect response body because backend may return codes like COMBO_HIDDEN or COMBO_DELETED
+      const res = await api.delete(`/menucomboitem/delete/${id}`);
+      const maybe = (res as any)?.data;
+      if (
+        maybe &&
+        typeof maybe.success !== "undefined" &&
+        maybe.success === false
+      ) {
+        // bubble up structured error
+        throw { response: { data: maybe } };
+      }
+      return { id, resData: maybe } as any;
     },
     onMutate: (id) => {
       const tid = toast.loading("Đang xoá combo…");
@@ -283,14 +314,49 @@ export function useDeleteComboMutation() {
       }
       return { tid };
     },
-    onSuccess: (_id, _v, ctx) => {
+    onSuccess: (result, _v, ctx) => {
       if (ctx?.tid) toast.dismiss(ctx.tid);
-      toast.success("Đã xoá combo");
+      // result may be { id, resData }
+      const resData = result?.resData ?? null;
+      // try multiple places where backend may put the code/message
+      const codeCandidate =
+        resData?.message ??
+        resData?.code ??
+        resData?.data?.message ??
+        resData?.data?.code ??
+        null;
+
+      const friendly = mapBackendCodeToVI(codeCandidate);
+
+      if (friendly) {
+        // mapped success message
+        if (codeCandidate === "COMBO_HIDDEN") {
+          toast.success("Đã ẩn combo", { description: friendly });
+        } else if (codeCandidate === "COMBO_DELETED") {
+          toast.success("Đã xoá combo", { description: friendly });
+        } else {
+          // generic mapped message
+          toast.success("Hoàn tất", { description: friendly });
+        }
+      } else if (codeCandidate) {
+        // backend returned some code/message we don't know → show a readable fallback (but avoid raw machine codes)
+        const text =
+          typeof codeCandidate === "string" &&
+          !/^[A-Z0-9_]+$/.test(codeCandidate)
+            ? codeCandidate
+            : "Đã xoá combo";
+        toast.success("Đã xoá combo", { description: text });
+      } else {
+        // no candidate → assume deleted
+        toast.success("Đã xoá combo");
+      }
+
       qc.invalidateQueries({ queryKey: ["combos"] });
     },
-    onError: (e, _id, ctx) => {
+    onError: (e: any, _id, ctx) => {
       if (ctx?.tid) toast.dismiss(ctx.tid);
-      toast.error("Xoá combo thất bại", { description: errMsg(e) });
+      const desc = getFriendlyMessageFromError(e);
+      toast.error("Xoá combo thất bại", { description: desc });
       qc.invalidateQueries({ queryKey: ["combos"] });
     },
   });

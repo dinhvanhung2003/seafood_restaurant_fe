@@ -16,12 +16,13 @@ type Row = {
 };
 
 export default function StaffTable({
-  rows, isLoading, onOpenProfile,onOpenSalary,
+  rows, isLoading, onOpenProfile,onOpenSalary, onOpenFace
 }: {
   rows: Row[];
   isLoading: boolean;
   onOpenProfile: (userId: string) => void;
   onOpenSalary: (userId: string) => void;
+    onOpenFace: (userId: string, fullName: string) => void;
 }) {
   return (
     <Table>
@@ -32,7 +33,8 @@ export default function StaffTable({
           <TableHead>Username</TableHead>
           <TableHead>SĐT</TableHead>
           <TableHead>Vai trò</TableHead>
-          <TableHead>Hồ sơ</TableHead>
+          <TableHead>Hồ sơ </TableHead>
+         
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -58,6 +60,12 @@ export default function StaffTable({
   >
     Thiết lập lương
   </Button>
+    <Button
+                    size="sm"
+                    onClick={() => onOpenFace(r.id, r.fullName)}
+                  >
+                    Khuôn mặt
+                  </Button>
               </TableCell>
             </TableRow>
           ))

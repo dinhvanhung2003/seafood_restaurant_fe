@@ -76,7 +76,6 @@ const NAV: NavItem[] = [
       },
     ],
   },
-  { label: "Bán Online", href: "/admin/ban-online", icon: ShoppingCart },
   {
     label: "Kho hàng",
     href: "/admin/kho-hang",
