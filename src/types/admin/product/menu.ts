@@ -11,6 +11,11 @@ export type MenuItem = {
     quantity: string;
     note: string | null;
     inventoryItem?: { id: string; name: string; unit?: string } | null;
+    selectedQty: string;
+    selectedUom: {
+      code: string;
+      name: string;
+    } | null;
   }>;
   isCombo?: boolean;
   components?: Array<{ id: string; quantity: number; item?: { id: string; name: string }; note?: string | null }>;
