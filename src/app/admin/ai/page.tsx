@@ -33,41 +33,63 @@ export default function AdminChatPanelSimple() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [extra, setExtra] = useState<ExtraData>(undefined);
+  const [suggestions, setSuggestions] = useState<string[]>([
+    "Tôi là nhân viên phục vụ",
+    "Tôi là thu ngân",
+    "Tôi là bếp",
+    "Tôi là quản lý",
+    "Cho tôi xem quy định chung của nhà hàng",
+  ]);
 
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
-  async function send(text: string) {
-    const q = text.trim();
-    if (!q || loading) return;
+ async function send(text: string) {
+  const q = text.trim();
+  if (!q || loading) return;
 
-    setLoading(true);
-    setExtra(undefined);
+  setLoading(true);
+  setExtra(undefined);
 
-    const next = [...messages, { role: "user" as const, content: q }];
-    setMessages(next);
-    setInput("");
+  const next = [...messages, { role: "user" as const, content: q }];
+  setMessages(next);
+  setInput("");
 
-    try {
-      const res = await api.post("/api/ai/chat", {
-        messages: next.map(({ role, content }) => ({ role, content })),
-      });
-      const role = (res.data?.role as UiMessage["role"]) ?? "assistant";
-      const content = typeof res.data?.content === "string" ? res.data.content : JSON.stringify(res.data);
-      setMessages((m) => [...m, { role, content }]);
+  try {
+    const res = await api.post("/api/ai/chat", {
+      messages: next.map(({ role, content }) => ({ role, content })),
+    });
 
-      const data: ExtraData = res.data?.data;
-      setExtra(data);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? "Lỗi không xác định";
-      setMessages((m) => [...m, { role: "assistant", content: `Đã có lỗi khi gọi API: ${msg}` }]);
-    } finally {
-      setLoading(false);
-      inputRef.current?.focus();
+    const role = (res.data?.role as UiMessage["role"]) ?? "assistant";
+    const content =
+      typeof res.data?.content === "string"
+        ? res.data.content
+        : JSON.stringify(res.data);
+    setMessages((m) => [...m, { role, content }]);
+
+    // 📌 SmartSQL / RAG / sales panel
+    const data: ExtraData = res.data?.data;
+    setExtra(data);
+
+    // 📌 🔥 SUGGESTIONS FROM BACKEND
+    if (Array.isArray(res.data?.suggestions)) {
+      setSuggestions(res.data.suggestions);
     }
+
+  } catch (e: any) {
+    const msg = e?.response?.data?.message ?? e?.message ?? "Lỗi không xác định";
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", content: `Đã có lỗi khi gọi API: ${msg}` },
+    ]);
+  } finally {
+    setLoading(false);
+    inputRef.current?.focus();
   }
+}
+
 
   return (
     <div className="p-4">
@@ -97,7 +119,27 @@ export default function AdminChatPanelSimple() {
               <div ref={endRef} />
             </div>
           </div>
-
+    {suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s, idx) => (
+              <Button
+                key={idx}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+               onClick={() => {
+  // nếu muốn vừa hiển thị trong input vừa gửi luôn:
+  setInput(s);
+  if (!loading) {
+    send(s);
+  }
+}}
+              >
+                {s}
+              </Button>
+            ))}
+          </div>
+        )}
           {/* Input row */}
           <div className="flex items-center gap-2">
           <div className="flex gap-2 mb-2">
