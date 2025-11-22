@@ -64,14 +64,19 @@ export default function MenuItemsPage() {
 
   // Pagination fallback: backend might return all items in a single page.
   const allItems = body?.data ?? [];
+
+  // Remove combo items from this page as requested: do not display items
+  // where `isCombo` is true.
+  const filteredAllItems = allItems.filter((it: any) => !it.isCombo);
   const returnedAllInOne =
-    (body?.meta?.totalPages ?? 1) === 1 && allItems.length > limit;
-  const totalItems = body?.meta?.total ?? allItems.length;
+    (body?.meta?.totalPages ?? 1) === 1 && filteredAllItems.length > limit;
+  // Use filtered counts (without combos) for UI pagination/total
+  const totalItems = filteredAllItems.length ?? 0;
   const pages =
     body?.meta?.totalPages ?? Math.max(1, Math.ceil(totalItems / limit));
   const pageItems = returnedAllInOne
-    ? allItems.slice((page - 1) * limit, page * limit)
-    : allItems;
+    ? filteredAllItems.slice((page - 1) * limit, page * limit)
+    : filteredAllItems;
 
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const del = useDeleteMenuItemMutation();

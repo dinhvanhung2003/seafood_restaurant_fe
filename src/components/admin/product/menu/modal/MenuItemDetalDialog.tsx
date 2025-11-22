@@ -49,6 +49,7 @@ export default function MenuItemDetailDialog({
   const updateMut = useUpdateMenuItemMutation();
 
   const { data: categoriesResp, isLoading: catLoading } = useCategoriesQuery({
+    type: "MENU",
     page: 1,
     limit: 50,
   });
