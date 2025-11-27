@@ -1,4 +1,4 @@
-// app/admin/AdminLayout.tsx  (SERVER COMPONENT - KHÔNG "use client")
+// app/admin/AdminLayout.tsx  (SERVER COMPONENT)
 import React from "react";
 import { SidebarNav } from "./SidebarNav";
 import { MobileTopBar } from "@/app/admin/MobileTopNav";
@@ -11,11 +11,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <SidebarNav variant="desktop" />
       </aside>
 
-      {/* Top bar mobile */}
-      <MobileTopBar />
+      {/* Cột bên phải: topbar mobile + content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar chỉ hiện trên mobile */}
+        <MobileTopBar />
 
-      {/* Content */}
-      <main className="flex-1 p-4 md:p-6">{children}</main>
+        {/* Content scroll theo chiều dọc, không trượt navbar */}
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
