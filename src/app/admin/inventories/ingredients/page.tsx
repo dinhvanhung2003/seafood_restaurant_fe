@@ -8,42 +8,61 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddIngredientModal from "@/components/admin/inventories/inventory-item/modal/AddIngredientModal";
 import EditIngredientModal from "@/components/admin/inventories/inventory-item/modal/EditIngredientModal";
+// --- [MỚI] Import thêm các component UI cần thiết ---
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator, // Mới
 } from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { MoreHorizontal } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  MoreHorizontal,
+  AlertTriangle,
+  Trash2,
+  Archive,
+  Pencil,
+  Undo2,
+} from "lucide-react"; // Mới
 import {
   useDeleteIngredient,
   useRestoreIngredient,
 } from "@/hooks/admin/useIngredients";
 import { useCategoriesQuery } from "@/hooks/admin/useCategory";
 import { useUomsQuery } from "@/hooks/admin/useUnitsOfMeasure";
+import { toast } from "sonner";
 
 export default function IngredientsListPage() {
   // Paging + search
   const [page, setPage] = React.useState(1);
-  // mặc định phân trang 10 phần tử / trang
   const [limit, setLimit] = React.useState(10);
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState(search);
+  const [statusFilter, setStatusFilter] = React.useState<string>("true");
+  const isActiveParam =
+    statusFilter === "all" ? undefined : statusFilter === "true";
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-  React.useEffect(() => setPage(1), [debounced]);
 
   // Filters
   const [stock, setStock] = React.useState<StockFilter>("ALL");
   const [baseUomCode, setBaseUomCode] = React.useState<string | undefined>();
-  // additional filters
   const [supplierId, setSupplierId] = React.useState<string | undefined>(
     undefined
   );
@@ -71,10 +90,11 @@ export default function IngredientsListPage() {
     debounced,
     stock,
     baseUomCode,
-    supplierId
+    supplierId,
+    isActiveParam
   );
 
-  // suppliers for filter (paged + searchable inside popover)
+  // suppliers for filter
   const [supplierPage, setSupplierPage] = React.useState(1);
   const [supplierQ, setSupplierQ] = React.useState("");
   const { data: supplierResp, isLoading: isSupplierLoading } = useSuppliers(
@@ -82,10 +102,7 @@ export default function IngredientsListPage() {
     10,
     { q: supplierQ } as any
   );
-  // normalize supplier response which may be shaped as:
-  // - { data: Supplier[] , total }
-  // - { data: { data: Supplier[], meta: { total, page, pages } } }
-  // - { data: Supplier[], meta: { total, page, pages } }
+
   const suppliers = React.useMemo(() => {
     if (!supplierResp) return [] as any[];
     if (Array.isArray((supplierResp as any).data))
@@ -118,8 +135,6 @@ export default function IngredientsListPage() {
     }));
   }, [uomPageResp]);
 
-  // displayed list: if category filter active, apply client-side filter on fetchedItems
-  // and then paginate client-side using `limit` and `page`; otherwise use server-paged data
   const { displayedIngredients, localMeta } = React.useMemo(() => {
     if (!categoryId) {
       return {
@@ -148,10 +163,103 @@ export default function IngredientsListPage() {
   const [editId, setEditId] = React.useState<string | null>(null);
   const [editDefaults, setEditDefaults] = React.useState<any | null>(null);
 
+  // --- [MỚI] Logic Xóa & Dialog ---
   const delMut = useDeleteIngredient();
   const restoreMut = useRestoreIngredient();
 
-  // Preload categories once and pass down to edit modal to ensure availability
+  // State quản lý Dialog xác nhận xóa
+  const [deleteConfirm, setDeleteConfirm] = React.useState<{
+    isOpen: boolean;
+    item: any | null;
+    mode: "SOFT" | "HARD"; // SOFT: Ngưng, HARD: Xóa hẳn
+  }>({ isOpen: false, item: null, mode: "SOFT" });
+  React.useEffect(
+    () => setPage(1),
+    [stock, baseUomCode, supplierId, categoryId, statusFilter]
+  );
+  // Mở dialog Soft Delete
+  const handleSoftDeleteClick = (item: any) => {
+    setDeleteConfirm({ isOpen: true, item, mode: "SOFT" });
+  };
+
+  // Mở dialog Hard Delete
+  const handleHardDeleteClick = (item: any) => {
+    setDeleteConfirm({ isOpen: true, item, mode: "HARD" });
+  };
+
+  // Hàm thực hiện xóa
+  // Hàm thực hiện xóa
+  const confirmDelete = async (force: boolean = false) => {
+    if (!deleteConfirm.item) return;
+    const { item, mode } = deleteConfirm;
+
+    try {
+      if (mode === "HARD") {
+        // Hard delete
+        await delMut.mutateAsync({ id: item.id, hard: true });
+        toast.success("Đã xóa vĩnh viễn nguyên liệu");
+      } else {
+        // Soft delete
+        await delMut.mutateAsync({ id: item.id, force });
+        toast.success(
+          force
+            ? "Đã ngưng sử dụng và xóa tồn kho về 0"
+            : "Đã ngưng sử dụng nguyên liệu"
+        );
+      }
+      setDeleteConfirm({ ...deleteConfirm, isOpen: false });
+      refetch();
+    } catch (error: any) {
+      const resData = error?.response?.data;
+      const rawMsg = resData?.message || error?.message;
+
+      // --- [SỬA] Bắt lỗi xóa vĩnh viễn để báo chi tiết ---
+      if (mode === "HARD" && rawMsg === "CANNOT_HARD_DELETE_ITEM") {
+        // Lấy danh sách lý do từ backend gửi về (nếu có)
+        // Cấu trúc có thể nằm trong resData.error hoặc resData.response tùy bộ lọc lỗi BE
+        const reasons =
+          resData?.error?.reasons || resData?.response?.reasons || [];
+
+        let reasonList: string[] = [];
+        if (reasons.includes("NON_ZERO_QUANTITY"))
+          reasonList.push("Đang còn tồn kho");
+        if (reasons.includes("HAS_INVENTORY_TRANSACTIONS"))
+          reasonList.push("Đã có lịch sử nhập/xuất kho");
+        if (reasons.includes("HAS_PURCHASE_RECEIPT_ITEMS"))
+          reasonList.push("Đã từng nhập hàng (có phiếu nhập)");
+        if (reasons.includes("USED_IN_MENU_INGREDIENTS"))
+          reasonList.push("Đang được dùng trong công thức món");
+
+        // Nếu không parse được lý do cụ thể thì báo chung
+        if (reasonList.length === 0)
+          reasonList.push("Đã phát sinh dữ liệu liên quan");
+
+        // Hiển thị Toast lỗi chi tiết
+        toast.error("Không thể xóa vĩnh viễn!", {
+          duration: 6000,
+          description: (
+            <div className="mt-2 text-sm">
+              <p className="mb-1">
+                Nguyên liệu <b>{item.name}</b> không thể xóa vì:
+              </p>
+              <ul className="list-disc list-inside text-red-600 font-medium space-y-1 mb-2">
+                {reasonList.map((r, idx) => (
+                  <li key={idx}>{r}</li>
+                ))}
+              </ul>
+              <p className="text-gray-600 italic border-t pt-1 mt-1">
+                💡 Bạn chỉ có thể chọn <b>Ngưng sử dụng</b>.
+              </p>
+            </div>
+          ),
+        });
+      } else {
+        // Các lỗi khác
+        toast.error("Thao tác thất bại", { description: String(rawMsg) });
+      }
+    }
+  };
+
   const catActive = useCategoriesQuery({
     type: "INGREDIENT",
     page: 1,
@@ -295,6 +403,26 @@ export default function IngredientsListPage() {
                           Sau
                         </button>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-600 mr-2">
+                          Danh mục
+                        </label>
+                        <select
+                          className="border rounded px-2 py-1 text-sm"
+                          value={categoryId ?? ""}
+                          onChange={(e) => {
+                            setCategoryId(e.target.value || undefined);
+                            setPage(1);
+                          }}
+                        >
+                          <option value="">Tất cả</option>
+                          {categoriesForModal.map((c: any) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
                       <div className="mt-2 text-right">
                         <button
@@ -417,12 +545,26 @@ export default function IngredientsListPage() {
             </select>
           </div>
 
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 mr-2">Trạng thái</label>
+            <select
+              className="border rounded px-2 py-1 text-sm bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="true">Đang hoạt động</option>
+              <option value="false">Đã ngưng sử dụng</option>
+              <option value="all">Tất cả</option>
+            </select>
+          </div>
+
           <div className="ml-auto">
             <button
               className="text-sm text-gray-600 underline"
               onClick={() => {
                 setSupplierId(undefined);
                 setCategoryId(undefined);
+                setStatusFilter("true");
                 setSearch("");
                 setPage(1);
               }}
@@ -450,14 +592,30 @@ export default function IngredientsListPage() {
             <tbody className={isFetching ? "opacity-70" : undefined}>
               {displayedIngredients.map((i: any) => {
                 const low = i.quantity <= i.alertThreshold;
+                const isDeleted = i.isDeleted || i.isActive === false; // Check trạng thái
+
                 return (
-                  <tr key={i.id} className="border-t">
-                    <td className="px-4 py-2 font-medium">{i.name}</td>
+                  <tr
+                    key={i.id}
+                    className={`border-t ${
+                      isDeleted ? "bg-gray-50 text-gray-400" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-2 font-medium">
+                      {i.name}
+                      {isDeleted && (
+                        <span className="ml-2 text-[10px] bg-gray-200 px-1 rounded border border-gray-300">
+                          Ngưng
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2">{i.unit}</td>
                     <td className="px-4 py-2">
                       <span
                         className={`rounded px-2 py-0.5 text-xs ${
-                          low
+                          isDeleted
+                            ? "bg-gray-200"
+                            : low
                             ? "bg-red-100 text-red-700"
                             : "bg-green-100 text-green-700"
                         }`}
@@ -466,13 +624,16 @@ export default function IngredientsListPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2">{i.alertThreshold}</td>
-                    <td className="px-4 py-2 text-gray-600">
+                    <td
+                      className="px-4 py-2 text-gray-600 max-w-[150px] truncate"
+                      title={i.description}
+                    >
                       {i.description ?? "-"}
                     </td>
                     <td className="px-4 py-2 text-gray-600">
                       {i.category?.name ?? "-"}
                     </td>
-                    <td className="px-4 py-2 text-gray-500">
+                    <td className="px-4 py-2 text-gray-500 text-xs">
                       {i.updatedAt
                         ? new Date(i.updatedAt).toLocaleString()
                         : "-"}
@@ -496,30 +657,43 @@ export default function IngredientsListPage() {
                               });
                             }}
                           >
-                            Sửa
+                            <Pencil className="mr-2 h-4 w-4 text-gray-500" />
+                            Sửa thông tin
                           </DropdownMenuItem>
-                          {i.isActive !== false ? (
+
+                          {/* Logic Ngưng / Khôi phục */}
+                          {!isDeleted ? (
                             <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={async () => {
-                                if (!confirm("Ngưng sử dụng nguyên liệu này?"))
-                                  return;
-                                await delMut.mutateAsync({ id: i.id } as any);
-                                refetch();
-                              }}
+                              className="text-amber-600 focus:text-amber-700 focus:bg-amber-50"
+                              onClick={() => handleSoftDeleteClick(i)}
                             >
+                              <Archive className="mr-2 h-4 w-4" />
                               Ngưng sử dụng
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
+                              className="text-blue-600 focus:text-blue-700 focus:bg-blue-50"
                               onClick={async () => {
                                 await restoreMut.mutateAsync({ id: i.id });
                                 refetch();
+                                toast.success("Đã khôi phục hoạt động");
                               }}
                             >
-                              Khôi phục
+                              <Undo2 className="mr-2 h-4 w-4" />
+                              Khôi phục hoạt động
                             </DropdownMenuItem>
                           )}
+
+                          <DropdownMenuSeparator />
+
+                          {/* Nút Xóa vĩnh viễn */}
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-700 focus:bg-red-50"
+                            onClick={() => handleHardDeleteClick(i)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Xóa dữ liệu vĩnh viễn
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -573,13 +747,11 @@ export default function IngredientsListPage() {
           open={openAdd}
           onOpenChange={setOpenAdd}
           onSaved={(ing) => {
-            // focus to new item by quick search
             setSearch(ing.name);
             setOpenAdd(false);
             refetch();
           }}
         />
-
         {editId && editDefaults && (
           <EditIngredientModal
             open={!!editId}
@@ -595,6 +767,130 @@ export default function IngredientsListPage() {
             onSaved={() => refetch()}
           />
         )}
+
+        {/* [MỚI] DIALOG XÁC NHẬN XÓA THÔNG MINH */}
+        {/* [MỚI] DIALOG XÁC NHẬN XÓA THÔNG MINH */}
+        <AlertDialog
+          open={deleteConfirm.isOpen}
+          onOpenChange={(open: boolean) => {
+            if (!open) setDeleteConfirm({ ...deleteConfirm, isOpen: false });
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                {deleteConfirm.mode === "HARD" ? (
+                  <>
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    <span className="text-red-600">Xóa dữ liệu vĩnh viễn?</span>
+                  </>
+                ) : (
+                  <>
+                    <Archive className="h-5 w-5 text-amber-600" />
+                    <span>Ngưng sử dụng nguyên liệu?</span>
+                  </>
+                )}
+              </AlertDialogTitle>
+
+              {/* SỬA LỖI Ở ĐÂY: Thêm asChild và bọc nội dung trong div */}
+              <AlertDialogDescription asChild>
+                <div className="flex flex-col gap-3 pt-2 text-base text-muted-foreground">
+                  {deleteConfirm.mode === "HARD" ? (
+                    <div className="space-y-2">
+                      <p>
+                        Hành động này sẽ xóa hoàn toàn nguyên liệu{" "}
+                        <strong className="text-foreground">
+                          {deleteConfirm.item?.name}
+                        </strong>{" "}
+                        khỏi hệ thống.
+                      </p>
+                      <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md text-sm">
+                        <strong>Lưu ý quan trọng:</strong>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                          <li>
+                            Dữ liệu này <b>không thể khôi phục</b>.
+                          </li>
+                          <li>
+                            Chỉ xóa được nếu chưa có lịch sử nhập/xuất kho.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p>
+                        Bạn đang muốn ngưng sử dụng{" "}
+                        <strong className="text-foreground">
+                          {deleteConfirm.item?.name}
+                        </strong>
+                        .
+                        <br />
+                        Nguyên liệu này sẽ bị ẩn khỏi danh sách chọn, nhưng vẫn
+                        được lưu trữ lịch sử trong hệ thống.
+                      </p>
+
+                      {deleteConfirm.item?.quantity > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-md text-sm mt-2">
+                          <div className="flex items-center gap-2 font-semibold mb-1">
+                            <AlertTriangle className="h-4 w-4" />
+                            Cảnh báo tồn kho
+                          </div>
+                          <p>
+                            Nguyên liệu này hiện vẫn còn tồn kho:{" "}
+                            <strong>
+                              {deleteConfirm.item?.quantity}{" "}
+                              {deleteConfirm.item?.unit}
+                            </strong>
+                            .
+                          </p>
+                          <p className="mt-1">
+                            Bạn có muốn hệ thống tự động tạo phiếu xuất hủy
+                            (Waste) để đưa tồn kho về 0 không?
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter className="mt-4">
+              {/* ... (Phần Footer giữ nguyên không đổi) ... */}
+              <AlertDialogCancel>Huỷ bỏ</AlertDialogCancel>
+
+              {deleteConfirm.mode === "HARD" ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => confirmDelete(false)}
+                >
+                  Xác nhận Xóa vĩnh viễn
+                </Button>
+              ) : // Logic nút bấm cho Soft Delete
+              deleteConfirm.item?.quantity > 0 ? (
+                <>
+                  <Button
+                    variant="outline"
+                    className="border-amber-600 text-amber-700 hover:bg-amber-50"
+                    onClick={() => confirmDelete(false)}
+                  >
+                    Giữ tồn kho & Ngưng
+                  </Button>
+                  <Button
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={() => confirmDelete(true)}
+                  >
+                    Hủy tồn kho & Ngưng
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={() => confirmDelete(false)}>
+                  Xác nhận Ngưng
+                </Button>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

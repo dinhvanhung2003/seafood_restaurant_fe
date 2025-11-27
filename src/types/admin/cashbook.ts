@@ -25,6 +25,7 @@ export type CashbookItem = {
   purchaseReceipt?: Record<string, any> | null;
   sourceCode?: string | null;
   createdAt: string;
+  staff?: PartyBase | null;
 };
 
 export type CashbookResponse = {
