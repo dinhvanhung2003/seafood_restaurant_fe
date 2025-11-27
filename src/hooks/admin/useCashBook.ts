@@ -174,4 +174,38 @@ export function useCreateCashbookEntry() {
       });
     },
   });
+
+}
+
+export function useDeleteCashbookEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // API endpoint xóa
+      const res = await api.delete(`/cashbook/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      // Refresh lại list sau khi xóa thành công
+      qc.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as QueryKey).includes("cashbook"),
+      });
+    },
+  });
+}
+
+/* =================== Update Entry =================== */
+export function useUpdateCashbookEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { amount?: number; note?: string; date?: string } }) => {
+      const res = await api.patch(`/cashbook/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as QueryKey).includes("cashbook"),
+      });
+    },
+  });
 }
