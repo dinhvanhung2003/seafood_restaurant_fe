@@ -37,7 +37,10 @@ export default function LoginClient({ back }: { back?: string }) {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [fieldErr, setFieldErr] = useState<{ email?: string; password?: string }>({});
+  const [fieldErr, setFieldErr] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,11 +55,14 @@ export default function LoginClient({ back }: { back?: string }) {
     if (!email) errors.email = "Vui lòng nhập email";
     else if (!isEmail(email)) errors.email = "Email không hợp lệ";
     if (!password) errors.password = "Vui lòng nhập mật khẩu";
-    else if (password.length < 6) errors.password = "Mật khẩu tối thiểu 6 ký tự";
+    else if (password.length < 6)
+      errors.password = "Mật khẩu tối thiểu 6 ký tự";
 
     if (errors.email || errors.password) {
       setFieldErr(errors);
-      toast.error("Thông tin chưa hợp lệ", { description: errors.email ?? errors.password });
+      toast.error("Thông tin chưa hợp lệ", {
+        description: errors.email ?? errors.password,
+      });
       return;
     }
 
@@ -64,7 +70,11 @@ export default function LoginClient({ back }: { back?: string }) {
     setLoading(true);
 
     try {
-      const res = await signIn("credentials", { email, password, redirect: false });
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
       if (!res) throw new Error("Không nhận được phản hồi");
       if (res.error) {
         toast.error("Đăng nhập thất bại", { description: res.error });
@@ -76,7 +86,9 @@ export default function LoginClient({ back }: { back?: string }) {
       const role = (session?.user as Session["user"] & { role?: string })?.role;
 
       toast.success("Đăng nhập thành công", {
-        description: role ? `Xin chào ${email} — vai trò: ${role}` : `Xin chào ${email}`,
+        description: role
+          ? `Xin chào ${email} — vai trò: ${role}`
+          : `Xin chào ${email}`,
       });
 
       if (remember) localStorage.setItem("remember", "1");
@@ -96,7 +108,13 @@ export default function LoginClient({ back }: { back?: string }) {
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 -z-10">
-        <Image src="/bg.webp" alt="Seafood background" fill priority className="object-cover" />
+        <Image
+          src="/bg.webp"
+          alt="Seafood background"
+          fill
+          priority
+          className="object-cover"
+        />
         <div className="absolute inset-0 bg-black/55" />
       </div>
 
@@ -116,7 +134,7 @@ export default function LoginClient({ back }: { back?: string }) {
 
               <form className="space-y-5" onSubmit={handleLogin} noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm text-white">
+                  <Label htmlFor="email" className="text-sm text-black">
                     Email
                   </Label>
                   <Input
@@ -125,13 +143,17 @@ export default function LoginClient({ back }: { back?: string }) {
                     type="email"
                     placeholder="admin@restaurant.com"
                     className={`h-11 text-base text-black placeholder-gray-300 ${
-                      fieldErr.email ? "border-red-500 focus-visible:ring-red-500" : ""
+                      fieldErr.email
+                        ? "border-red-500 focus-visible:ring-red-500"
+                        : ""
                     }`}
                     autoComplete="email"
                     aria-invalid={!!fieldErr.email}
                     required
                   />
-                  {fieldErr.email && <p className="text-xs text-red-400">{fieldErr.email}</p>}
+                  {fieldErr.email && (
+                    <p className="text-xs text-red-400">{fieldErr.email}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -145,7 +167,9 @@ export default function LoginClient({ back }: { back?: string }) {
                       type={showPassword ? "text" : "password"}
                       placeholder="Mật khẩu"
                       className={`h-11 pr-10 text-base text-black placeholder-gray-300 ${
-                        fieldErr.password ? "border-red-500 focus-visible:ring-red-500" : ""
+                        fieldErr.password
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : ""
                       }`}
                       autoComplete="current-password"
                       aria-invalid={!!fieldErr.password}
@@ -155,12 +179,20 @@ export default function LoginClient({ back }: { back?: string }) {
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
                       className="absolute inset-y-0 right-2 grid w-9 place-items-center rounded-md hover:bg-muted/50"
-                      aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                      aria-label={
+                        showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
+                      }
                     >
-                      {showPassword ? <EyeOff className="h-5 w-5 opacity-70" /> : <Eye className="h-5 w-5 opacity-70" />}
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5 opacity-70" />
+                      ) : (
+                        <Eye className="h-5 w-5 opacity-70" />
+                      )}
                     </button>
                   </div>
-                  {fieldErr.password && <p className="text-xs text-red-500">{fieldErr.password}</p>}
+                  {fieldErr.password && (
+                    <p className="text-xs text-red-500">{fieldErr.password}</p>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
@@ -171,7 +203,9 @@ export default function LoginClient({ back }: { back?: string }) {
                       onChange={(e) => setRemember(e.target.checked)}
                       className="h-4 w-4 rounded border-slate-300"
                     />
-                    <span className="text-muted-foreground">Duy trì đăng nhập</span>
+                    <span className="text-muted-foreground">
+                      Duy trì đăng nhập
+                    </span>
                   </label>
                   <a href="#" className="text-primary hover:underline">
                     Quên mật khẩu?
@@ -179,7 +213,11 @@ export default function LoginClient({ back }: { back?: string }) {
                 </div>
 
                 <div className="mt-2 grid grid-cols-2 gap-3">
-                  <Button type="submit" disabled={loading} className="h-12 rounded-xl text-base font-semibold">
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="h-12 rounded-xl text-base font-semibold"
+                  >
                     {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                   </Button>
                   <Button
@@ -199,7 +237,10 @@ export default function LoginClient({ back }: { back?: string }) {
                   <HelpCircle className="h-4 w-4" />
                   <span>
                     Hỗ trợ:{" "}
-                    <a className="font-medium text-foreground hover:underline" href="tel:0369566285">
+                    <a
+                      className="font-medium text-foreground hover:underline"
+                      href="tel:0369566285"
+                    >
                       0369566285
                     </a>
                   </span>
@@ -219,7 +260,9 @@ export default function LoginClient({ back }: { back?: string }) {
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-3 z-0 flex justify-center text-xs text-white/50">
-        <span>© {new Date().getFullYear()} Demo UI – Quản lý nhà hàng hải sản</span>
+        <span>
+          © {new Date().getFullYear()} Demo UI – Quản lý nhà hàng hải sản
+        </span>
       </div>
     </div>
   );
@@ -236,8 +279,15 @@ function Logo({ className = "" }: { className?: string }) {
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
         </defs>
-        <path d="M18 12c10 0 18 8 18 18S28 48 18 48 0 40 0 30 8 12 18 12z" fill="url(#g1)" />
-        <path d="M46 16c6 0 10 4 10 10s-4 10-10 10-10-4-10-10 4-10 10-10z" fill="#34d399" opacity="0.9" />
+        <path
+          d="M18 12c10 0 18 8 18 18S28 48 18 48 0 40 0 30 8 12 18 12z"
+          fill="url(#g1)"
+        />
+        <path
+          d="M46 16c6 0 10 4 10 10s-4 10-10 10-10-4-10-10 4-10 10-10z"
+          fill="#34d399"
+          opacity="0.9"
+        />
       </svg>
       <span className="text-xl font-semibold tracking-tight">SeaFood</span>
     </div>

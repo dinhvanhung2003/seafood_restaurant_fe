@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import mapServerError from "@/lib/mapServerError";
 import { currency, asNum, applyGlobalDiscount } from "@/utils/purchase";
 import type { DiscountType, Line, NumMaybeEmpty } from "@/types/types";
 
@@ -47,6 +48,38 @@ export default function PurchaseUpsertClient({
   const [shippingFee, setShippingFee] = useState<NumMaybeEmpty>("");
   const [amountPaid, setAmountPaid] = useState<NumMaybeEmpty>("");
   const [note, setNote] = useState<string>("");
+  const setGlobalDiscountValueSafe = (v: NumMaybeEmpty) => {
+    if (v === "") return setGlobalDiscountValue("");
+    const n = Number(v);
+    if (globalDiscountType === "PERCENT") {
+      // Phần trăm thì chặn max 100 là đúng
+      setGlobalDiscountValue(Math.max(0, Math.min(100, n)));
+    } else {
+      setGlobalDiscountValue(Math.max(0, n));
+    }
+  };
+
+  const setShippingFeeSafe = (v: NumMaybeEmpty) => {
+    if (v === "") return setShippingFee("");
+    const n = Number(v);
+    setShippingFee(Math.max(0, n));
+  };
+
+  const setAmountPaidSafe = (v: NumMaybeEmpty, curGrand?: number) => {
+    if (v === "") return setAmountPaid("");
+    const n = Number(v);
+    const cap =
+      curGrand ??
+      (() => {
+        const { after } = applyGlobalDiscount(
+          subTotal,
+          globalDiscountType,
+          globalDiscountValue
+        );
+        return Math.max(0, after + asNum(shippingFee));
+      })();
+    setAmountPaid(Math.max(0, Math.min(cap, n)));
+  };
 
   /** ---------- LINES ---------- */
   const [lines, setLines] = useState<Line[]>([]);
@@ -151,16 +184,108 @@ export default function PurchaseUpsertClient({
   });
 
   /** ---------- ACTIONS ---------- */
-  const ensureValid = () => {
+  const ensureValid = (isPostNow: boolean) => {
+    // 1. Validate Header (Thông tin chung)
     if (!supplierId) return toast.error("Vui lòng chọn nhà cung cấp"), false;
     if (!receiptDate) return toast.error("Vui lòng chọn ngày nhập"), false;
+    if (isNaN(Date.parse(receiptDate)))
+      return toast.error("Ngày không hợp lệ"), false;
+
+    // Validate Logic Tiền & Chiết khấu
+    if (
+      globalDiscountType === "AMOUNT" &&
+      asNum(globalDiscountValue) > subTotal
+    )
+      return toast.error("Giảm giá không được lớn hơn tổng tiền hàng"), false;
+
+    if (globalDiscountType === "PERCENT" && asNum(globalDiscountValue) > 100)
+      return toast.error("% giảm giá không hợp lệ"), false;
+
+    const paidVal = asNum(amountPaid);
+    if (paidVal < 0)
+      return toast.error("Số tiền trả không hợp lệ (không được âm)"), false;
+    if (paidVal > grandTotal)
+      return toast.error("Tiền đã trả không được lớn hơn tổng phải trả"), false;
+
+    // --- [MỚI] CHECK BẮT BUỘC NHẬP TIỀN KHI HOÀN THÀNH ---
+    if (isPostNow) {
+      if (paidVal <= 0) {
+        toast.error("Bắt buộc phải nhập số tiền đã trả khi Hoàn thành phiếu");
+        return false;
+      }
+    }
+
+    // 2. Validate Lines (Danh sách hàng)
     if (lines.length === 0) return toast.error("Chưa có dòng hàng nào"), false;
+
+    // Chuẩn bị ngày nhập để so sánh HSD
+    const rDate = new Date(receiptDate);
+    rDate.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const rowIdx = i + 1;
+
+      // --- Check Số lượng ---
+      if (
+        l.quantity === "" ||
+        l.quantity === undefined ||
+        l.quantity === null
+      ) {
+        toast.error(`Dòng ${rowIdx} (${l.itemName}): Vui lòng nhập Số lượng`);
+        return false;
+      }
+      const qty = Number(l.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        toast.error(`Dòng ${rowIdx} (${l.itemName}): Số lượng phải lớn hơn 0`);
+        return false;
+      }
+
+      // --- Check Đơn giá ---
+      if (
+        l.unitPrice === "" ||
+        l.unitPrice === undefined ||
+        l.unitPrice === null
+      ) {
+        toast.error(`Dòng ${rowIdx} (${l.itemName}): Vui lòng nhập Đơn giá`);
+        return false;
+      }
+      const price = Number(l.unitPrice);
+      if (isNaN(price) || price < 0) {
+        toast.error(`Dòng ${rowIdx} (${l.itemName}): Đơn giá không hợp lệ`);
+        return false;
+      }
+
+      // --- Check Chiết khấu dòng ---
+      if (l.discountType === "PERCENT" && Number(l.discountValue) > 100) {
+        toast.error(`Dòng ${rowIdx} (${l.itemName}): Chiết khấu dòng quá 100%`);
+        return false;
+      }
+
+      // --- Check Hạn sử dụng ---
+      if (!l.expiryDate) {
+        toast.error(
+          `Dòng ${rowIdx} (${l.itemName}): Vui lòng chọn Hạn sử dụng`
+        );
+        return false;
+      }
+      const expDate = new Date(l.expiryDate);
+      expDate.setHours(0, 0, 0, 0);
+
+      if (expDate <= rDate) {
+        toast.error(
+          `Dòng ${rowIdx} (${l.itemName}): HSD phải sau ngày nhập phiếu (${receiptDate})`
+        );
+        return false;
+      }
+    }
+
     return true;
   };
 
   // Lưu NHÁP
   const handleSaveDraft = () => {
-    if (!ensureValid()) return;
+    if (!ensureValid(false)) return;
 
     if (isEdit) {
       if (detail?.status !== "DRAFT") {
@@ -175,12 +300,10 @@ export default function PurchaseUpsertClient({
             });
             router.push("/admin/inventories/purchase");
           },
-          onError: (e: any) =>
-            toast.error(
-              e?.response?.data?.message ||
-                e?.message ||
-                "Cập nhật nháp thất bại"
-            ),
+          onError: (e: any) => {
+            const { message } = mapServerError(e);
+            toast.error(message || "Cập nhật nháp thất bại");
+          },
         }
       );
     } else {
@@ -189,17 +312,17 @@ export default function PurchaseUpsertClient({
           toast.success("Đã lưu NHÁP", { description: res?.code });
           router.push("/admin/inventories/purchase");
         },
-        onError: (e: any) =>
-          toast.error(
-            e?.response?.data?.message || e?.message || "Lưu nháp thất bại"
-          ),
+        onError: (e: any) => {
+          const { message } = mapServerError(e);
+          toast.error(message || "Lưu nháp thất bại");
+        },
       });
     }
   };
 
   // Hoàn thành (POST NOW)
   const handleComplete = () => {
-    if (!ensureValid()) return;
+    if (!ensureValid(true)) return;
 
     if (isEdit) {
       if (detail?.status !== "DRAFT") {
@@ -214,10 +337,10 @@ export default function PurchaseUpsertClient({
             });
             router.push("/admin/inventories/purchase");
           },
-          onError: (e: any) =>
-            toast.error(
-              e?.response?.data?.message || e?.message || "Ghi sổ thất bại"
-            ),
+          onError: (e: any) => {
+            const { message } = mapServerError(e);
+            toast.error(message || "Ghi sổ thất bại");
+          },
         }
       );
     } else {
@@ -228,10 +351,10 @@ export default function PurchaseUpsertClient({
           });
           router.push("/admin/inventories/purchase");
         },
-        onError: (e: any) =>
-          toast.error(
-            e?.response?.data?.message || e?.message || "Tạo phiếu thất bại"
-          ),
+        onError: (e: any) => {
+          const { message } = mapServerError(e);
+          toast.error(message || "Tạo phiếu thất bại");
+        },
       });
     }
   };
@@ -281,11 +404,12 @@ export default function PurchaseUpsertClient({
         globalDiscountType={globalDiscountType}
         setGlobalDiscountType={setGlobalDiscountType}
         globalDiscountValue={globalDiscountValue}
-        setGlobalDiscountValue={setGlobalDiscountValue}
+        setGlobalDiscountValue={setGlobalDiscountValueSafe}
         shippingFee={shippingFee}
-        setShippingFee={setShippingFee}
+        setShippingFee={setShippingFeeSafe}
         amountPaid={amountPaid}
-        setAmountPaid={setAmountPaid}
+        setAmountPaid={(v) => setAmountPaidSafe(v, grandTotal)}
+        grandTotal={grandTotal}
         renderTotals={
           <TotalsBar
             subTotal={Math.max(0, subTotal)}
@@ -312,6 +436,7 @@ export default function PurchaseUpsertClient({
         onUpdateLine={updateLine}
         onRemoveLine={removeLine}
         isLotDuplicate={isLotDuplicate}
+        receiptDate={receiptDate}
       />
 
       <div className="flex items-center justify-end gap-2">

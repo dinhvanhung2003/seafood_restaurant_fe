@@ -40,8 +40,13 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!r.ok) {
+          // Try to extract a human-friendly message from the backend.
+          // Some endpoints return machine codes in `message` but a user-facing
+          // string in `errorMessage`. Prefer `errorMessage` first, then
+          // `message`, then fall back to a generic string.
           const err = await r.json().catch(() => ({}));
-          throw new Error(err?.message || "Sai thông tin đăng nhập");
+          const remoteMsg = (err && (err.errorMessage || err.error || err.message)) || undefined;
+          throw new Error(remoteMsg || "Sai thông tin đăng nhập");
         }
 
         const j = await r.json();

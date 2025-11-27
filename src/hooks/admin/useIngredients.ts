@@ -20,6 +20,7 @@ export type ListQuery = {
   baseUomCode?: string;  // VD: "CAN", "KG"...
   stock?: StockFilter;
   supplierId?: string;       // radio ở sidebar
+  isActive?: boolean;        // <--- [THÊM] Lọc theo trạng thái hoạt động
 };
 
 /** Tạo REST hooks cho resource Ingredients */
@@ -29,16 +30,36 @@ const base = createRestHooks<any, IngredientDTO, ListQuery, any, UpdateIngredien
   detail: { path: ({ id }: { id: string }) => `/inventoryitems/${id}` }, // GET one
   create: { path: "/inventoryitems/create", method: "post" },
   update: { path: ({ id }: { id: string }) => `/inventoryitems/${id}`, method: "put" },
-  remove: { path: ({ id }: { id: string }) => `/inventoryitems/${id}`, method: "delete" },
+  // remove: { path: ({ id }: { id: string }) => `/inventoryitems/${id}`, method: "delete" },
 });
 
 export const {
   useCreateMutation: useStockInIngredient,
   useUpdateMutation: useUpdateIngredient,
-  useRemoveMutation: useDeleteIngredient,
+  // useRemoveMutation: useDeleteIngredient,
   useDetailQuery: useIngredientDetail,
 } = base;
+export function useDeleteIngredient() {
+  const qc = useQueryClient();
+  return useMutation<any, Error, { id: string; force?: boolean; hard?: boolean }>({
+    mutationFn: async ({ id, force, hard }) => {
+      // Xây dựng query string thủ công
+      const params = new URLSearchParams();
+      if (force) params.append("force", "true");
+      if (hard) params.append("hard", "true");
 
+      const queryString = params.toString() ? `?${params.toString()}` : "";
+
+      // Gọi API: DELETE /inventoryitems/:id?force=true&hard=true
+      const { data } = await api.delete(`/inventoryitems/${id}${queryString}`);
+      return data;
+    },
+    onSuccess: () => {
+      // Invalidate cache để load lại danh sách
+      qc.invalidateQueries({ queryKey: ["ingredients"] });
+    },
+  });
+}
 /** Restore a soft-deleted ingredient */
 export function useRestoreIngredient() {
   const qc = useQueryClient();
@@ -61,16 +82,17 @@ export function useIngredients(
   search: string,
   stock: StockFilter,
   baseUomCode?: string,
-  supplierId?: string
+  supplierId?: string,
+  isActive?: boolean // <--- [THÊM] Tham số này
 ) {
   const q = base.useListQuery({
     page,
     limit,
     q: search || undefined,
-    // BE có thể không hỗ trợ 'ALL' => bỏ field khi ALL để trả về đầy đủ
     stock: stock !== "ALL" ? stock : undefined,
     baseUomCode: baseUomCode || undefined,
     supplierId: supplierId || undefined,
+    isActive: isActive,
   });
 
   const items: IngredientDTO[] = useMemo(() => {

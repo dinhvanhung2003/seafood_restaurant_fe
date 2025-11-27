@@ -49,7 +49,7 @@ export type EditIngredientModalProps = {
     categoryId?: string | null;
   };
   onSaved?: () => void;
-  categoriesProp?: Array<{ id: string; name: string; type?: string }>; // optional preloaded categories
+  categoriesProp?: Array<{ id: string; name: string; type?: string }>;
 };
 
 export default function EditIngredientModal({
@@ -57,7 +57,7 @@ export default function EditIngredientModal({
   onOpenChange,
   id,
   defaults,
-  onSaved
+  onSaved,
 }: EditIngredientModalProps) {
   const updateMut = useUpdateIngredient();
   const qCat = useCategoriesQuery({ type: "INGREDIENT", page: 1, limit: 10 });
@@ -82,33 +82,53 @@ export default function EditIngredientModal({
   }, [open, defaults]);
 
   const submit = async () => {
-    if (!form.name.trim())
-      return toast.error("Tên nguyên liệu không được trống");
-    const alertNum = parseFloat(form.alertThreshold);
-    if (Number.isNaN(alertNum) || alertNum < 0)
-      return toast.error("Ngưỡng cảnh báo không hợp lệ");
+    // 1. Validate Tên
+    const nameTrimmed = form.name.trim();
+    if (!nameTrimmed) {
+      return toast.error("Tên nguyên liệu không được để trống");
+    }
+    if (!/^[\p{L}\p{N}\s]+$/u.test(nameTrimmed)) {
+      return toast.error(
+        "Tên chỉ được chứa chữ cái và số, không chứa ký tự đặc biệt"
+      );
+    }
+
+    // 2. Validate Loại (Unit thường không sửa trong edit, nếu có thì thêm validate tương tự)
+    if (!form.categoryId) {
+      return toast.error("Vui lòng chọn loại nguyên liệu");
+    }
+
+    // 3. Validate Ngưỡng cảnh báo
+    let alertNum = 0;
+    const alertStr = form.alertThreshold.trim();
+    if (alertStr !== "") {
+      if (!/^\d+(\.\d+)?$/.test(alertStr)) {
+        return toast.error("Ngưỡng cảnh báo phải là số hợp lệ");
+      }
+      alertNum = parseFloat(alertStr);
+      if (alertNum < 0) {
+        return toast.error("Ngưỡng cảnh báo không được âm");
+      }
+    }
+
+    // 5. Validate Mô tả
+    if (form.description && form.description.length > 255) {
+      return toast.error("Mô tả không được vượt quá 255 ký tự");
+    }
 
     try {
       const payload = {
-        name: form.name.trim(),
+        name: nameTrimmed,
         alertThreshold: alertNum,
         description: form.description?.trim() || null,
         categoryId: form.categoryId ?? null,
       };
-      // debug: log payload
-      // eslint-disable-next-line no-console
-      console.debug("Update ingredient payload:", { id, payload });
 
       const res = await updateMut.mutateAsync({ args: { id }, data: payload });
-      // eslint-disable-next-line no-console
-      console.debug("Update ingredient response:", res);
       toast.success("Đã cập nhật nguyên liệu");
       onOpenChange(false);
       onSaved?.();
     } catch (e: any) {
-      // show detailed error when possible
-      // eslint-disable-next-line no-console
-      console.error("Update ingredient error:", e);
       const msg =
         e?.response?.data?.message ||
         e?.response?.data?.error ||
@@ -172,10 +192,10 @@ export default function EditIngredientModal({
                 value={form.alertThreshold}
                 onChange={(e) => {
                   const v = e.target.value;
-                  if (/^\d*(\.\d*)?$/.test(v) || v === "")
+                  if (/^\d*(\.\d*)?$/.test(v))
                     setForm((f) => ({ ...f, alertThreshold: v }));
                 }}
-                placeholder="VD: 5, 10, 0.5"
+                placeholder="Để trống = 0"
               />
             </Field>
           </div>
@@ -187,7 +207,11 @@ export default function EditIngredientModal({
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
               placeholder="Ghi chú chất lượng, lô nhập, ..."
+              maxLength={255}
             />
+            <div className="text-xs text-right text-muted-foreground">
+              {(form.description || "").length}/255
+            </div>
           </Field>
         </div>
 

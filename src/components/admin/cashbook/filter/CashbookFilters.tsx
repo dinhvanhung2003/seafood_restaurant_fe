@@ -33,7 +33,6 @@ export function CashbookFilters({
     string | undefined
   >();
   const [cashTypeId, setCashTypeId] = React.useState<string | undefined>();
-  // removed isPostedToBusinessResult filter
   const [range, setRange] = React.useState<DateRange | undefined>();
 
   const { data: cashTypes = [], isLoading: isCashTypesLoading } =
@@ -47,7 +46,7 @@ export function CashbookFilters({
       normalized.counterpartyGroup = counterpartyGroup;
     if (cashTypeId && cashTypeId !== "__all" && cashTypeId !== "__loading")
       normalized.cashTypeId = cashTypeId;
-    // isPostedToBusinessResult removed — do not include in params
+
     if (range?.from) normalized.dateFrom = format(range.from, "yyyy-MM-dd");
     if (range?.to) normalized.dateTo = format(range.to, "yyyy-MM-dd");
     normalized.page = 1;
@@ -58,22 +57,17 @@ export function CashbookFilters({
     return normalized;
   };
 
-  // apply() was removed: we auto-apply using debounce in useEffect
-
   const clear = () => {
     setQ("");
     setType(undefined);
     setCounterpartyGroup(undefined);
     setCashTypeId(undefined);
     setRange(undefined);
-    // Call onApply with default params so that UI refreshes immediately
     onApply({ page: 1, limit: 10, sortBy: "date", sortDir: "DESC" });
   };
 
-  // Debounce & auto-apply filters when they change
   const firstRun = React.useRef(true);
   React.useEffect(() => {
-    // skip first run to avoid duplicate request on mount
     if (firstRun.current) {
       firstRun.current = false;
       return;
@@ -156,12 +150,15 @@ export function CashbookFilters({
             </SelectContent>
           </Select>
         </div>
-        {/* Hạch toán KQKD filter removed */}
+
         <div className="md:col-span-3">
           <Label>Khoảng ngày</Label>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full justify-start gap-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2 text-left font-normal"
+              >
                 <CalendarIcon className="h-4 w-4" />
                 {range?.from ? (
                   range.to ? (
@@ -173,16 +170,24 @@ export function CashbookFilters({
                     <span>{format(range.from, "dd/MM/yyyy")}</span>
                   )
                 ) : (
-                  <span>Chọn khoảng ngày</span>
+                  <span className="text-muted-foreground">
+                    Chọn khoảng ngày
+                  </span>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="p-0">
+            {/* FIXED: 
+              1. w-auto: Để chiều rộng tự động theo nội dung (Calendar)
+              2. bg-white: Đảm bảo có nền trắng, che các phần tử phía sau (khắc phục lỗi Dòng tiền đè lên)
+              3. align="end": Canh lề phải để popup không bị tràn ra ngoài màn hình nếu ở góc phải 
+            */}
+            <PopoverContent className="w-auto p-0 bg-white" align="end">
               <Calendar
                 mode="range"
                 selected={range}
                 onSelect={setRange}
-                numberOfMonths={2}
+                // FIXED: Đổi thành 1 tháng để hiển thị to, rõ ràng, không bị vỡ layout
+                numberOfMonths={1}
                 initialFocus
               />
             </PopoverContent>
