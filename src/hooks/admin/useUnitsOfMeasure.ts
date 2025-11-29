@@ -2,7 +2,7 @@
 "use client";
 
 import { createRestHooks } from "@/hooks/admin/rq";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
 import type {
     UnitOfMeasure,
@@ -72,4 +72,29 @@ export function useActivateUomMutation(options?: any) {
             ...(options || {}),
         } as any
     );
+}
+
+export type UomUsageResponse = {
+    code: string;
+    isUsed: boolean; // Quan trọng nhất cái này
+    counts: {
+        inventoryItems: number;
+        conversions: number;
+        purchaseReceiptItems: number;
+        purchaseReturnLogs: number;
+        ingredients: number;
+    };
+};
+
+export function useUomUsageQuery(code: string, options?: { enabled?: boolean }) {
+    return useQuery<UomUsageResponse>({
+        queryKey: ["units-of-measure", code, "usage"],
+        queryFn: async () => {
+            // Gọi vào API bạn vừa viết ở Controller
+            const res = await api.get(`/units-of-measure/${code}/usage`);
+            return res.data?.data; // Lấy cục data trong response chuẩn của bạn
+        },
+        enabled: !!code && (options?.enabled ?? true), // Chỉ chạy khi có code và dialog mở
+        staleTime: 0, // Luôn fetch mới nhất để đảm bảo chính xác
+    });
 }

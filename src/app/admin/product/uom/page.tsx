@@ -24,7 +24,23 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"; // Import thêm Alert Dialog
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import {
   useUomsQuery,
   useRemoveUomMutation,
@@ -46,12 +62,26 @@ export default function UomListPage() {
   const [name, setName] = useState("");
   const [dimension, setDimension] = useState<string>("none");
   const [page, setPage] = useState(1);
-  // Bỏ chọn số lượng hiển thị (mặc định 10)
   const [sortBy, setSortBy] = useState<"code" | "name" | "dimension" | "none">(
     "none"
   );
   const [sortDir, setSortDir] = useState<"ASC" | "DESC" | "none">("none");
   const [showInactive, setShowInactive] = useState(false);
+
+  // State quản lý dialog xác nhận xóa
+  const [deleteConf, setDeleteConf] = useState<{
+    isOpen: boolean;
+    code: string;
+    name: string;
+    type: "DELETE" | "DEACTIVATE"; // DELETE: Xóa hẳn, DEACTIVATE: Có ràng buộc, hỏi ngưng hoạt động
+    isLoadingCheck: boolean; // Loading khi đang check API
+  }>({
+    isOpen: false,
+    code: "",
+    name: "",
+    type: "DELETE",
+    isLoadingCheck: false,
+  });
 
   useEffect(() => {
     setPage(1);
@@ -79,7 +109,6 @@ export default function UomListPage() {
 
   const removeMut = useRemoveUomMutation({
     onSuccess: (res) => {
-      // BE can soft-delete -> returns different messages
       const msg: string | undefined = (res as any)?.message;
       switch (msg) {
         case "UOM_DEACTIVATED":
@@ -93,8 +122,9 @@ export default function UomListPage() {
         default:
           toast.success("Xóa đơn vị tính thành công");
       }
-      // Ensure the list refreshes immediately when server changes the active flag
       refetch();
+      // Đóng dialog sau khi thành công
+      setDeleteConf((prev) => ({ ...prev, isOpen: false }));
     },
     onError: (e) => toast.error("Xóa thất bại", (e as Error)?.message),
   });
@@ -107,6 +137,63 @@ export default function UomListPage() {
     onError: (e) =>
       toast.error("Không thể ngưng hoạt động", (e as Error)?.message),
   });
+
+  // Hàm xử lý khi bấm nút thùng rác
+  const handleVerifyDelete = async (u: { code: string; name: string }) => {
+    try {
+      setDeleteConf({
+        isOpen: false,
+        code: u.code,
+        name: u.name,
+        type: "DELETE",
+        isLoadingCheck: true, // Bật loading
+      });
+
+      const c = u.code;
+      // Kiểm tra xem đơn vị tính có đang được sử dụng không
+      const [invRes, convFromRes, convToRes] = await Promise.all([
+        api
+          .get("/inventoryitems/list-ingredients", {
+            params: { limit: 1, baseUomCode: c },
+          })
+          .catch(() => ({ data: { data: [] } } as any)),
+        api
+          .get("/uomconversion", {
+            params: { limit: 1, fromCode: c },
+          })
+          .catch(() => ({ data: { data: [] } } as any)),
+        api
+          .get("/uomconversion", {
+            params: { limit: 1, toCode: c },
+          })
+          .catch(() => ({ data: { data: [] } } as any)),
+      ]);
+
+      const usedInInv = (invRes?.data?.data ?? []).length > 0;
+      const usedInConv =
+        (convFromRes?.data?.data ?? []).length > 0 ||
+        (convToRes?.data?.data ?? []).length > 0;
+      const isUsed = usedInInv || usedInConv;
+
+      // Cập nhật trạng thái dialog dựa trên kết quả kiểm tra
+      setDeleteConf({
+        isOpen: true,
+        code: u.code,
+        name: u.name,
+        type: isUsed ? "DEACTIVATE" : "DELETE",
+        isLoadingCheck: false,
+      });
+    } catch (err: any) {
+      setDeleteConf((prev) => ({ ...prev, isLoadingCheck: false }));
+      toast.error(err?.message ?? "Lỗi khi kiểm tra trạng thái đơn vị");
+    }
+  };
+
+  // Hàm thực thi xóa khi người dùng bấm "Đồng ý" trên Dialog
+  const handleConfirmDelete = () => {
+    if (!deleteConf.code) return;
+    removeMut.mutate({ code: deleteConf.code });
+  };
 
   return (
     <div className="space-y-4">
@@ -135,6 +222,7 @@ export default function UomListPage() {
       </div>
 
       <Card className="p-4 grid gap-4 md:grid-cols-4">
+        {/* ... (Phần Input tìm kiếm giữ nguyên không đổi) ... */}
         <div className="md:col-span-2">
           <Label>Tìm kiếm</Label>
           <Input
@@ -290,67 +378,23 @@ export default function UomListPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={async () => {
-                        // pre-check if this UOM is referenced anywhere so we can ask
-                        // the user whether they want to deactivate instead
-                        try {
-                          const c = u.code;
-                          const [invRes, convFromRes, convToRes, ingRes] =
-                            await Promise.all([
-                              api
-                                .get("/inventoryitems/list-ingredients", {
-                                  params: { limit: 1, baseUomCode: c },
-                                })
-                                .catch(() => ({ data: { data: [] } } as any)),
-                              api
-                                .get("/uomconversion", {
-                                  params: { limit: 1, fromCode: c },
-                                })
-                                .catch(() => ({ data: { data: [] } } as any)),
-                              api
-                                .get("/uomconversion", {
-                                  params: { limit: 1, toCode: c },
-                                })
-                                .catch(() => ({ data: { data: [] } } as any)),
-                              // attempt to check menu items (ingredients) by scanning menu list briefly
-                              // NOTE: There's no convenient filter for selected_uom_code - skip heavy checks
-                              Promise.resolve({ data: { data: [] } }),
-                            ]);
-
-                          const usedInInv =
-                            (invRes?.data?.data ?? []).length > 0;
-                          const usedInConv =
-                            (convFromRes?.data?.data ?? []).length > 0 ||
-                            (convToRes?.data?.data ?? []).length > 0;
-                          const isUsed = usedInInv || usedInConv;
-
-                          if (!isUsed) {
-                            // not used: ask for delete confirmation
-                            if (!confirm(`Xóa đơn vị "${u.name}" (${u.code})?`))
-                              return;
-                            removeMut.mutate({ code: u.code });
-                            return;
-                          }
-
-                          // is used -> ask if they want to deactivate instead
-                          const doDeactivate = confirm(
-                            `Đơn vị "${u.name}" (${u.code}) đang được sử dụng ở nơi khác. Bạn có muốn chuyển sang trạng thái ngưng hoạt động thay vì xóa?`
-                          );
-                          if (!doDeactivate) return;
-
-                          // call delete (backend will either hard-delete or soft-delete -> inactivate)
-                          await removeMut.mutateAsync({ code: u.code });
-                        } catch (err: any) {
-                          toast.error(
-                            err?.message ??
-                              "Lỗi khi kiểm tra/đổi trạng thái đơn vị"
-                          );
-                        }
-                      }}
+                      // Sửa logic onClick tại đây: gọi hàm handleVerifyDelete
+                      onClick={() => handleVerifyDelete(u)}
                       title="Xóa"
-                      disabled={removeMut.isPending || updateMut.isPending}
+                      disabled={
+                        removeMut.isPending ||
+                        updateMut.isPending ||
+                        (deleteConf.isLoadingCheck &&
+                          deleteConf.code === u.code)
+                      }
                     >
-                      <Trash2 className="h-4 w-4 text-red-500" />
+                      {/* Hiển thị loader nếu đang check đúng dòng này */}
+                      {deleteConf.isLoadingCheck &&
+                      deleteConf.code === u.code ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      )}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -383,6 +427,74 @@ export default function UomListPage() {
           </Button>
         </div>
       </div>
+
+      {/* Component Alert Dialog Mới */}
+      <AlertDialog
+        open={deleteConf.isOpen}
+        onOpenChange={(open) => {
+          // Nếu đóng modal, reset state
+          if (!open) {
+            setDeleteConf((prev) => ({ ...prev, isOpen: false }));
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteConf.type === "DEACTIVATE"
+                ? "Ngưng hoạt động đơn vị?"
+                : "Xác nhận xóa đơn vị tính"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConf.type === "DEACTIVATE" ? (
+                <>
+                  Đơn vị{" "}
+                  <span className="font-semibold text-foreground">
+                    {deleteConf.name} ({deleteConf.code})
+                  </span>{" "}
+                  đang được sử dụng trong công thức hoặc quy đổi. <br />
+                  Bạn có muốn chuyển sang trạng thái{" "}
+                  <span className="font-semibold text-destructive">
+                    NGƯNG HOẠT ĐỘNG
+                  </span>{" "}
+                  thay vì xóa không?
+                </>
+              ) : (
+                <>
+                  Bạn có chắc chắn muốn xóa đơn vị{" "}
+                  <span className="font-semibold text-foreground">
+                    {deleteConf.name} ({deleteConf.code})
+                  </span>
+                  ? <br />
+                  Hành động này không thể hoàn tác.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMut.isPending}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault(); // Ngăn modal tự đóng ngay lập tức để chờ API
+                handleConfirmDelete();
+              }}
+              className={
+                deleteConf.type === "DELETE"
+                  ? "bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                  : "bg-orange-600 hover:bg-orange-700 focus:ring-orange-600"
+              }
+              disabled={removeMut.isPending}
+            >
+              {removeMut.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {deleteConf.type === "DEACTIVATE" ? "Ngưng hoạt động" : "Xóa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

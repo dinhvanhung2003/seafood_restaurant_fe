@@ -25,6 +25,7 @@ import {
   useUpdateUomMutation,
   useActivateUomMutation,
   useDeactivateUomMutation,
+  useUomUsageQuery,
 } from "@/hooks/admin/useUnitsOfMeasure";
 import {
   useUomConversionsQuery,
@@ -33,7 +34,7 @@ import {
 } from "@/hooks/admin/useUomConversions";
 import type { UnitOfMeasure } from "@/types/admin/product/uom";
 import { useAppToast } from "@/lib/toast";
-import { Pencil, Save } from "lucide-react";
+import { Pencil, Save, Loader2, LockKeyhole } from "lucide-react";
 
 const DIMENSIONS = [
   { value: "count", label: "Số lượng (count)" },
@@ -47,188 +48,143 @@ type Props = { uom: UnitOfMeasure; onUpdated?: () => void };
 export function UomEditDialog({ uom, onUpdated }: Props) {
   const toast = useAppToast();
   const [open, setOpen] = useState(false);
+
+  // Form State
   const [name, setName] = useState(uom.name);
-  const [dimension] = useState<UnitOfMeasure["dimension"]>(uom.dimension); // luôn giữ nguyên
+  const [dimension] = useState<UnitOfMeasure["dimension"]>(uom.dimension);
   const [convFactor, setConvFactor] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
-  function clearFieldErr(field: string) {
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[field];
-      return next;
-    });
-  }
-
-  function parseServerErrors(arr: string[]) {
-    const result: Record<string, string[]> = {};
-    try {
-      for (const s of arr) {
-        const lower = (s || "").toLowerCase();
-        if (lower.includes("name")) {
-          (result.name ??= []).push(s);
-        } else if (lower.includes("dimension")) {
-          (result.dimension ??= []).push(s);
-        } else if (
-          lower.includes("basecode") ||
-          lower.includes("base code") ||
-          lower.includes("base_code")
-        ) {
-          (result.baseCode ??= []).push(s);
-        } else if (lower.includes("code")) {
-          (result.code ??= []).push(s);
-        } else if (
-          lower.includes("factor") ||
-          lower.includes("hệ số") ||
-          lower.includes("ratio")
-        ) {
-          (result.factor ??= []).push(s);
-        } else {
-          (result._ ??= []).push(s);
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return result;
-  }
-
-  const updateMut = useUpdateUomMutation({
-    onError: (e: any) => {
-      const msg = e?.response?.data?.message;
-      if (Array.isArray(msg)) {
-        const parsed = parseServerErrors(msg as string[]);
-        setErrors(parsed);
-        if (parsed._ && parsed._.length) {
-          toast.error(parsed._.join("; "));
-          return;
-        }
-      }
-      toast.error("Cập nhật thất bại", (e as Error)?.message);
-    },
-  });
-
-  // Nếu baseCode null thì coi chính nó là đơn vị cơ sở
   const effectiveBaseCode = uom.baseCode ?? uom.code;
   const isBase = effectiveBaseCode === uom.code;
 
-  // query conversion (if any) for this UOM -> base UOM
+  // 1. Fetch dữ liệu Conversion
   const convQuery = useUomConversionsQuery(
     { fromCode: uom.code, toCode: effectiveBaseCode, limit: 1 },
-    { enabled: !isBase }
+    { enabled: open && !isBase }
   );
-  const createConv = useCreateUomConversionMutation({
-    onError: (e: any) => toast.error("Tạo quy đổi thất bại", e?.message),
-  });
-  const updateConv = useUpdateUomConversionMutation({
-    onError: (e: any) => toast.error("Cập nhật quy đổi thất bại", e?.message),
+
+  // 2. Fetch dữ liệu Usage
+  const usageQuery = useUomUsageQuery(uom.code, {
+    enabled: open && !isBase,
   });
 
-  const activateMut = useActivateUomMutation({
-    onSuccess: () => {
-      toast.success("Đã kích hoạt lại đơn vị");
-      onUpdated?.();
-    },
-    onError: (e: any) => toast.error("Kích hoạt thất bại", e?.message),
-  });
+  // --- SỬA LOGIC CHECK TẠI ĐÂY ---
+  const isLoadingUsage = usageQuery.isLoading;
 
-  const deactivateMut = useDeactivateUomMutation({
-    onSuccess: () => {
-      toast.success("Đã ngưng hoạt động đơn vị");
-      onUpdated?.();
-    },
-    onError: (e: any) => toast.error("Ngưng hoạt động thất bại", e?.message),
-  });
+  // Lấy ra object counts từ API
+  const counts = usageQuery.data?.counts;
 
+  // Chỉ tính là "Đã sử dụng" nếu 1 trong 4 bảng nghiệp vụ có dữ liệu
+  // Bỏ qua trường 'conversions' vì nó luôn tồn tại khi sửa quy đổi
+  const hasTransactionData =
+    (counts?.inventoryItems ?? 0) > 0 ||
+    (counts?.purchaseReceiptItems ?? 0) > 0 ||
+    (counts?.purchaseReturnLogs ?? 0) > 0 ||
+    (counts?.ingredients ?? 0) > 0;
+
+  // Nếu có dữ liệu nghiệp vụ -> KHÔNG cho sửa (canEdit = false)
+  const canEditFactor = !hasTransactionData;
+
+  // --- Reset Form khi mở Dialog ---
+  useEffect(() => {
+    if (open) {
+      setName(uom.name);
+      setErrors({});
+      if (!isBase && convQuery.data) {
+        const r = (convQuery.data?.data ?? [])[0];
+        if (r) setConvFactor(String(r.factor ?? ""));
+      }
+    }
+  }, [open, uom.name, isBase, convQuery.data]);
+
+  // --- Xử lý Submit ---
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Tên không được để trống");
       return;
     }
-
     setSubmitting(true);
 
-    // Gửi kèm baseCode để BE không báo lỗi
+    const doAfter = () => {
+      toast.success("Đã cập nhật đơn vị tính");
+      setOpen(false);
+      onUpdated?.();
+      setSubmitting(false);
+    };
+
     updateMut.mutate(
       {
         args: { code: uom.code },
-        data: {
-          name: name.trim(),
-          // dimension không cho đổi, dùng lại giá trị cũ
-          dimension,
-          baseCode: effectiveBaseCode,
-        },
+        data: { name: name.trim(), dimension, baseCode: effectiveBaseCode },
       },
       {
         onSuccess: () => {
-          setErrors({});
-          // If this is a conversion unit, attempt update/create conversion record
-          const doAfter = () => {
-            toast.success("Đã cập nhật đơn vị tính");
-            setOpen(false);
-            onUpdated?.();
-          };
-
-          if (!isBase) {
-            const f = Number(convFactor);
-            if (!isFinite(f) || f <= 0) {
-              toast.error("Hệ số quy đổi không hợp lệ");
-              setSubmitting(false);
-              return;
-            }
-
-            const exists = (convQuery.data?.data ?? []).length > 0;
-            if (exists) {
-              updateConv.mutate(
-                {
-                  args: undefined,
-                  data: {
-                    fromCode: uom.code,
-                    toCode: effectiveBaseCode,
-                    factor: f,
-                  },
-                },
-                { onSuccess: doAfter, onSettled: () => setSubmitting(false) }
-              );
-              return;
-            }
-            // else create
-            createConv.mutate(
-              { fromCode: uom.code, toCode: effectiveBaseCode, factor: f },
-              { onSuccess: doAfter, onSettled: () => setSubmitting(false) }
-            );
+          // Nếu là Base unit hoặc Bị khóa do có giao dịch -> Chỉ update tên
+          if (isBase || !canEditFactor) {
+            doAfter();
             return;
           }
 
-          doAfter();
+          const f = Number(convFactor);
+          if (!isFinite(f) || f <= 0) {
+            toast.error("Hệ số quy đổi không hợp lệ");
+            setSubmitting(false);
+            return;
+          }
+
+          const exists = (convQuery.data?.data ?? []).length > 0;
+          if (exists) {
+            updateConv.mutate(
+              {
+                args: undefined,
+                data: {
+                  fromCode: uom.code,
+                  toCode: effectiveBaseCode,
+                  factor: f,
+                },
+              },
+              { onSuccess: doAfter, onError: () => setSubmitting(false) }
+            );
+          } else {
+            createConv.mutate(
+              { fromCode: uom.code, toCode: effectiveBaseCode, factor: f },
+              { onSuccess: doAfter, onError: () => setSubmitting(false) }
+            );
+          }
         },
-        onSettled: () => setSubmitting(false),
+        onError: (e) => {
+          handleMutationError(e, "Cập nhật thất bại");
+          setSubmitting(false);
+        },
       }
     );
   };
 
-  // hydrate convFactor when conversion query returns
-  useEffect(() => {
-    if (!isBase && convQuery.data) {
-      const r = (convQuery.data?.data ?? [])[0];
-      if (r) setConvFactor(String(r.factor ?? ""));
-    }
-  }, [convQuery.data, isBase]);
+  const updateMut = useUpdateUomMutation({});
+  const createConv = useCreateUomConversionMutation({});
+  const updateConv = useUpdateUomConversionMutation({});
+  const activateMut = useActivateUomMutation({
+    onSuccess: () => {
+      toast.success("Đã kích hoạt");
+      onUpdated?.();
+    },
+  });
+  const deactivateMut = useDeactivateUomMutation({
+    onSuccess: () => {
+      toast.success("Đã ngưng hoạt động");
+      onUpdated?.();
+    },
+  });
+
+  const handleMutationError = (e: any, defaultMsg: string) => {
+    toast.error(defaultMsg, e?.message);
+  };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) {
-          // reset mỗi lần mở
-          setName(uom.name);
-          setErrors({});
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="icon" variant="ghost" title="Chỉnh sửa">
           <Pencil className="h-4 w-4" />
@@ -238,155 +194,126 @@ export function UomEditDialog({ uom, onUpdated }: Props) {
         <DialogHeader>
           <DialogTitle>Chỉnh sửa đơn vị</DialogTitle>
           <DialogDescription>
-            Mã đơn vị <span className="font-mono">{uom.code}</span> không thể
-            thay đổi. Bạn chỉ có thể cập nhật <strong>tên hiển thị</strong>, các
-            thông tin khác mang tính tham khảo.
+            Mã đơn vị {uom.code} không thể thay đổi.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Mã */}
           <div>
             <Label>Mã</Label>
-            <Input value={uom.code} disabled readOnly />
+            <Input value={uom.code} disabled readOnly className="bg-muted" />
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">Trạng thái:</span>
-            {uom.isActive === false ? (
-              <Badge variant="destructive">Ngưng hoạt động</Badge>
-            ) : (
-              <Badge variant="outline">Hoạt động</Badge>
-            )}
-            {/* action button to toggle active state (activate when inactive, deactivate when active) */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Label>Trạng thái:</Label>
+              {uom.isActive === false ? (
+                <Badge variant="destructive">Ngưng hoạt động</Badge>
+              ) : (
+                <Badge variant="outline">Hoạt động</Badge>
+              )}
+            </div>
             {uom.isActive === false ? (
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  if (!confirm(`Kích hoạt đơn vị ${uom.name} (${uom.code})?`))
-                    return;
-                  activateMut.mutate({ code: uom.code });
-                }}
-                disabled={activateMut.isPending}
+                type="button"
+                onClick={() => activateMut.mutate({ code: uom.code })}
               >
                 Kích hoạt
               </Button>
             ) : (
               <Button
                 size="sm"
-                variant="destructive"
+                variant="ghost"
+                className="text-red-500 hover:text-red-600"
+                type="button"
                 onClick={() => {
-                  if (
-                    !confirm(
-                      `Ngưng hoạt động đơn vị ${uom.name} (${uom.code})?`
-                    )
-                  )
-                    return;
-                  deactivateMut.mutate({ code: uom.code });
+                  if (confirm("Ngưng hoạt động?"))
+                    deactivateMut.mutate({ code: uom.code });
                 }}
-                disabled={deactivateMut.isPending}
               >
                 Ngưng hoạt động
               </Button>
             )}
           </div>
-          {/* Tên */}
+
           <div>
-            <Label>Tên</Label>
+            <Label>Tên hiển thị</Label>
             <Input
               value={name}
-              onChange={(e) => {
-                clearFieldErr("name");
-                setName(e.target.value);
-              }}
+              onChange={(e) => setName(e.target.value)}
               required
             />
-            {errors?.name?.[0] && (
-              <p className="text-xs text-destructive">{errors.name[0]}</p>
-            )}
           </div>
 
-          {/* Quy cách đo – hiển thị, không cho đổi */}
-          <div>
-            <Label>Quy cách đo</Label>
-            <Select value={dimension} disabled>
-              <SelectTrigger className="bg-muted">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DIMENSIONS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Quy cách đo được thiết lập khi tạo đơn vị và không thể thay đổi vì
-              đã ảnh hưởng đến công thức / tồn kho.
-            </p>
-            {errors?.dimension?.[0] && (
-              <p className="text-xs text-destructive mt-1">
-                {errors.dimension[0]}
-              </p>
-            )}
-          </div>
-
-          {/* Loại đơn vị – chỉ hiển thị, không cho sửa */}
-          <div className="rounded-md border p-3 bg-muted/40 space-y-2">
+          <div className="rounded-md border p-3 bg-slate-50 space-y-2">
             <Label className="text-sm font-medium">Loại đơn vị</Label>
-
             {isBase ? (
-              <p className="text-sm">
-                <span className="font-semibold">Đơn vị cơ sở (Base).</span> Đây
-                là đơn vị nhỏ nhất dùng để tính tồn kho (ví dụ: G, ML, CAN,
-                EA...). Tất cả quy đổi sẽ quy về đơn vị này.
+              <p className="text-sm text-muted-foreground">
+                Đơn vị cơ sở (Base).
               </p>
             ) : (
               <>
-                <p className="text-sm">
-                  <span className="font-semibold">
-                    Đơn vị quy đổi (Pack / Case).
-                  </span>{" "}
-                  Đơn vị này dùng để nhập bán theo thùng / lốc / hộp lớn.
+                <p className="text-sm text-muted-foreground">
+                  Đơn vị quy đổi (Pack / Case).
                 </p>
-                <div className="space-y-1">
-                  <Label className="text-xs">Đơn vị cơ sở</Label>
-                  <Input
-                    value={
-                      uom.baseName
-                        ? `${uom.baseName} (${effectiveBaseCode})`
-                        : effectiveBaseCode
-                    }
-                    disabled
-                    className="bg-muted"
-                  />
-                  {errors?.baseCode?.[0] && (
-                    <p className="text-xs text-destructive">
-                      {errors.baseCode[0]}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">Đơn vị cơ sở</p>
-                  <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">Hệ số</Label>
+                      <Label className="text-xs">Đơn vị cơ sở</Label>
                       <Input
-                        type="number"
-                        min={0}
-                        step={0.0001}
-                        value={convFactor}
-                        onChange={(e) => {
-                          clearFieldErr("factor");
-                          setConvFactor(e.target.value);
-                        }}
+                        value={effectiveBaseCode}
+                        disabled
+                        className="bg-white"
                       />
-                      {errors?.factor?.[0] && (
-                        <p className="text-xs text-destructive">
-                          {errors.factor[0]}
-                        </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs flex justify-between items-center">
+                        Hệ số
+                        {!canEditFactor && !isLoadingUsage && (
+                          <span className="text-[10px] text-red-600 font-bold flex items-center ml-1">
+                            <LockKeyhole className="h-3 w-3 mr-0.5" /> (Đã khóa)
+                          </span>
+                        )}
+                      </Label>
+
+                      {isLoadingUsage ? (
+                        <div className="h-9 w-full bg-slate-200 animate-pulse rounded border" />
+                      ) : (
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.0001}
+                          value={convFactor}
+                          onChange={(e) => setConvFactor(e.target.value)}
+                          disabled={!canEditFactor}
+                          className={
+                            !canEditFactor
+                              ? "bg-red-50 text-red-900 border-red-200 cursor-not-allowed font-medium"
+                              : "bg-white"
+                          }
+                        />
                       )}
                     </div>
+                  </div>
+
+                  {!canEditFactor && !isLoadingUsage && (
+                    <div className="text-[11px] text-red-600 bg-red-50 p-2 rounded border border-red-100 flex gap-2 items-start">
+                      <LockKeyhole className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <div>
+                        Đơn vị này đã được sử dụng trong nghiệp vụ (Kho:{" "}
+                        {counts?.inventoryItems}, Nhập:{" "}
+                        {counts?.purchaseReceiptItems}, Công thức:{" "}
+                        {counts?.ingredients}). Bạn không thể thay đổi hệ số quy
+                        đổi.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-xs text-muted-foreground text-center">
+                    1 {uom.code} = <b>{convFactor || "..."}</b>{" "}
+                    {effectiveBaseCode}
                   </div>
                 </div>
               </>
@@ -398,12 +325,12 @@ export function UomEditDialog({ uom, onUpdated }: Props) {
               variant="outline"
               type="button"
               onClick={() => setOpen(false)}
-              disabled={submitting}
             >
               Hủy
             </Button>
-            <Button type="submit" disabled={submitting}>
-              <Save className="h-4 w-4 mr-2" /> Lưu
+            <Button type="submit" disabled={submitting || isLoadingUsage}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Lưu
             </Button>
           </DialogFooter>
         </form>

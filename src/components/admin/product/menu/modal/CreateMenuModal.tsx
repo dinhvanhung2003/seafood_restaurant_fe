@@ -2,19 +2,27 @@
 
 import { useState, useEffect } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { X } from "lucide-react";
+import {
+  X,
+  Plus,
+  Trash2,
+  AlertCircle,
+  Package,
+  Info,
+  ChefHat,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -24,25 +32,19 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
-import { Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/axios";
 import { IngredientCombobox } from "./IngredientCombobox";
-import { UomPicker } from "./UomPicker"; // Import UomPicker
+import { UomPicker } from "./UomPicker";
+
+/* ================== UTILS ================== */
+const blockInvalidChar = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (["-", "+", "e", "E"].includes(e.key)) {
+    e.preventDefault();
+  }
+};
 
 /* ================== TYPES ================== */
 export type CategoryOption = { id: string; name: string };
-export type InventoryItemOption = {
-  id: string;
-  name: string; // label hiển thị
-  unit: string;
-  onHand: number; // quantity parse về number
-};
-function toNumber(n: any) {
-  // PG numeric -> "50.000" => 50
-  if (n == null) return 0;
-  return Number(String(n).replace(/,/g, ""));
-}
 export type IngredientInput = {
   inventoryItemId: string;
   quantity: number;
@@ -53,15 +55,15 @@ export type IngredientInput = {
 
 export type CreateMenuItemForm = {
   name: string;
-  price: string; // gửi dạng string trong multipart
+  price: number | string;
   description?: string;
-  image?: FileList; // RHF trả FileList
+  image?: FileList;
   categoryId: string;
   ingredients: IngredientInput[];
-  isReturnable?: boolean; // Thêm trường isReturnable
+  isReturnable?: boolean;
 };
 
-/* ================== API calls (axios) ================== */
+/* ================== API calls ================== */
 async function fetchCategoryOptions(): Promise<CategoryOption[]> {
   const res = await api.get("/category/list-category", {
     params: { isActive: true, type: "MENU", limit: 100, sort: "name:ASC" },
@@ -69,20 +71,6 @@ async function fetchCategoryOptions(): Promise<CategoryOption[]> {
   const list = res.data?.data ?? [];
   return list.map((c: any) => ({ id: c.id, name: c.name })) as CategoryOption[];
 }
-
-// This function is no longer needed here as the combobox fetches its own data.
-// async function fetchInventoryOptions(): Promise<InventoryItemOption[]> {
-//   const res = await api.get("/inventoryitems/list-ingredients", {
-//     params: { limit: 10, sort: "name:ASC", isActive: true },
-//   });
-//   const list: any[] = res.data?.data ?? res.data ?? [];
-//   return list.map(i => ({
-//     id: i.id,
-//     name: i.name,
-//     unit: i.unit,
-//     onHand: toNumber(i.quantity),
-//   }));
-// }
 
 async function createMenuItem(values: CreateMenuItemForm) {
   const fd = new FormData();
@@ -97,13 +85,13 @@ async function createMenuItem(values: CreateMenuItemForm) {
         inventoryItemId: g.inventoryItemId,
         quantity: Number(g.quantity),
         note: g.note ?? undefined,
-        uomCode: g.uomCode, // Send uomCode to backend
+        uomCode: g.uomCode,
       }))
     )
   );
   const file = values.image?.[0];
-  if (file) fd.append("image", file); // axios sẽ tự set Content-Type + boundary
-  fd.append("isReturnable", String(values.isReturnable ?? false)); // Gửi trường isReturnable
+  if (file) fd.append("image", file);
+  fd.append("isReturnable", String(values.isReturnable ?? false));
 
   const res = await api.post("/menuitems/create-menuitem", fd);
   return res.data;
@@ -120,13 +108,10 @@ export default function CreateMenuItemDialog({
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
 
-  // options
   const categoriesQuery = useQuery({
     queryKey: ["category-options"],
     queryFn: fetchCategoryOptions,
   });
-  // Remove the old inventoryQuery
-  // const inventoryQuery = useQuery({ ... });
 
   const {
     register,
@@ -135,6 +120,8 @@ export default function CreateMenuItemDialog({
     reset,
     watch,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<CreateMenuItemForm>({
     defaultValues: {
@@ -142,6 +129,7 @@ export default function CreateMenuItemDialog({
       price: "",
       description: "",
       categoryId: "",
+      isReturnable: false,
       ingredients: [
         {
           inventoryItemId: "",
@@ -163,57 +151,74 @@ export default function CreateMenuItemDialog({
   const mutation = useMutation({
     mutationFn: (vals: CreateMenuItemForm) => createMenuItem(vals),
     onSuccess: () => {
-      // reload list hiện tại
       qc.invalidateQueries({ queryKey: ["menuitems"], exact: false });
       setOpen(false);
       reset();
       onCreated?.();
     },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Có lỗi xảy ra khi tạo món");
+    },
   });
 
   const onSubmit = handleSubmit((vals) => {
-    // Lọc bỏ dòng chưa chọn nguyên liệu
-    const cleaned = {
-      ...vals,
-      ingredients: vals.ingredients
-        .filter(
-          (g) => g.inventoryItemId && String(g.inventoryItemId).length > 0
-        )
-        .map((g) => ({
-          inventoryItemId: String(g.inventoryItemId),
-          quantity: Number(g.quantity),
-          note: g.note?.trim() || undefined,
-          uomCode: g.uomCode || undefined,
-        })),
-    };
-
-    if (!cleaned.categoryId) {
-      alert("Vui lòng chọn danh mục");
-      return;
-    }
-    if (cleaned.ingredients.length === 0) {
+    if (vals.ingredients.length === 0) {
       alert("Vui lòng thêm ít nhất 1 nguyên liệu");
       return;
     }
+    const hasEmptyItem = vals.ingredients.some(
+      (i) => !i.inventoryItemId || i.inventoryItemId === ""
+    );
+    if (hasEmptyItem) {
+      vals.ingredients.forEach((item, index) => {
+        if (!item.inventoryItemId) {
+          setError(`ingredients.${index}.inventoryItemId`, {
+            type: "manual",
+            message: "Bắt buộc chọn",
+          });
+        }
+      });
+      return;
+    }
 
-    // (tuỳ chọn) kiểm tra pattern UUID để báo sớm trên FE
+    // Validate price > 0
+    const priceNum = Number(vals.price);
+    if (Number.isNaN(priceNum) || priceNum <= 0) {
+      setError("price", {
+        type: "manual",
+        message: "Giá phải lớn hơn 0",
+      });
+      return;
+    }
+
+    // Validate quantities > 0 per row
+    let hasQtyError = false;
+    vals.ingredients.forEach((item, index) => {
+      const q = Number(item.quantity);
+      if (Number.isNaN(q) || q <= 0) {
+        hasQtyError = true;
+        setError(`ingredients.${index}.quantity`, {
+          type: "manual",
+          message: "Số lượng phải lớn hơn 0",
+        });
+      }
+    });
+    if (hasQtyError) return;
+
     const uuidRe =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (
-      !uuidRe.test(cleaned.categoryId) ||
-      cleaned.ingredients.some((i) => !uuidRe.test(i.inventoryItemId))
+      !uuidRe.test(vals.categoryId) ||
+      vals.ingredients.some((i) => !uuidRe.test(i.inventoryItemId))
     ) {
-      alert("Dữ liệu không hợp lệ (ID không phải UUID)");
+      alert("Dữ liệu không hợp lệ (ID lỗi)");
       return;
     }
-    console.log("Payload gửi:", cleaned);
 
-    mutation.mutate(cleaned);
+    mutation.mutate(vals);
   });
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // Lấy file từ RHF và tạo preview URL
   const imageFiles = watch("image");
   useEffect(() => {
     if (!imageFiles || imageFiles.length === 0) {
@@ -226,357 +231,434 @@ export default function CreateMenuItemDialog({
     return () => URL.revokeObjectURL(url);
   }, [imageFiles]);
 
-  // Clear ảnh đang chọn
   const clearImage = () => {
-    setValue("image", undefined); // reset field RHF
+    setValue("image", undefined);
     setPreviewUrl(null);
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-blue-600 hover:bg-blue-700">
+        <Button className="bg-blue-600 hover:bg-blue-700 font-medium shadow-sm">
           <Plus className="h-4 w-4 mr-2" /> {triggerLabel}
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[900px] lg:max-w-[1100px] max-h-[90vh] overflow-y-auto p-8">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold mb-4">
-            Thêm món
+      <DialogContent className="sm:max-w-[950px] lg:max-w-[1150px] max-h-[90vh] overflow-y-auto p-0 gap-0 bg-gray-50/90">
+        <DialogHeader className="px-6 py-4 bg-white border-b sticky top-0 z-20 shadow-sm">
+          <DialogTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <Package className="w-5 h-5 text-blue-600" />
+            Thêm món mới
           </DialogTitle>
         </DialogHeader>
-        <form
-          onSubmit={onSubmit}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-8"
-        >
-          {/* Cột trái: Ảnh món ăn */}
-          <div className="flex flex-col gap-4 items-start justify-start">
-            <Label className="mb-2 font-semibold">Ảnh món (tùy chọn)</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              {...register("image", {
-                validate: (fl) => {
-                  const f = fl?.[0];
-                  if (!f) return true;
-                  const maxMB = 5;
-                  const okType = /^image\//.test(f.type);
-                  const okSize = f.size <= maxMB * 1024 * 1024;
-                  if (!okType) return "Chỉ chọn file ảnh";
-                  if (!okSize) return `Kích thước tối đa ${maxMB}MB`;
-                  return true;
-                },
-              })}
-              className="mb-2"
-            />
-            {previewUrl && (
-              <div className="relative rounded-lg overflow-hidden border w-full max-w-xs">
-                <Image
-                  src={previewUrl}
-                  alt="Xem trước ảnh món"
-                  width={320}
-                  height={180}
-                  className="object-cover w-full h-auto"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  className="absolute top-2 right-2"
-                  onClick={clearImage}
-                  title="Gỡ ảnh"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-            {errors.image && (
-              <p className="text-sm text-red-500 mt-1">
-                {String(errors.image.message)}
-              </p>
-            )}
-          </div>
 
-          {/* Cột phải: Thông tin món ăn */}
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="font-semibold">Tên món *</Label>
-                <Input
-                  placeholder="Lẩu Tomyum"
-                  {...register("name", { required: "Vui lòng nhập tên món" })}
-                  className="mt-1"
-                />
-                {errors.name && (
-                  <p className="text-sm text-red-500 mt-1">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label className="font-semibold">Giá (VND) *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="250000"
-                  {...register("price", {
-                    required: "Vui lòng nhập giá",
-                    validate: (v) => {
-                      if (!v.trim()) return "Vui lòng nhập giá";
-                      const n = Number(v);
-                      if (Number.isNaN(n) || n < 0)
-                        return "Giá phải là số >= 0";
-                      return true;
-                    },
-                  })}
-                  className="mt-1"
-                />
-                {errors.price && (
-                  <p className="text-sm text-red-500 mt-1">
-                    {errors.price.message}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div>
-              <Label className="font-semibold">Mô tả</Label>
-              <Textarea
-                placeholder="Món lẩu tôm yum ngon"
-                {...register("description")}
-                className="mt-1"
-              />
-            </div>
-            <div className="flex items-center gap-3 mb-2">
-              <Controller
-                control={control}
-                name="isReturnable"
-                defaultValue={false}
-                render={({ field }) => (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="isReturnable"
-                      className="w-4 h-4 accent-blue-600"
-                      checked={field.value}
-                      onChange={(e) => field.onChange(e.target.checked)}
+        <form onSubmit={onSubmit} className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Cột trái: Ảnh món ăn (4 columns) */}
+            <div className="lg:col-span-4 flex flex-col gap-6">
+              <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                <div className="border-b pb-3 mb-4">
+                  <h3 className="font-semibold text-base text-gray-800 flex items-center gap-2">
+                    Ảnh đại diện
+                  </h3>
+                </div>
+
+                {previewUrl ? (
+                  <div className="relative rounded-md overflow-hidden border border-gray-200 aspect-video w-full group shadow-inner">
+                    <Image
+                      src={previewUrl}
+                      alt="Xem trước"
+                      fill
+                      className="object-cover"
                     />
-                    <Label
-                      htmlFor="isReturnable"
-                      className="cursor-pointer text-sm"
-                    >
-                      Cho phép khách trả lại món này
-                    </Label>
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={clearImage}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" /> Xóa ảnh
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-300 rounded-md aspect-video w-full flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 hover:bg-gray-100 hover:border-blue-400 transition cursor-pointer relative group">
+                    <div className="p-3 bg-white rounded-full shadow-sm mb-2 group-hover:scale-110 transition-transform">
+                      <Plus className="h-6 w-6 text-gray-400 group-hover:text-blue-500" />
+                    </div>
+                    <span className="text-sm font-medium">Tải ảnh lên</span>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      {...register("image", {
+                        validate: (fl) => {
+                          const f = fl?.[0];
+                          if (!f) return true;
+                          if (!/^image\//.test(f.type))
+                            return "Chỉ chọn file ảnh";
+                          if (f.size > 5 * 1024 * 1024)
+                            return "Kích thước tối đa 5MB";
+                          return true;
+                        },
+                      })}
+                    />
                   </div>
                 )}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="font-semibold">Danh mục *</Label>
-                <Controller
-                  control={control}
-                  name="categoryId"
-                  rules={{ required: "Vui lòng chọn danh mục" }}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => field.onChange(v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            categoriesQuery.isLoading
-                              ? "Đang tải..."
-                              : "Chọn danh mục"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(categoriesQuery.data ?? []).map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                {errors.categoryId && (
-                  <p className="text-sm text-red-500 mt-1">
-                    {errors.categoryId.message as string}
+
+                {errors.image && (
+                  <p className="text-xs text-red-500 mt-2 font-medium flex items-center">
+                    <AlertCircle className="w-3 h-3 mr-1" />{" "}
+                    {String(errors.image.message)}
                   </p>
                 )}
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  Hỗ trợ: JPG, PNG, WEBP. Tối đa 5MB.
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* Nguyên liệu */}
-          <div className="col-span-2 mt-8">
-            <div className="font-semibold text-lg mb-2">Nguyên liệu</div>
-            <div className="rounded-lg border bg-white max-h-[340px] overflow-y-auto overflow-x-hidden px-2">
-              <table className="w-full text-sm table-fixed">
-                <colgroup>
-                  <col style={{ width: "45%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "18%" }} />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "5%" }} />
-                </colgroup>
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-3 py-2 font-medium text-left">
-                      Nguyên liệu *
-                    </th>
-                    <th className="px-3 py-2 font-medium text-left">
-                      Số lượng *
-                    </th>
-                    <th className="px-3 py-2 font-medium text-left">
-                      Đơn vị *
-                    </th>
-                    <th className="px-3 py-2 font-medium text-left">Ghi chú</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fields.map((f, idx) => {
-                    const inventoryItemId = watch(
-                      `ingredients.${idx}.inventoryItemId`
-                    );
-                    const selectedItem = (watch("ingredients") as any[]).find(
-                      (i) => i.inventoryItemId === inventoryItemId
-                    );
-                    return (
-                      <tr key={f.id} className="border-b">
-                        <td className="px-3 py-2 align-top">
-                          <Controller
-                            control={control}
-                            name={`ingredients.${idx}.inventoryItemId` as const}
-                            rules={{ required: "Chọn nguyên liệu" }}
-                            render={({ field }) => (
-                              <div className="min-w-0 w-full">
-                                <IngredientCombobox
-                                  value={field.value}
-                                  onChange={(value, item) => {
-                                    field.onChange(value);
-                                    setValue(
-                                      `ingredients.${idx}.uomCode`,
-                                      item?.unit ?? ""
-                                    );
-                                    setValue(
-                                      `ingredients.${idx}.baseUnit`,
-                                      item?.baseUomName ?? ""
-                                    );
-                                  }}
-                                />
-                              </div>
-                            )}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            step="any"
-                            min={0}
-                            className="w-full max-w-full"
-                            {...register(
-                              `ingredients.${idx}.quantity` as const,
-                              {
-                                // allow string while typing; validate on the fly
-                                validate: (v) => {
-                                  const raw = v as any;
-                                  if (
-                                    raw === "" ||
-                                    raw === null ||
-                                    typeof raw === "undefined"
-                                  )
-                                    return true;
-                                  const n = Number(raw);
-                                  return (!Number.isNaN(n) && n >= 0) || ">= 0";
-                                },
-                              }
-                            )}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <Controller
-                            control={control}
-                            name={`ingredients.${idx}.uomCode` as const}
-                            rules={{ required: "Chọn đơn vị" }}
-                            render={({ field }) => (
-                              <div className="min-w-0 w-full">
-                                <UomPicker
-                                  inventoryItemId={inventoryItemId}
-                                  baseUnit={selectedItem?.baseUnit}
-                                  value={field.value ?? ""}
-                                  onChange={field.onChange}
-                                  disabled={!inventoryItemId}
-                                />
-                              </div>
-                            )}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <Input
-                            className="w-full"
-                            {...register(`ingredients.${idx}.note` as const)}
-                            placeholder="Tươi / hộp / lon..."
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right align-top">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() => remove(idx)}
-                            size="sm"
+            {/* Cột phải: Thông tin & Nguyên liệu (8 columns) */}
+            <div className="lg:col-span-8 flex flex-col gap-6">
+              {/* Card 1: Thông tin chung */}
+              <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                <div className="border-b pb-3 mb-5 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-gray-500" />
+                  <h3 className="font-semibold text-base text-gray-800">
+                    Thông tin chung
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label className="font-medium text-sm">
+                      Tên món <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      placeholder="VD: Lẩu Thái Tomyum"
+                      {...register("name", {
+                        required: "Vui lòng nhập tên món",
+                      })}
+                      className={errors.name ? "border-red-500 bg-red-50" : ""}
+                    />
+                    {errors.name && (
+                      <p className="text-xs text-red-500">
+                        {errors.name.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="font-medium text-sm">
+                      Giá bán (VND) <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      {/* --- SỬA Ở ĐÂY: Thêm class CSS để ẩn nút spinner mũi tên --- */}
+                      <Input
+                        type="number"
+                        min={1}
+                        onKeyDown={blockInvalidChar}
+                        placeholder="0"
+                        {...register("price", {
+                          required: "Vui lòng nhập giá",
+                          min: {
+                            value: 1,
+                            message: "Giá phải lớn hơn 0",
+                          },
+                          valueAsNumber: true,
+                        })}
+                        className={`${
+                          errors.price
+                            ? "border-red-500 bg-red-50 pr-8"
+                            : "pr-8"
+                        } [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-medium">
+                        đ
+                      </span>
+                    </div>
+                    {errors.price && (
+                      <p className="text-xs text-red-500">
+                        {errors.price.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
+                  <div className="space-y-2">
+                    <Label className="font-medium text-sm">
+                      Danh mục <span className="text-red-500">*</span>
+                    </Label>
+                    <Controller
+                      control={control}
+                      name="categoryId"
+                      rules={{ required: "Vui lòng chọn danh mục" }}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger
+                            className={
+                              errors.categoryId
+                                ? "border-red-500 bg-red-50"
+                                : ""
+                            }
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div className="p-2 sticky bottom-0 bg-white">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    append({
-                      inventoryItemId: "",
-                      quantity: 1,
-                      note: "",
-                      uomCode: "",
-                      baseUnit: "",
-                    })
-                  }
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Thêm dòng
-                </Button>
+                            <SelectValue placeholder="-- Chọn danh mục --" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(categoriesQuery.data ?? []).map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.categoryId && (
+                      <p className="text-xs text-red-500">
+                        {errors.categoryId.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center pt-8">
+                    <Controller
+                      control={control}
+                      name="isReturnable"
+                      render={({ field }) => (
+                        <div
+                          className="flex items-center space-x-2 border px-3 py-2 rounded-md bg-gray-50/50 w-full hover:bg-gray-100 transition cursor-pointer"
+                          onClick={() => field.onChange(!field.value)}
+                        >
+                          <input
+                            type="checkbox"
+                            id="isReturnable"
+                            checked={field.value}
+                            onChange={(e) => field.onChange(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <Label
+                            htmlFor="isReturnable"
+                            className="cursor-pointer text-sm font-medium text-gray-700 select-none"
+                          >
+                            Cho phép khách trả lại món
+                          </Label>
+                        </div>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 mt-4">
+                  <Label className="font-medium text-sm">Mô tả</Label>
+                  <Textarea
+                    placeholder="Mô tả chi tiết về thành phần, hương vị..."
+                    {...register("description")}
+                    className="resize-none min-h-[80px]"
+                  />
+                </div>
+              </div>
+
+              {/* Card 2: Nguyên liệu */}
+              <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm flex flex-col h-full">
+                <div className="border-b pb-3 mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ChefHat className="w-4 h-4 text-gray-500" />
+                    <h3 className="font-semibold text-base text-gray-800">
+                      Định lượng nguyên liệu
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      append({
+                        inventoryItemId: "",
+                        quantity: 1,
+                        note: "",
+                        uomCode: "",
+                        baseUnit: "",
+                      })
+                    }
+                    className="text-blue-600 border-blue-200 bg-blue-50/50 hover:bg-blue-100 h-8 text-xs"
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Thêm dòng
+                  </Button>
+                </div>
+
+                <div className="rounded-md border border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto max-h-[400px]">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 sticky top-0 z-10 text-gray-700 font-semibold border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left w-[35%] text-xs uppercase tracking-wider">
+                            Nguyên liệu <span className="text-red-500">*</span>
+                          </th>
+                          <th className="px-4 py-2.5 text-left w-[15%] text-xs uppercase tracking-wider">
+                            Số lượng <span className="text-red-500">*</span>
+                          </th>
+                          <th className="px-4 py-2.5 text-left w-[20%] text-xs uppercase tracking-wider">
+                            Đơn vị <span className="text-red-500">*</span>
+                          </th>
+                          <th className="px-4 py-2.5 text-left w-[25%] text-xs uppercase tracking-wider">
+                            Ghi chú
+                          </th>
+                          <th className="px-2 py-2.5 w-[5%]"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {fields.map((f, idx) => {
+                          const hasErrorItem =
+                            errors.ingredients?.[idx]?.inventoryItemId;
+                          const selectedItem = (
+                            watch("ingredients") as any[]
+                          )?.[idx];
+
+                          return (
+                            <tr
+                              key={f.id}
+                              className="hover:bg-blue-50/30 group transition-colors"
+                            >
+                              <td className="px-4 py-2 align-top">
+                                <Controller
+                                  control={control}
+                                  name={`ingredients.${idx}.inventoryItemId`}
+                                  rules={{ required: "Bắt buộc chọn" }}
+                                  render={({ field }) => (
+                                    <IngredientCombobox
+                                      value={field.value}
+                                      onChange={(value, item) => {
+                                        field.onChange(value);
+                                        clearErrors(
+                                          `ingredients.${idx}.inventoryItemId`
+                                        );
+                                        setValue(
+                                          `ingredients.${idx}.uomCode`,
+                                          item?.unit ?? ""
+                                        );
+                                        setValue(
+                                          `ingredients.${idx}.baseUnit`,
+                                          item?.baseUomName ?? ""
+                                        );
+                                      }}
+                                    />
+                                  )}
+                                />
+                                {hasErrorItem && (
+                                  <span className="text-[10px] text-red-500 block mt-1 font-medium">
+                                    {hasErrorItem.message}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 align-top">
+                                {/* --- SỬA Ở ĐÂY: Ẩn spinner cho ô số lượng --- */}
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  step="any"
+                                  onKeyDown={blockInvalidChar}
+                                  {...register(`ingredients.${idx}.quantity`, {
+                                    valueAsNumber: true,
+                                    min: {
+                                      value: 1,
+                                      message: "Số lượng phải lớn hơn 0",
+                                    },
+                                    required: "Bắt buộc",
+                                  })}
+                                  className="h-9 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                />
+                                {errors.ingredients?.[idx]?.quantity && (
+                                  <div className="text-[11px] text-red-500 mt-1">
+                                    {String(
+                                      errors.ingredients[idx].quantity?.message
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 align-top">
+                                <Controller
+                                  control={control}
+                                  name={`ingredients.${idx}.uomCode`}
+                                  rules={{ required: true }}
+                                  render={({ field }) => (
+                                    <UomPicker
+                                      inventoryItemId={
+                                        selectedItem?.inventoryItemId
+                                      }
+                                      baseUnit={selectedItem?.baseUnit}
+                                      value={field.value ?? ""}
+                                      onChange={field.onChange}
+                                      disabled={!selectedItem?.inventoryItemId}
+                                    />
+                                  )}
+                                />
+                              </td>
+                              <td className="px-4 py-2 align-top">
+                                <Input
+                                  {...register(`ingredients.${idx}.note`)}
+                                  placeholder="Ghi chú..."
+                                  className="h-9"
+                                />
+                              </td>
+                              <td className="px-2 py-2 align-top text-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                                  onClick={() => remove(idx)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {fields.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan={5}
+                              className="py-10 text-center text-gray-400 flex flex-col items-center justify-center gap-2"
+                            >
+                              <Package className="w-8 h-8 opacity-20" />
+                              <span className="text-sm">
+                                Chưa có nguyên liệu nào. Vui lòng thêm nguyên
+                                liệu.
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="col-span-2 flex justify-end gap-3 mt-8">
+          <DialogFooter className="mt-8 pt-4 border-t sticky bottom-0 bg-white z-20 pb-2 flex items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={() => setOpen(false)}
+              className="px-6"
             >
-              Hủy
+              Hủy bỏ
             </Button>
             <Button
               type="submit"
               disabled={mutation.isPending}
-              className="font-semibold"
+              className="bg-blue-600 hover:bg-blue-700 px-8 font-semibold shadow-md"
             >
-              {mutation.isPending ? "Đang lưu..." : "Tạo món"}
+              {mutation.isPending ? "Đang xử lý..." : "Tạo món mới"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
