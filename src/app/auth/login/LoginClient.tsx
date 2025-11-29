@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, HelpCircle } from "lucide-react";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 
 /* ===== Roles & routes ===== */
 export enum UserRole {
@@ -41,6 +42,7 @@ export default function LoginClient({ back }: { back?: string }) {
     email?: string;
     password?: string;
   }>({});
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -207,7 +209,14 @@ export default function LoginClient({ back }: { back?: string }) {
                       Duy trì đăng nhập
                     </span>
                   </label>
-                  <a href="#" className="text-primary hover:underline">
+                  <a
+                    href="#"
+                    className="text-primary hover:underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setForgotOpen(true);
+                    }}
+                  >
                     Quên mật khẩu?
                   </a>
                 </div>
@@ -264,6 +273,8 @@ export default function LoginClient({ back }: { back?: string }) {
           © {new Date().getFullYear()} Demo UI – Quản lý nhà hàng hải sản
         </span>
       </div>
+      {/* Forgot password modal */}
+      <ForgotPasswordModal open={forgotOpen} onOpenChange={setForgotOpen} />
     </div>
   );
 }
