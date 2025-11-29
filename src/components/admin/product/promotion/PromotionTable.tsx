@@ -171,19 +171,25 @@ export default function PromotionTable({
                   <td className="p-3">
                     <label
                       className={`inline-flex cursor-pointer items-center gap-2 ${
-                        isDeleted ? "opacity-50" : ""
+                        isDeleted ? "opacity-50 pointer-events-none" : ""
                       }`}
                     >
                       <input
                         type="checkbox"
                         className="peer sr-only"
                         checked={!!p.isActive}
-                        disabled={isDeleted} // 4.1: khoá khi đã xoá
+                        disabled={isDeleted}
                         onChange={(e) => onToggle(p.id, e.target.checked)}
-                        aria-label="Bật/Tắt khuyến mãi"
                       />
-                      <span className="relative inline-block h-5 w-9 rounded-full bg-slate-300 transition peer-checked:bg-sky-600">
-                        <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-4" />
+
+                      {/* Phần nền (Track): Về kích thước h-5 w-9 */}
+                      <span className="relative inline-block h-5 w-9 rounded-full bg-slate-200 transition-colors duration-300 ease-in-out peer-checked:bg-sky-600 peer-focus:ring-2 peer-focus:ring-sky-500 peer-focus:ring-offset-2">
+                        {/* Phần nút tròn (Knob): Padding left-0.5, translate-x-4 */}
+                        <span
+                          className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                            p.isActive ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
                       </span>
                     </label>
                   </td>

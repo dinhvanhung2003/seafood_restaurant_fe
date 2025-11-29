@@ -1,8 +1,9 @@
-// components/admin/menu/MenuItemDetailDialog.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+
 import Image from "next/image";
+
 import {
   Dialog,
   DialogContent,
@@ -10,9 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import { Button } from "@/components/ui/button";
+
 import { Input } from "@/components/ui/input";
+
 import { Label } from "@/components/ui/label";
+
 import {
   Select,
   SelectContent,
@@ -20,97 +25,137 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { Textarea } from "@/components/ui/textarea";
 
 import { useMenuItemDetailQuery } from "@/hooks/admin/useMenu";
+
 import { useUpdateMenuItemMutation } from "@/hooks/admin/useMenu";
+
 import { useCategoriesQuery } from "@/hooks/admin/useCategory";
+
 import { IngredientCombobox } from "./IngredientCombobox";
+
 import { UomPicker } from "./UomPicker";
+
+import { cn } from "@/lib/utils";
 
 function formatVND(x: string | number) {
   const num = typeof x === "string" ? Number(x) : x;
+
   if (Number.isNaN(num)) return String(x);
+
   return num.toLocaleString("vi-VN", {
     style: "currency",
+
     currency: "VND",
+
     maximumFractionDigits: 0,
   });
 }
+
+// Hàm chặn ký tự lạ cho ô số
+
+const blockInvalidChar = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (["-", "+", "e", "E"].includes(e.key)) {
+    e.preventDefault();
+  }
+};
 
 type Props = { id?: string; open: boolean; onOpenChange: (v: boolean) => void };
 
 export default function MenuItemDetailDialog({
   id,
+
   open,
+
   onOpenChange,
 }: Props) {
   const detailQuery = useMenuItemDetailQuery(id);
+
   const updateMut = useUpdateMenuItemMutation();
 
   const { data: categoriesResp, isLoading: catLoading } = useCategoriesQuery({
     type: "MENU",
+
     page: 1,
+
     limit: 50,
   });
+
   const categories = categoriesResp?.data ?? [];
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const [editing, setEditing] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [form, setForm] = useState<{
     name: string;
-    // keep price as string while editing so user can type freely (e.g. empty/partial)
+
     price: string;
+
     description: string;
+
     categoryId: string | "";
+
     isAvailable: boolean;
+
     isReturnable: boolean;
+
     ingredients: Array<{
       inventoryItemId: string;
-      // allow string during edit so user can type freely (e.g. empty while editing)
+
       quantity: number | string;
+
       uomCode?: string;
+
       baseUnit?: string;
+
       note?: string;
     }>;
+
     imageFile: File | null;
   } | null>(null);
 
-  // Reset preview khi mở lại modal hoặc data thay đổi
-  // useEffect(() => {
-  //   if (open) setImagePreview(null);
-  // }, [open, detailQuery.data]);
   useEffect(() => {
     return () => {
       if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
 
-  // Map data BE -> form state
   useEffect(() => {
     if (detailQuery.data && open) {
       const d = detailQuery.data;
 
       setForm({
         name: d.name,
-        // store as string for editable input
+
         price: String(Number(d.price) || 0),
+
         description: d.description ?? "",
+
         categoryId: d.category?.id ?? "",
+
         isAvailable: !!d.isAvailable,
+
         isReturnable: !!(d as any).isReturnable,
+
         ingredients: (d.ingredients ?? []).map((ing: any) => ({
           inventoryItemId: ing.inventoryItem?.id ?? ing.inventoryItemId ?? "",
-          // store as string so input is editable; convert on save
+
           quantity: String(Number(ing.selectedQty ?? ing.quantity) || 0),
+
           uomCode:
             ing.selectedUom?.code ?? ing.inventoryItem?.baseUom?.code ?? "",
+
           baseUnit:
             ing.inventoryItem?.baseUom?.name ?? ing.selectedUom?.name ?? "",
+
           note: ing.note ?? "",
         })),
+
         imageFile: null,
       });
 
@@ -119,39 +164,100 @@ export default function MenuItemDetailDialog({
   }, [detailQuery.data, open]);
 
   const busy = detailQuery.isLoading || updateMut.isPending;
+
   const loadingRefs = catLoading;
 
-  const canSave = useMemo(() => {
-    if (!editing || !form) return false;
-    if (!form.name) return false;
-    // price must be a non-empty integer >= 0
+  // --- VALIDATION LOGIC ---
+
+  const validation = useMemo(() => {
+    // SỬA LỖI 1: Ép kiểu {} thành Record<string, boolean> để TS không báo lỗi khi truy cập .price, .name
+
+    if (!form)
+      return {
+        valid: false,
+
+        errors: {} as Record<string, boolean>,
+
+        invalidIngredientsIndices: [],
+      };
+
+    const errors: Record<string, boolean> = {};
+
+    let valid = true;
+
+    // 1. Validate Name
+
+    if (!form.name.trim()) {
+      errors.name = true;
+
+      valid = false;
+    }
+
+    // 2. Validate Price
+
     const priceStr = String(form.price).replace(/,/g, "").trim();
-    if (!priceStr) return false;
-    if (!/^\d+$/.test(priceStr)) return false;
+
     const parsedPrice = Number(priceStr);
-    if (Number.isNaN(parsedPrice) || parsedPrice < 0) return false;
-    const badIng = form.ingredients.some((i) => {
+
+    if (
+      !priceStr ||
+      !/^\d+$/.test(priceStr) ||
+      Number.isNaN(parsedPrice) ||
+      parsedPrice < 0
+    ) {
+      errors.price = true;
+
+      valid = false;
+    }
+
+    // 3. Validate Category (Thường là bắt buộc)
+
+    if (!form.categoryId) {
+      errors.categoryId = true;
+
+      valid = false;
+    }
+
+    // 4. Validate Ingredients
+
+    const invalidIngredientsIndices = form.ingredients.map((i) => {
       if (!i.inventoryItemId) return true;
+
       if (!i.uomCode) return true;
+
       const q =
         typeof i.quantity === "string" ? Number(i.quantity) : i.quantity;
+
       return Number.isNaN(q) || q <= 0;
     });
-    return !badIng;
-  }, [editing, form]);
+
+    if (invalidIngredientsIndices.some(Boolean)) {
+      valid = false;
+    }
+
+    return { valid, errors, invalidIngredientsIndices };
+  }, [form]);
 
   const onSave = async () => {
-    if (!id || !form) return;
+    if (!id || !form || !validation.valid) return;
 
     await updateMut.mutateAsync({
       id,
+
       name: form.name,
+
       price: parseInt(String(form.price).replace(/,/g, "").trim(), 10),
+
       description: form.description,
+
       categoryId: form.categoryId || undefined,
+
       isAvailable: form.isAvailable,
+
       isReturnable: form.isReturnable,
+
       ingredients: form.ingredients.filter((i) => i.inventoryItemId),
+
       image: form.imageFile ?? undefined,
     } as any);
 
@@ -173,17 +279,13 @@ export default function MenuItemDetailDialog({
           </div>
         ) : detailQuery.data && form ? (
           <div className="space-y-6">
-            {/* ===== Header: ảnh + thông tin chính ===== */}
             <div className="flex gap-4">
-              {/* Ảnh món */}
-              {/* Ảnh món */}
+              {/* --- CỘT ẢNH --- */}
+
               {editing ? (
-                // ======= MODE SỬA =======
                 <div className="shrink-0 flex flex-col gap-2 items-start">
-                  {/* khung preview cố định 28x28 */}
-                  <div className="w-28 h-28 rounded-lg overflow-hidden border bg-muted/30 flex items-center justify-center">
+                  <div className="w-28 h-28 rounded-lg overflow-hidden border bg-muted/30 flex items-center justify-center relative">
                     {imagePreview ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={imagePreview}
                         alt="preview"
@@ -205,7 +307,6 @@ export default function MenuItemDetailDialog({
                     )}
                   </div>
 
-                  {/* input file ẩn */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -213,20 +314,16 @@ export default function MenuItemDetailDialog({
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0] ?? null;
+
                       setForm((s) => (s ? { ...s, imageFile: f } : s));
 
                       if (imagePreview) URL.revokeObjectURL(imagePreview);
 
-                      if (f) {
-                        const url = URL.createObjectURL(f);
-                        setImagePreview(url);
-                      } else {
-                        setImagePreview(null);
-                      }
+                      if (f) setImagePreview(URL.createObjectURL(f));
+                      else setImagePreview(null);
                     }}
                   />
 
-                  {/* Nút chọn / bỏ ảnh mới */}
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -234,58 +331,79 @@ export default function MenuItemDetailDialog({
                       variant="outline"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      Chọn ảnh khác
+                      Chọn ảnh
                     </Button>
 
                     {imagePreview && (
                       <Button
                         type="button"
                         size="sm"
-                        variant="secondary"
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
                         onClick={() => {
                           setForm((s) => (s ? { ...s, imageFile: null } : s));
+
                           if (imagePreview) URL.revokeObjectURL(imagePreview);
+
                           setImagePreview(null);
+
                           if (fileInputRef.current)
                             fileInputRef.current.value = "";
                         }}
                       >
-                        Bỏ ảnh mới
+                        Xóa
                       </Button>
                     )}
                   </div>
                 </div>
               ) : (
-                // ======= MODE XEM =======
                 <div className="w-28 h-28 rounded-lg overflow-hidden border shrink-0 bg-muted/30 flex items-center justify-center">
                   {detailQuery.data?.image ? (
                     <Image
                       src={detailQuery.data.image}
-                      alt={form?.name || ""}
+                      alt={form?.name}
                       width={112}
                       height={112}
                       className="object-cover w-28 h-28"
                     />
                   ) : (
-                    <div className="text-xs text-muted-foreground">
-                      Không có ảnh
-                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      No img
+                    </span>
                   )}
                 </div>
               )}
 
-              {/* Thông tin chính */}
+              {/* --- CỘT THÔNG TIN --- */}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">
-                {/* Tên món */}
                 <div className="lg:col-span-2">
-                  <Label className="mb-1 block">Tên món</Label>
+                  <Label className="mb-1 block">
+                    Tên món <span className="text-red-500">*</span>
+                  </Label>
+
                   {editing ? (
-                    <Input
-                      value={form.name}
-                      onChange={(e) =>
-                        setForm((s) => (s ? { ...s, name: e.target.value } : s))
-                      }
-                    />
+                    <>
+                      <Input
+                        value={form.name}
+                        onChange={(e) =>
+                          setForm((s) =>
+                            s ? { ...s, name: e.target.value } : s
+                          )
+                        }
+                        className={
+                          validation.errors.name
+                            ? "border-red-500 focus-visible:ring-red-500"
+                            : ""
+                        }
+                      />
+
+                      {validation.errors.name && (
+                        <span className="text-[11px] text-red-500">
+                          Tên không được để trống
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <div className="text-lg font-semibold">
                       {detailQuery.data.name}
@@ -293,55 +411,88 @@ export default function MenuItemDetailDialog({
                   )}
                 </div>
 
-                {/* Danh mục */}
                 <div>
-                  <Label className="mb-1 block">Danh mục</Label>
+                  <Label className="mb-1 block">
+                    Danh mục <span className="text-red-500">*</span>
+                  </Label>
+
                   {editing ? (
-                    <Select
-                      value={form.categoryId}
-                      onValueChange={(v) =>
-                        setForm((s) => (s ? { ...s, categoryId: v } : s))
-                      }
-                      disabled={loadingRefs}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn danh mục" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((c: any) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <>
+                      <Select
+                        value={form.categoryId}
+                        onValueChange={(v) =>
+                          setForm((s) => (s ? { ...s, categoryId: v } : s))
+                        }
+                        disabled={loadingRefs}
+                      >
+                        <SelectTrigger
+                          className={
+                            validation.errors.categoryId ? "border-red-500" : ""
+                          }
+                        >
+                          <SelectValue placeholder="Chọn danh mục" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {categories.map((c: any) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {validation.errors.categoryId && (
+                        <span className="text-[11px] text-red-500">
+                          Vui lòng chọn danh mục
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <div>{detailQuery.data.category?.name ?? "—"}</div>
                   )}
                 </div>
 
-                {/* Giá bán */}
                 <div>
-                  <Label className="mb-1 block">Giá bán</Label>
+                  <Label className="mb-1 block">
+                    Giá bán <span className="text-red-500">*</span>
+                  </Label>
+
                   {editing ? (
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={form.price}
-                      onChange={(e) =>
-                        setForm((s) =>
-                          s ? { ...s, price: e.target.value } : s
-                        )
-                      }
-                    />
+                    <>
+                      <Input
+                        type="number"
+                        min={0}
+                        onKeyDown={blockInvalidChar} // Chặn ký tự lạ
+                        value={form.price}
+                        onChange={(e) =>
+                          setForm((s) =>
+                            s ? { ...s, price: e.target.value } : s
+                          )
+                        }
+                        className={
+                          validation.errors.price
+                            ? "border-red-500 focus-visible:ring-red-500"
+                            : ""
+                        }
+                      />
+
+                      {validation.errors.price && (
+                        <span className="text-[11px] text-red-500">
+                          Giá không hợp lệ
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <div>{formatVND(detailQuery.data.price)}</div>
                   )}
                 </div>
 
-                {/* Trạng thái + cho phép trả */}
+                {/* Trạng thái & Checkbox */}
+
                 <div className="lg:col-span-2">
                   <Label className="mb-1 block">Trạng thái</Label>
+
                   {editing ? (
                     <>
                       <Select
@@ -355,8 +506,10 @@ export default function MenuItemDetailDialog({
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
+
                         <SelectContent>
                           <SelectItem value="true">Sẵn sàng</SelectItem>
+
                           <SelectItem value="false">Tạm ẩn</SelectItem>
                         </SelectContent>
                       </Select>
@@ -373,6 +526,7 @@ export default function MenuItemDetailDialog({
                           }
                           className="accent-blue-600 w-4 h-4"
                         />
+
                         <Label
                           htmlFor="detail-is-returnable"
                           className="cursor-pointer text-sm"
@@ -386,6 +540,7 @@ export default function MenuItemDetailDialog({
                       <div>
                         {detailQuery.data.isAvailable ? "Sẵn sàng" : "Tạm ẩn"}
                       </div>
+
                       <div className="text-sm text-muted-foreground mt-1">
                         {(detailQuery.data as any).isReturnable
                           ? "Cho phép khách trả lại: Có"
@@ -395,9 +550,9 @@ export default function MenuItemDetailDialog({
                   )}
                 </div>
 
-                {/* Mô tả */}
                 <div className="lg:col-span-2">
                   <Label className="mb-1 block">Mô tả</Label>
+
                   {editing ? (
                     <Textarea
                       rows={3}
@@ -415,105 +570,131 @@ export default function MenuItemDetailDialog({
               </div>
             </div>
 
-            {/* ===== Nguyên liệu ===== */}
+            {/* ===== NGUYÊN LIỆU ===== */}
+
             <div>
               <div className="font-medium mb-2">Nguyên liệu</div>
+
               {editing ? (
                 <div className="rounded-lg border bg-white p-3 max-h-[260px] overflow-y-auto space-y-2">
-                  {form.ingredients.map((it, idx) => (
-                    <div
-                      key={idx}
-                      className="grid grid-cols-[minmax(0,4fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,3fr)_80px] gap-2 items-center"
-                    >
-                      <div className="min-w-0">
-                        <IngredientCombobox
-                          value={it.inventoryItemId}
-                          onChange={(id, item) => {
+                  {form.ingredients.map((it, idx) => {
+                    const isRowError =
+                      validation.invalidIngredientsIndices?.[idx];
+
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,4fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,3fr)_80px] gap-2 items-start p-2 rounded",
+
+                          isRowError ? "bg-red-50 border border-red-200" : ""
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <IngredientCombobox
+                            value={it.inventoryItemId}
+                            onChange={(id, item) => {
+                              const arr = [...form.ingredients];
+
+                              arr[idx] = {
+                                ...arr[idx],
+
+                                inventoryItemId: id,
+
+                                uomCode: item?.unit ?? arr[idx].uomCode ?? "",
+
+                                baseUnit:
+                                  item?.baseUomName ?? arr[idx].baseUnit ?? "",
+                              };
+
+                              setForm((s) =>
+                                s ? { ...s, ingredients: arr } : s
+                              );
+                            }}
+                            disabled={busy}
+                          />
+
+                          {/* Hiển thị lỗi thiếu nguyên liệu */}
+
+                          {isRowError && !it.inventoryItemId && (
+                            <span className="text-[10px] text-red-500 ml-1">
+                              Chọn NL
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <UomPicker
+                            inventoryItemId={it.inventoryItemId}
+                            baseUnit={it.baseUnit}
+                            value={it.uomCode ?? ""}
+                            onChange={(v) => {
+                              const arr = [...form.ingredients];
+
+                              arr[idx] = { ...arr[idx], uomCode: v };
+
+                              setForm((s) =>
+                                s ? { ...s, ingredients: arr } : s
+                              );
+                            }}
+                            disabled={busy || !it.inventoryItemId}
+                          />
+                        </div>
+
+                        <div>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="any"
+                            onKeyDown={blockInvalidChar}
+                            placeholder="SL"
+                            value={String(it.quantity)}
+                            onChange={(e) => {
+                              const arr = [...form.ingredients];
+
+                              arr[idx] = {
+                                ...arr[idx],
+
+                                quantity: e.target.value,
+                              };
+
+                              setForm((s) =>
+                                s ? { ...s, ingredients: arr } : s
+                              );
+                            }}
+                            className={
+                              isRowError && Number(it.quantity) <= 0
+                                ? "border-red-500 h-10"
+                                : "h-10"
+                            }
+                          />
+                        </div>
+
+                        <Input
+                          placeholder="Ghi chú"
+                          value={it.note ?? ""}
+                          onChange={(e) => {
                             const arr = [...form.ingredients];
-                            arr[idx] = {
-                              ...arr[idx],
-                              inventoryItemId: id,
-                              uomCode: item?.unit ?? arr[idx].uomCode ?? "",
-                              baseUnit:
-                                item?.baseUomName ?? arr[idx].baseUnit ?? "",
-                            };
+
+                            arr[idx] = { ...arr[idx], note: e.target.value };
+
                             setForm((s) =>
                               s ? { ...s, ingredients: arr } : s
                             );
                           }}
-                          disabled={busy}
+                          className="h-10"
                         />
-                      </div>
 
-                      <div>
-                        <UomPicker
-                          inventoryItemId={it.inventoryItemId}
-                          baseUnit={
-                            it.baseUnit ??
-                            ((
-                              detailQuery.data?.ingredients?.find(
-                                (r: any) =>
-                                  r.inventoryItem?.id === it.inventoryItemId
-                              ) as any
-                            )?.inventoryItem?.baseUom?.name ||
-                              (
-                                detailQuery.data?.ingredients?.find(
-                                  (r: any) =>
-                                    r.inventoryItem?.id === it.inventoryItemId
-                                ) as any
-                              )?.selectedUom?.name) ??
-                            undefined
-                          }
-                          value={it.uomCode ?? ""}
-                          onChange={(v) => {
-                            const arr = [...form.ingredients];
-                            arr[idx] = { ...arr[idx], uomCode: v };
-                            setForm((s) =>
-                              s ? { ...s, ingredients: arr } : s
-                            );
-                          }}
-                          disabled={busy || !it.inventoryItemId}
-                        />
-                      </div>
-
-                      <Input
-                        className="w-full"
-                        type="number"
-                        inputMode="numeric"
-                        step="any"
-                        min={0}
-                        placeholder="Số lượng"
-                        value={String(it.quantity)}
-                        onChange={(e) => {
-                          const arr = [...form.ingredients];
-                          arr[idx] = {
-                            ...arr[idx],
-                            quantity: e.target.value,
-                          };
-                          setForm((s) => (s ? { ...s, ingredients: arr } : s));
-                        }}
-                      />
-
-                      <Input
-                        className="w-full min-w-0"
-                        placeholder="Ghi chú"
-                        value={it.note ?? ""}
-                        onChange={(e) => {
-                          const arr = [...form.ingredients];
-                          arr[idx] = { ...arr[idx], note: e.target.value };
-                          setForm((s) => (s ? { ...s, ingredients: arr } : s));
-                        }}
-                      />
-
-                      <div className="text-right">
                         <Button
                           variant="destructive"
                           size="sm"
+                          className="h-10"
                           onClick={() =>
                             setForm((s) =>
                               s
                                 ? {
                                     ...s,
+
                                     ingredients: s.ingredients.filter(
                                       (_, i) => i !== idx
                                     ),
@@ -525,8 +706,8 @@ export default function MenuItemDetailDialog({
                           Xóa
                         </Button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   <Button
                     variant="secondary"
@@ -535,11 +716,15 @@ export default function MenuItemDetailDialog({
                         s
                           ? {
                               ...s,
+
                               ingredients: [
                                 ...s.ingredients,
+
                                 {
                                   inventoryItemId: "",
+
                                   quantity: 1,
+
                                   uomCode: "",
                                 },
                               ],
@@ -559,56 +744,54 @@ export default function MenuItemDetailDialog({
                     </div>
                   ) : (
                     <ul className="list-disc pl-6 text-sm space-y-1">
-                      {detailQuery.data.ingredients.map((ing: any) => {
-                        const label = ing.inventoryItem?.name ?? "—";
-                        // prefer selectedQty for display but fallback to quantity if selectedQty is null
-                        const rawQty = ing.selectedQty ?? ing.quantity;
-                        // backend may return numeric strings with separators like "1.000"; normalize
-                        const qtyNum =
-                          Number(String(rawQty).replace(/,/g, "")) || 0;
-                        return (
-                          <li key={ing.id}>
-                            {label} — SL: {qtyNum.toLocaleString()}{" "}
-                            {ing.selectedUom?.name ?? ing.selectedUom?.code}
-                            {ing.note ? ` — ${ing.note}` : ""}
-                          </li>
-                        );
-                      })}
+                      {detailQuery.data.ingredients.map((ing: any) => (
+                        <li key={ing.id}>
+                          {ing.inventoryItem?.name} — SL:{" "}
+                          {Number(
+                            ing.selectedQty ?? ing.quantity
+                          ).toLocaleString()}{" "}
+                          {ing.selectedUom?.name ??
+                            ing.inventoryItem?.baseUom?.name ??
+                            (ing.inventoryItem as any)?.baseUomName ??
+                            ""}{" "}
+                          {ing.note && `(${ing.note})`}
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </>
               )}
             </div>
 
-            {/* ===== Combo (nếu có) ===== */}
+            {/* Combo Display (Readonly) */}
+
             {detailQuery.data.isCombo && (
               <div>
                 <div className="font-medium mb-2">Thành phần combo</div>
-                {detailQuery.data.components &&
-                detailQuery.data.components.length > 0 ? (
+
+                {/* SỬA LỖI 2: Thêm Optional Chaining (?.) vào .map */}
+
+                {(detailQuery.data.components?.length ?? 0) > 0 ? (
                   <ul className="list-disc pl-6 text-sm space-y-1">
-                    {detailQuery.data.components.map((c: any) => (
+                    {detailQuery.data.components?.map((c: any) => (
                       <li key={c.id}>
-                        {c.item?.name ?? "—"} — SL: {c.quantity}
-                        {c.note ? ` — ${c.note}` : ""}
+                        {c.item?.name} — SL: {c.quantity}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="text-sm text-muted-foreground">
-                    Không có thành phần
-                  </div>
+                  <div className="text-sm text-muted-foreground">Trống</div>
                 )}
               </div>
             )}
 
-            {/* ===== Footer ===== */}
             <DialogFooter className="pt-2">
               {!editing ? (
                 <>
                   <Button variant="outline" onClick={() => onOpenChange(false)}>
                     Đóng
                   </Button>
+
                   <Button
                     onClick={() => setEditing(true)}
                     disabled={busy || loadingRefs}
@@ -620,12 +803,19 @@ export default function MenuItemDetailDialog({
                 <>
                   <Button
                     variant="secondary"
-                    onClick={() => setEditing(false)}
+                    onClick={() => {
+                      setEditing(false);
+
+                      setForm(null);
+                    }}
                     disabled={busy}
                   >
                     Hủy
                   </Button>
-                  <Button onClick={onSave} disabled={!canSave || busy}>
+
+                  {/* Nút lưu sẽ bị disable nếu form không valid */}
+
+                  <Button onClick={onSave} disabled={!validation.valid || busy}>
                     {busy ? "Đang lưu…" : "Lưu thay đổi"}
                   </Button>
                 </>

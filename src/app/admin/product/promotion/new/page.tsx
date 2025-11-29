@@ -2,12 +2,19 @@
 import { Suspense } from "react";
 import PromotionUpsertClient from "./PromotionUpsertClient";
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  // Next may supply searchParams as a Promise; await it before use
+  searchParams:
+    | Record<string, string | string[] | undefined>
+    | Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const idParam = searchParams.id;
+  const params = (await searchParams) as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const idParam = params?.id;
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
   return (

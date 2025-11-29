@@ -153,6 +153,10 @@ export default function CreatePurchaseReturnModal({
 
   const hasErrors = Object.keys(errors).length > 0;
   const disabled = !supplierId || lines.length === 0 || hasErrors;
+  // When posting (Hoàn tất & Ghi sổ) require supplier immediate refund to be entered
+  const requiresPaidForPosting = true; // nếu sau này muốn toggle rule, sửa biến này
+  const disabledPosted =
+    disabled || (requiresPaidForPosting && Number(paidAmount || 0) <= 0);
 
   // Hooks
   const createPostedMut = useCreatePurchaseReturn();
@@ -246,6 +250,12 @@ export default function CreatePurchaseReturnModal({
 
   const handleSavePosted = async () => {
     if (!supplierId) return toast.error("Vui lòng chọn nhà cung cấp");
+    // Bắt buộc phải nhập NCC hoàn tiền ngay khi ghi sổ
+    if (Number(paidAmount || 0) <= 0) {
+      return toast.error(
+        "Vui lòng nhập số tiền NCC hoàn ngay trước khi ghi sổ"
+      );
+    }
     const payload = toPayload();
     try {
       if (isEditMode) {
@@ -553,7 +563,7 @@ export default function CreatePurchaseReturnModal({
 
                   <div className="pt-2">
                     <Label className="flex justify-between mb-2">
-                      <span>NCC hoàn tiền ngay?</span>
+                      <span>NCC hoàn tiền</span>
                       {isPaidAmountInvalid && (
                         <Badge variant="destructive">Lỗi</Badge>
                       )}
@@ -576,6 +586,12 @@ export default function CreatePurchaseReturnModal({
                       </div>
                     )}
 
+                    {Number(paidAmount || 0) <= 0 && (
+                      <div className="text-xs text-red-500 text-right mt-1">
+                        Vui lòng nhập số tiền NCC hoàn ngay để có thể ghi sổ
+                      </div>
+                    )}
+
                     {/* --- THÊM ĐOẠN HIỂN THỊ CÔNG NỢ --- */}
                     <div className="flex justify-between text-sm mt-3 pt-3 border-t border-dashed">
                       <span className="text-slate-600 font-medium">
@@ -592,7 +608,7 @@ export default function CreatePurchaseReturnModal({
               <div className="p-4 border-t bg-white flex flex-col gap-3 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.05)]">
                 <Button
                   onClick={handleSavePosted}
-                  disabled={disabled || isSaving}
+                  disabled={disabledPosted || isSaving}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold"
                 >
                   {isSaving && (

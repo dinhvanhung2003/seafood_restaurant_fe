@@ -6,17 +6,23 @@ import { MenuItem } from "@/types/admin/product/menu";
 import { UpdateMenuItemInput } from "@/types/admin/product/menu";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
 export type MenuItemsList = {
   data: MenuItem[];
   meta: { page: number; limit: number; total: number; totalPages: number };
 };
 
+// --- CẬP NHẬT TYPE Ở ĐÂY ---
 export type MenuItemsQuery = {
   page?: number;
   limit?: number;
   search?: string;
   categoryId?: string;
   isAvailable?: string; // "true" | "false"
+
+  // Thêm tham số này để lọc Combo
+  isCombo?: string; // "true" | "false"
+
   minPrice?: number | string;
   maxPrice?: number | string;
   sortBy?: "name" | "price" | "createdAt";
@@ -24,7 +30,8 @@ export type MenuItemsQuery = {
 };
 
 export type HeadersMap = Record<string, string>;
-/** Map known BE error codes to friendly Vietnamese messages */
+
+// ... (Giữ nguyên phần Error Handling extractError và constants) ...
 const BACKEND_ERROR_TRANSLATIONS: Record<string, string> = {
   MENU_ITEM_NOT_FOUND: "Món ăn không tồn tại",
   MENU_ITEM_IN_USE_BY_ORDERS:
@@ -37,34 +44,29 @@ const BACKEND_ERROR_TRANSLATIONS: Record<string, string> = {
   MENU_ITEM_IS_COMBO_COMPONENT:
     "Món là thành phần của combo khác, không thể xoá",
   IMAGE_TYPE_NOT_ALLOWED: "File ảnh không hợp lệ (chỉ JPG/PNG/WebP/GIF)",
-  // Add more mappings here as backend provides codes
 };
 
 function extractError(e: any) {
   const status = e?.response?.status;
   const data = e?.response?.data;
-
-  // Backend sometimes returns an `errorMessage` code (e.g., MENU_ITEM_IN_USE_BY_ORDERS)
   const code = data?.errorMessage ?? data?.code ?? undefined;
   const translated = code
     ? BACKEND_ERROR_TRANSLATIONS[String(code)]
     : undefined;
-
   const msg =
     translated ??
     (Array.isArray(data?.message) ? data.message.join(", ") : data?.message) ??
     (typeof data === "string" ? data : undefined) ??
     e?.message ??
     "Đã có lỗi xảy ra";
-
   const title = status ? `Lỗi ${status}` : "Lỗi";
   return { title, description: msg };
 }
 
-/** ===== Internal API (đã gộp từ services/menu.api.ts) ===== */
 async function listMenuItems(
   params: MenuItemsQuery
 ): Promise<{ body: MenuItemsList; headers: HeadersMap }> {
+  // Axios sẽ tự động gửi ?isCombo=false lên URL
   const res = await api.get<MenuItemsList>("/menuitems/list-menuitems", {
     params,
   });
@@ -80,9 +82,9 @@ async function getMenuItemDetail(id: string): Promise<MenuItem> {
   return res.data;
 }
 
-/** ===== Hooks ===== */
 export function useMenuItemsQuery(params: MenuItemsQuery) {
   return useQuery<{ body: MenuItemsList; headers: HeadersMap }, Error>({
+    // Thêm params vào queryKey để khi params đổi (ví dụ chuyển tab) nó sẽ fetch lại
     queryKey: ["menuitems", params],
     queryFn: () => listMenuItems(params),
     placeholderData: keepPreviousData,
@@ -97,10 +99,10 @@ export function useMenuItemDetailQuery(id?: string) {
     enabled: Boolean(id),
   });
 }
+
+// ... (Giữ nguyên phần updateMenuItem và useUpdateMenuItemMutation phía dưới) ...
 async function updateMenuItem(input: UpdateMenuItemInput): Promise<MenuItem> {
   const { id, image, ...rest } = input;
-
-  // Chuẩn hoá ingredients
   const preparedIngredients = (rest as any).ingredients
     ? (rest as any).ingredients.map((it: any) => ({
         inventoryItemId: String(it.inventoryItemId),
@@ -113,12 +115,9 @@ async function updateMenuItem(input: UpdateMenuItemInput): Promise<MenuItem> {
 
   if (image) {
     const fd = new FormData();
-
     Object.entries(rest).forEach(([k, v]) => {
       if (v === undefined || v === null) return;
-
       if (k === "isAvailable" || k === "isReturnable") {
-        // 👈 cả 2 đều phải gửi dạng "true"/"false"
         fd.append(k, (v as boolean) ? "true" : "false");
       } else if (k === "ingredients") {
         fd.append("ingredients", JSON.stringify(preparedIngredients ?? v));
@@ -126,16 +125,13 @@ async function updateMenuItem(input: UpdateMenuItemInput): Promise<MenuItem> {
         fd.append(k, String(v));
       }
     });
-
-    fd.append("image", image); // field trùng với FileInterceptor('image')
-
+    fd.append("image", image);
     const res = await api.patch<MenuItem>(`/menuitems/${id}`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   }
 
-  // ----- Nhánh không có image: vẫn gửi JSON như cũ -----
   const payload: any = { ...rest };
   if (typeof payload.isAvailable === "boolean") {
     payload.isAvailable = payload.isAvailable ? "true" : "false";
@@ -151,20 +147,18 @@ async function updateMenuItem(input: UpdateMenuItemInput): Promise<MenuItem> {
 
 export function useUpdateMenuItemMutation() {
   const qc = useQueryClient();
-
   return useMutation<
     MenuItem,
     any,
     UpdateMenuItemInput,
     { tid?: string | number }
   >({
-    mutationFn: updateMenuItem, // giữ nguyên hàm của bạn
+    mutationFn: updateMenuItem,
     onMutate: async () => {
       const tid = toast.loading("Đang lưu thay đổi…");
       return { tid };
     },
     onSuccess: (data, _variables, ctx) => {
-      // bust cache ảnh nếu cần
       const patched = data.image
         ? {
             ...data,
@@ -173,10 +167,8 @@ export function useUpdateMenuItemMutation() {
               : `${data.image}?v=${Date.now()}`,
           }
         : data;
-
       qc.setQueryData(["menuitem", data.id], patched);
       qc.invalidateQueries({ queryKey: ["menuitems"] });
-
       if (ctx?.tid) toast.dismiss(ctx.tid);
       toast.success("Đã lưu", { description: "Món ăn đã được cập nhật." });
     },
@@ -188,7 +180,6 @@ export function useUpdateMenuItemMutation() {
   });
 }
 
-/** DELETE */
 export function useDeleteMenuItemMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -198,8 +189,6 @@ export function useDeleteMenuItemMutation() {
     },
     onMutate: (id: string) => {
       const tid = toast.loading("Đang xoá món…");
-
-      // Optimistic: remove from cached menuitems lists
       const entries = qc.getQueryCache().findAll({ queryKey: ["menuitems"] });
       for (const entry of entries) {
         const key = entry.queryKey;
