@@ -16,6 +16,7 @@ import type { Catalog as CatalogType, Table as TableType } from "@/types/types";
 import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 import { useKitchenHistory } from "@/hooks/cashier/useKitchenHistory";
 import { useKitchenVoids } from "@/hooks/cashier/socket/useKitchenVoids";
+import { useMutation } from "@tanstack/react-query";
 export type CancelTarget = { orderItemId: string; name: string; qty: number };
 
 export function usePosPage() {
@@ -542,6 +543,31 @@ const onDelete = (it: any) => {
 };
 
 
+useEffect(() => {
+  const s = getSocket();
+
+  const onItemNoteUpdated = (p: {
+    orderId: string;
+    orderItemId: string;
+    menuItemId: string;
+    note: string | null;
+    by: string;
+  }) => {
+    // nếu muốn chỉ ảnh hưởng order đang mở thì check:
+    if (currentOrderId && p.orderId !== currentOrderId) return;
+
+    // cách lười: refetch lại active-orders
+    qc.invalidateQueries({ queryKey: ["active-orders"] });
+
+    // nếu thích thì toast:
+    // toast.success(`Cập nhật ghi chú món ${p.menuItemId}`);
+  };
+
+  s.on("orderitem:note_updated", onItemNoteUpdated);
+  return () => {
+    s.off("orderitem:note_updated", onItemNoteUpdated);
+  };
+}, [qc, currentOrderId]);
 
 
 
@@ -569,59 +595,64 @@ const onDelete = (it: any) => {
 
   const { prepend } = useKitchenHistory(); // <-- bổ sung dòng này nếu muốn prepend
 
+const muUpdateNote = useMutation({
+  mutationFn: ({ id, note }: { id: string; note: string }) =>
+    api.patch(`/orderitems/${id}/note`, { note }),
+  onSuccess: () => {
+    qc.invalidateQueries({ queryKey: ["active-orders"] });
+  },
+  onError: (err: any) => {
+    console.error("update note error", err?.response?.data || err);
+    toast.error("Cập nhật ghi chú thất bại", {
+      description: err?.response?.data?.message || err.message,
+    });
+  },
+});
+
+const onUpdateNote = (orderItemId: string, note: string) => {
+  console.log("usePosPage onUpdateNote", { orderItemId, note }); // 👈 thêm log
+  if (!orderItemId) return;
+  muUpdateNote.mutate({ id: orderItemId, note });
+};
+
+
 
 
   const onNotify = async () => {
-    if (!selectedTable) return toast.error("Chưa chọn bàn!");
-    if (!canNotify || notifying) return;
+  if (!selectedTable) {
+    toast.error("Chưa chọn bàn!");
+    return;
+  }
+  if (!canNotify || notifying) return;
 
-    setNotifying(true);
-    try {
-      const orderId = currentOrderId; // <-- dùng currentOrderId đã tính sẵn
-      if (!orderId) throw new Error("Không có orderId");
+  setNotifying(true);
+  try {
+    const orderId = currentOrderId;
+    if (!orderId) throw new Error("Không có orderId");
 
-      // gọi API CHỈ 1 LẦN
-      const res = await api.post(`/kitchen/orders/${orderId}/notify-items`, {
-        items: deltaItems,                 // [{ menuItemId, delta }]
-        priority: true,
-        tableName: selectedTable.name,
-      });
+    const res = await api.post(`/kitchen/orders/${orderId}/notify-items`, {
+      items: deltaItems,
+      tableName: selectedTable.name,
+      priority: true,          // ✅ thu ngân luôn gửi ưu tiên
+      source: "cashier",       // ✅ đánh dấu gửi từ cashier
+      // note: null            // nếu muốn có note riêng thì truyền thêm
+    });
 
-      // (tuỳ chọn) cập nhật lịch sử lạc quan để Drawer thấy ngay
-      // nếu useKitchenHistory() có expose prepend
-      if (prepend) {
-        prepend({
-          id: res.data.batchId,
-          createdAt: res.data.createdAt,     // ISO từ BE
-          staff: staffName,
-          tableName: selectedTable.name,
-          note: null,
-          priority: true,
-          // nếu BE trả về {items:[{menuItemId, name, qty}]}
-          items: (res.data.items || []).map((x: any) => ({
-            menuItemId: x.menuItemId ?? x.ticketId, // ưu tiên menuItemId nếu BE trả
-            name: x.name ?? "",
-            qty: x.qty,
-          })),
-        });
-      }
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["kitchen-progress", orderId] }),
+      qc.invalidateQueries({ queryKey: ["kitchen-history", orderId] }),
+    ]);
 
-      // đồng bộ query để F5 vẫn đúng
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["kitchen-progress", orderId] }),
-        qc.invalidateQueries({ queryKey: ["kitchen-history", orderId] }), // nếu bạn có query này
-      ]);
-
-      toast.success("Đã gửi bếp!");
-      setJustChanged(false);
-    } catch (e: any) {
-      toast.error("Không thể gửi bếp", {
-        description: e?.response?.data?.message || e.message,
-      });
-    } finally {
-      setNotifying(false);
-    }
-  };
+    toast.success("Đã gửi bếp!");
+    setJustChanged(false);
+  } catch (e: any) {
+    toast.error("Không thể gửi bếp", {
+      description: e?.response?.data?.message || e.message,
+    });
+  } finally {
+    setNotifying(false);
+  }
+};
 
 useEffect(() => {
   if (!justChanged) return;
@@ -748,5 +779,6 @@ useEffect(() => {
     customer,
     onChangeGuestCount,
     onChangeCustomer,
+    onUpdateNote,
   };
 }

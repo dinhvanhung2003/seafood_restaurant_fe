@@ -49,6 +49,7 @@ export type ApiOrderItemExt = {
   batchId?: string | null;
   menuItem: { id: string; name: string };
   order: { id: string; table?: { id: string; name: string } | null };
+   note?: string | null; 
 };
 
 // === types ===
@@ -80,6 +81,7 @@ function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
         createdTs: ts,
       items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
 itemIds: [r.id], // PATCH theo ticket.id
+   note: r.note ?? undefined,    
       } as Ticket;
     })
     .sort((a, b) => b.createdTs - a.createdTs);
@@ -423,75 +425,77 @@ useEffect(() => {
 
   // --- chuẩn hoá payload & nhét từng ticket vào state socketTickets ---
   const pushTicketPayload = (p: any) => {
-    const items = Array.isArray(p?.items) ? p.items : [];
-    if (!items.length) return;
+  const items = Array.isArray(p?.items) ? p.items : [];
+  if (!items.length) return;
 
-    const batchId = p?.batchId;
-    if (batchId && processedBatchIdsRef.current.has(batchId)) return;
-    if (batchId) processedBatchIdsRef.current.add(batchId);
+  const batchId = p?.batchId;
+  if (batchId && processedBatchIdsRef.current.has(batchId)) return;
+  if (batchId) processedBatchIdsRef.current.add(batchId);
 
-    const createdTs = Date.parse(p?.createdAt || "") || Date.now();
-    const table = getTableName(p);
+  const createdTs = Date.parse(p?.createdAt || "") || Date.now();
+  const table = getTableName(p);
 
-    const createdIds: string[] = [];
+  const createdIds: string[] = [];
 
-    setSocketTickets(prev => {
-      const next = { ...prev };
+  setSocketTickets(prev => {
+    const next = { ...prev };
 
-      for (const raw of items) {
-        const orderItemId = raw?.orderItemId as string | undefined;
+    for (const raw of items) {
+      const orderItemId = raw?.orderItemId as string | undefined;
 
-        let ticketIdResolved =
-          (raw as any)?.ticketId ??
-          (raw as any)?.id ??
-          `${p?.orderId ?? "order"}:${orderItemId ?? "item"}:${batchId ?? createdTs}`;
+      let ticketIdResolved =
+        (raw as any)?.ticketId ??
+        (raw as any)?.id ??
+        `${p?.orderId ?? "order"}:${orderItemId ?? "item"}:${batchId ?? createdTs}`;
 
-        if (next[ticketIdResolved]) {
-          ticketIdResolved = `${ticketIdResolved}:${createdTs}`;
-        }
-
-        const qty = Math.max(1, Number(raw?.qty) || 1);
-        const name = raw?.name ?? "";
-        const menuItemId = raw?.menuItemId ?? raw?.menu_item_id ?? "unknown";
-
-        next[ticketIdResolved] = {
-          id: ticketIdResolved,
-          orderId: p.orderId,
-          table,
-          createdAt: p.createdAt
-            ? new Date(p.createdAt).toLocaleString()
-            : new Date().toLocaleString(),
-          createdTs,
-          items: [{ menuItemId, name, qty }],
-          itemIds: [ticketIdResolved],
-          priority: p.priority ? "high" : "normal",
-          note: p.note ?? undefined,
-          justArrived: true,
-        };
-
-        createdIds.push(ticketIdResolved);
+      if (next[ticketIdResolved]) {
+        ticketIdResolved = `${ticketIdResolved}:${createdTs}`;
       }
 
+      const qty = Math.max(1, Number(raw?.qty) || 1);
+      const name = raw?.name ?? "";
+      const menuItemId = raw?.menuItemId ?? raw?.menu_item_id ?? "unknown";
+      const note = raw?.note ?? p.note ?? undefined;   // 👈 CHUYỂN VÀO TRONG VÒNG FOR
+
+      next[ticketIdResolved] = {
+        id: ticketIdResolved,
+        orderId: p.orderId,
+        table,
+        createdAt: p.createdAt
+          ? new Date(p.createdAt).toLocaleString()
+          : new Date().toLocaleString(),
+        createdTs,
+        items: [{ menuItemId, name, qty }],
+        itemIds: [ticketIdResolved],
+        priority: p.priority ? "high" : "normal",
+        note,                            // 👈 dùng note ở đây
+        justArrived: true,
+      };
+
+      createdIds.push(ticketIdResolved);
+    }
+
+    return next;
+  });
+
+  setTimeout(() => {
+    setSocketTickets(prev => {
+      const next = { ...prev };
+      for (const id of createdIds) {
+        if (next[id]) next[id] = { ...next[id], justArrived: false };
+      }
       return next;
     });
+  }, 15_000);
 
-    setTimeout(() => {
-      setSocketTickets(prev => {
-        const next = { ...prev };
-        for (const id of createdIds) {
-          if (next[id]) next[id] = { ...next[id], justArrived: false };
-        }
-        return next;
-      });
-    }, 15_000);
+  qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
 
-    qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
+  toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", {
+    description: `Bàn ${table}`,
+    duration: 3500,
+  });
+};
 
-    toast.success(p?.priority ? "Có order ưu tiên" : "Phiếu mới", {
-      description: `Bàn ${table}`,
-      duration: 3500,
-    });
-  };
 
   // --- listen Notify từ thu ngân ---
   const onSingle = (p: any) => pushTicketPayload(p);

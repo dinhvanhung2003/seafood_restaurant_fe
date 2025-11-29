@@ -60,6 +60,7 @@ export function OrderList({
   customer,
   onChangeGuestCount,
   onChangeCustomer,
+  onUpdateNote: onUpdateNoteProp,
 }: {
   orderId?: string;
   table: Table | null;
@@ -87,6 +88,8 @@ export function OrderList({
   onChangeCustomer: (
     c: { id: string; name: string; phone?: string | null } | null
   ) => void | Promise<void>;
+ onUpdateNote?: (id: string, note: string) => void;
+
 
 }) {
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
@@ -264,21 +267,24 @@ const mergedWithPhantom = useMemo(() => {
       const reason   = voidInfo?.last?.reason;
 
       return (
-        <OrderItemCard
-          key={`${orderId ?? "no-order"}-${oi.rowId ?? oi.id}`}
-          index={idx}
-          item={itemLike as any}
-          order={oi}
-          onChangeQty={onChangeQty}
-          cooked={cooked}
-          voidQty={voidQty}
-          voidReason={reason}
-          onClearVoid={
-            onClearKitchenVoid
-              ? () => onClearKitchenVoid(oi.id)   // clear banner & dòng ảo
-              : undefined
-          }
-        />
+       <OrderItemCard
+  key={`${orderId ?? "no-order"}-${oi.rowId ?? oi.id}`}
+  index={idx}
+  item={itemLike as any}
+  order={oi}
+  onChangeQty={onChangeQty}
+  onUpdateNote={(id, note) => {
+    console.log("OrderList onUpdateNote handler", { id, note });
+     onUpdateNoteProp?.(id, note);  
+  }}
+  cooked={cooked}
+  voidQty={voidQty}
+  voidReason={reason}
+  onClearVoid={
+    onClearKitchenVoid ? () => onClearKitchenVoid(oi.id) : undefined
+  }
+/>
+
       );
     })}
   </div>

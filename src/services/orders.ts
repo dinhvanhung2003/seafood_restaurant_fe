@@ -5,6 +5,7 @@ export type ApiOrderItemRow = {
   id: string;                 // orderItem id (cần cho remove)
   menuItemId: string;
   quantity: number;
+    note?: string | null;
 };
 
 export type ApiOrderRow = {
@@ -24,6 +25,7 @@ function normalizeOrder(row: any): ApiOrderRow {
       id: it.id,
       menuItemId: it.menuItem?.id ?? it.menuItemId,
       quantity: it.quantity,
+       note: it.note ?? null,    
     })),
   };
 }

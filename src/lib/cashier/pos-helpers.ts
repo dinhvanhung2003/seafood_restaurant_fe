@@ -16,6 +16,7 @@ export type UIOrderItem = {
   name?: string;
   price?: number;
   image?: string;
+  note?: string;
 };
 
 // 🔹 Tab của 1 order (meta nằm ở đây)
