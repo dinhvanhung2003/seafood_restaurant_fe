@@ -17,6 +17,15 @@ export type MenuBasic = {
   isAvailable?: boolean;
 };
 
+// Hàm format tiền tệ VNĐ
+const formatCurrency = (value: string | number) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value));
+};
+
 export default function MenuItemCombobox({
   value,
   onChange,
@@ -26,7 +35,6 @@ export default function MenuItemCombobox({
   onChange: (id: string) => void;
   placeholder?: string;
 }) {
-  // tải danh sách món lẻ (page=1, limit=50, sort theo tên). Có ô search client-side trong combobox.
   const { data } = useMenuItemsQuery({
     page: 1,
     limit: 50,
@@ -38,8 +46,7 @@ export default function MenuItemCombobox({
   const [open, setOpen] = useState(false);
   const items: MenuBasic[] =
     (data?.body?.data ?? [])
-      // nếu API có cả combo, lọc bỏ combo ở FE
-      .filter((m: any) => m.isCombo !== true) // an toàn
+      .filter((m: any) => m.isCombo !== true)
       .map((m) => ({ id: m.id, name: m.name, price: m.price, image: m.image, isAvailable: m.isAvailable }));
 
   const selected = items.find((i) => i.id === value);
@@ -72,9 +79,13 @@ export default function MenuItemCombobox({
                 }}
               >
                 <Check className={cn("mr-2 h-4 w-4", i.id === value ? "opacity-100" : "opacity-0")} />
-                <span className="truncate">{i.name}</span>
-                <span className="ml-auto text-xs opacity-60">
-                  {typeof i.price === "string" ? Number(i.price) : i.price}
+                
+                {/* Tên món */}
+                <span className="truncate font-medium">{i.name}</span>
+                
+                {/* --- CHỈNH SỬA Ở ĐÂY: Format giá tiền --- */}
+                <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                  {formatCurrency(i.price)}
                 </span>
               </CommandItem>
             ))}

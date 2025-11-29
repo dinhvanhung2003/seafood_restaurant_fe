@@ -28,6 +28,8 @@ import {
 import { Plus } from "lucide-react";
 
 import { useCreateCategoryMutation } from "@/hooks/admin/useCategory";
+import mapServerError from "@/lib/mapServerError";
+import { useToast } from "@/components/ui/use-toast";
 import type { CreateCategoryPayload } from "@/types/admin/product/category";
 
 const TYPE_OPTIONS: CreateCategoryPayload["type"][] = ["MENU", "INGREDIENT"];
@@ -60,6 +62,7 @@ export default function CreateCategoryDialog({
   });
 
   const { mutate, isPending, error } = useCreateCategoryMutation();
+  const { toast } = useToast();
 
   const onSubmit = handleSubmit((values) =>
     mutate(values, {
@@ -72,6 +75,12 @@ export default function CreateCategoryDialog({
           exact: false,
         });
         onCreated?.();
+        toast({ title: "Tạo danh mục thành công" });
+      },
+      onError: (err: any) => {
+        const mapped = mapServerError(err);
+        // show Vietnamese message as toast
+        toast({ title: mapped.message });
       },
     })
   );
@@ -149,11 +158,7 @@ export default function CreateCategoryDialog({
             {/* Thứ tự removed per request */}
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500">
-              {(error as Error).message || "Có lỗi xảy ra"}
-            </p>
-          )}
+          {/* server errors are shown as toast */}
 
           <DialogFooter className="mt-2">
             <Button

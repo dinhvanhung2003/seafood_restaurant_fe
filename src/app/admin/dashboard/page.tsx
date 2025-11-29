@@ -3,36 +3,34 @@
 import { useState } from "react";
 import { RangeSelect, type RangeKey } from "@/components/admin/report/RangeSelect";
 import SalesKPI from "@/components/admin/report/SalesKPI";
-import SalesSeriesChart from "@/components/admin/report/SaleSeriesChart"; // 👈 sửa tên import
+import SalesSeriesChart from "@/components/admin/report/SaleSeriesChart"; 
 import TopItemsChart from "@/components/admin/report/TopItemsChart";
 
 export default function SalesSection() {
-  // 👉 tách 2 state range độc lập
-  const [kpiRange, setKpiRange] = useState<RangeKey>("today");
   const [seriesRange, setSeriesRange] = useState<RangeKey>("today");
   const [tab, setTab] = useState<"day" | "hour" | "dow">("day");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-hidden">
+      
       {/* KPI card */}
       <div className="rounded-lg border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="font-semibold">KẾT QUẢ BÁN HÀNG</div>
-          <RangeSelect value={kpiRange} onChange={setKpiRange} />
-        </div>
-        <SalesKPI range={kpiRange} />
+        <SalesKPI />
       </div>
 
       {/* Chart card */}
       <div className="rounded-lg border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="font-semibold">DOANH SỐ</div>
           <RangeSelect value={seriesRange} onChange={setSeriesRange} />
         </div>
-        <SalesSeriesChart range={seriesRange} tab={tab} onTabChange={setTab} />
+
+        <div className="w-full">
+          <SalesSeriesChart range={seriesRange} tab={tab} onTabChange={setTab} />
+        </div>
       </div>
 
-      {/* Top 10 */}
+      {/* Top Items */}
       <TopItemsChart />
     </div>
   );

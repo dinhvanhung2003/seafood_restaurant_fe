@@ -2,7 +2,6 @@
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Trash2 } from "lucide-react";
 import MenuItemCombobox from "./MenuItemCombobox";
 
@@ -42,21 +41,31 @@ export default function ComboComponentsBuilder({
               onChange={(id) => setRow(idx, { itemId: id })}
               placeholder="Chọn món…"
             />
-            {/* cảnh báo trùng */}
-            {r.itemId && rows.filter((x) => x.itemId === r.itemId).length > 1 && (
-              <div className="text-xs text-amber-600 mt-1">Món này đang bị trùng trong danh sách.</div>
-            )}
+            {r.itemId &&
+              rows.filter((x) => x.itemId === r.itemId).length > 1 && (
+                <div className="text-xs text-amber-600 mt-1">
+                  Món này đang bị trùng.
+                </div>
+              )}
           </div>
           <div className="col-span-3">
             <Input
               type="number"
               min={1}
               value={r.quantity}
-              onChange={(e) => setRow(idx, { quantity: Math.max(1, Number(e.target.value)) })}
+              onChange={(e) =>
+                setRow(idx, { quantity: Math.max(1, Number(e.target.value)) })
+              }
+              // --- CẬP NHẬT: Class ẩn mũi tên tăng giảm ---
+              className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
           <div className="col-span-1">
-            <Button variant="outline" size="icon" onClick={() => removeRow(idx)}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => removeRow(idx)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -64,14 +73,23 @@ export default function ComboComponentsBuilder({
       ))}
 
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={addRow}>+ Thêm thành phần</Button>
-        {rows.length === 0 && <span className="text-xs text-muted-foreground">Chưa có thành phần nào.</span>}
+        <Button variant="outline" onClick={addRow}>
+          + Thêm thành phần
+        </Button>
+        {rows.length === 0 && (
+          <span className="text-xs text-muted-foreground">
+            Chưa có thành phần nào.
+          </span>
+        )}
       </div>
 
-      {/* Tóm tắt lỗi nhỏ */}
       <div className="text-xs text-muted-foreground">
-        {invalid.hasEmpty && <div>Vui lòng chọn món và nhập số lượng cho tất cả dòng.</div>}
-        {rows.length > 0 && invalid.duplicates.size > 0 && <div>Đang có món trùng lặp.</div>}
+        {invalid.hasEmpty && (
+          <div>Vui lòng chọn món và nhập số lượng cho tất cả dòng.</div>
+        )}
+        {rows.length > 0 && invalid.duplicates.size > 0 && (
+          <div>Đang có món trùng lặp.</div>
+        )}
       </div>
     </div>
   );

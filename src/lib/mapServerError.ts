@@ -15,6 +15,15 @@ export default function mapServerError(err: any): { code?: string; message: stri
     CATEGORY_IN_USE_BY_INVENTORY_ITEMS: 'Danh mục đang được sử dụng trong kho (inventory). Không thể đổi loại hoặc tắt.',
     INTERNAL_SERVER_ERROR: 'Lỗi hệ thống, vui lòng thử lại sau.',
     OVERPAY_NOT_ALLOWED: 'Số tiền đã trả không được lớn hơn số tiền phải trả.',
+
+    COMBO_NAME_REQUIRED: 'Vui lòng nhập tên combo.',
+    COMBO_NAME_DUPLICATED: 'Tên combo này đã tồn tại. Vui lòng đặt tên khác.',
+    COMBO_PRICE_INVALID: 'Giá combo không hợp lệ (phải lớn hơn 0).',
+    COMBO_COMPONENTS_REQUIRED: 'Combo phải có ít nhất 1 món thành phần.',
+    COMBO_COMPONENT_DUPLICATE: 'Có món thành phần bị trùng lặp trong danh sách.',
+    COMBO_COMPONENT_INVALID_QUANTITY: 'Số lượng thành phần không hợp lệ.',
+    COMBO_IN_USE_BY_OPEN_ORDERS: 'Combo đang có đơn hàng chưa hoàn thành, không thể sửa đổi cấu trúc.',
+
   };
 
   if (typeof code === 'string' && map[code]) return { code, message: map[code] };

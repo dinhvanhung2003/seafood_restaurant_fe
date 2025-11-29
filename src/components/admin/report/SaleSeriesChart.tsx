@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar } from "recharts";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar,
+} from "recharts";
 import api from "@/lib/axios";
 import type { RangeKey } from "./RangeSelect";
 
@@ -32,7 +42,8 @@ export default function SalesSeriesChart({
 
   return (
     <>
-      <div className="mb-2 flex gap-2">
+      {/* tab button: cho wrap, không bị tràn ngang */}
+      <div className="mb-2 flex flex-wrap gap-2">
         {[
           { k: "day", label: "Theo ngày" },
           { k: "hour", label: "Theo giờ" },
@@ -40,7 +51,11 @@ export default function SalesSeriesChart({
         ].map((t) => (
           <button
             key={t.k}
-            className={`px-3 py-1.5 rounded-md border text-sm ${tab === (t.k as Granularity) ? "bg-slate-900 text-white" : "bg-white"}`}
+            className={`px-3 py-1.5 rounded-md border text-xs sm:text-sm ${
+              tab === (t.k as Granularity)
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-700"
+            }`}
             onClick={() => onTabChange(t.k as Granularity)}
           >
             {t.label}
@@ -48,20 +63,27 @@ export default function SalesSeriesChart({
         ))}
       </div>
 
-      <div className="h-[360px]">
+      {/* Chart wrapper */}
+      <div className="h-[260px] sm:h-[320px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           {tab === "day" ? (
-            <LineChart data={points} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+            <LineChart
+              data={points}
+              margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
+            >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" />
-              <YAxis />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v: number) => v.toLocaleString()} />
               <Line type="monotone" dataKey="value" dot />
             </LineChart>
           ) : (
-            <BarChart data={points} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
-              <XAxis dataKey="label" />
-              <YAxis />
+            <BarChart
+              data={points}
+              margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
+            >
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v: number) => v.toLocaleString()} />
               <Bar dataKey="value" />
             </BarChart>

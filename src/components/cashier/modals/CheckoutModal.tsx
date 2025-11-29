@@ -710,7 +710,7 @@ useInvoiceSocket(invoiceId, {
           <DialogHeader className="p-4 pb-2">
             <DialogTitle className="flex items-center gap-2">
               <ReceiptText className="h-5 w-5 text-slate-700" />
-              Phiếu thanh toán #{receiptShortId()}
+              Phiếu thanh toán 
               <span className="ml-2 text-sm font-normal text-slate-500">
                 {table.name} / {table.floor}
               </span>
@@ -1012,6 +1012,4 @@ useInvoiceSocket(invoiceId, {
   );
 }
 
-function receiptShortId() {
-  return (Date.now() + "").slice(-4);
-}
+

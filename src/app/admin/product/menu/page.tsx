@@ -2,12 +2,27 @@
 import { useMemo, useState, useEffect } from "react";
 import { useDebounce } from "use-debounce";
 import { useMenuItemsQuery } from "@/hooks/admin/useMenu";
+
+// 1. Cập nhật Type cho khớp với BE
+// Bạn có thể cần sửa type này trong file gốc (ví dụ: @/types/...) nếu nó được import từ nơi khác
+// Ở đây tôi define tạm để bạn thấy sự thay đổi
+type MenuItemsResponse = {
+  data: any[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number; // <--- Backend trả về 'pages', không phải 'totalPages'
+  };
+};
+
 export type MenuItemsQuery = {
   page?: number;
   limit?: number;
   search?: string;
   categoryId?: string;
-  isAvailable?: string; // "true" | "false"
+  isAvailable?: string;
+  isCombo?: string;
   minPrice?: number | string;
   maxPrice?: number | string;
   sortBy?: "name" | "price" | "createdAt";
@@ -41,6 +56,7 @@ export default function MenuItemsPage() {
       limit,
       search: debouncedSearch || undefined,
       isAvailable: isAvailable === "all" ? undefined : isAvailable,
+      isCombo: "false",
       minPrice: minPrice === "" ? undefined : Number(minPrice),
       maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
       sortBy,
@@ -60,36 +76,24 @@ export default function MenuItemsPage() {
 
   const { data, isLoading, isFetching, error, refetch, isPlaceholderData } =
     useMenuItemsQuery(params);
-  const body = data?.body;
 
-  // Pagination fallback: backend might return all items in a single page.
-  const allItems = body?.data ?? [];
+  // Ép kiểu body về dạng đúng nếu TypeScript báo lỗi, hoặc sửa trong hook
+  const body = data?.body as unknown as MenuItemsResponse;
 
-  // Remove combo items from this page as requested: do not display items
-  // where `isCombo` is true.
-  const filteredAllItems = allItems.filter((it: any) => !it.isCombo);
-  const returnedAllInOne =
-    (body?.meta?.totalPages ?? 1) === 1 && filteredAllItems.length > limit;
-  // Use filtered counts (without combos) for UI pagination/total
-  const totalItems = filteredAllItems.length ?? 0;
-  const pages =
-    body?.meta?.totalPages ?? Math.max(1, Math.ceil(totalItems / limit));
-  const pageItems = returnedAllInOne
-    ? filteredAllItems.slice((page - 1) * limit, page * limit)
-    : filteredAllItems;
+  const pageItems = body?.data ?? [];
+  const total = body?.meta?.total ?? 0;
+
+  // --- SỬA QUAN TRỌNG Ở ĐÂY ---
+  // Backend trả về `pages`, trước đây code dùng `totalPages` nên bị undefined => mặc định về 1
+  const totalPages = body?.meta?.pages ?? 1;
 
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const del = useDeleteMenuItemMutation();
 
-  // Keep page in valid range if `pages` changes
+  // Giữ page hợp lệ nếu pages thay đổi
   useEffect(() => {
-    if (page > pages) setPage(pages);
-  }, [page, pages]);
-
-  // use derived values rather than values from response when necessary
-  // (re-declared above)
-  // const pages = body?.meta.totalPages ?? 1;
-  const total = totalItems;
+    if (page > totalPages && totalPages > 0) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -113,14 +117,14 @@ export default function MenuItemsPage() {
       <MenuTable
         data={pageItems}
         total={total}
-        page={Math.min(page, pages)}
-        pages={pages}
+        page={page}
+        pages={totalPages} // Truyền đúng số trang lấy từ biến đã sửa
         isLoading={isLoading}
         isFetching={isFetching}
         error={error ?? null}
         isPlaceholderData={!!isPlaceholderData}
         onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => Math.min(pages, p + 1))}
+        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
         onRefresh={() => refetch()}
         onOpenDetail={(id) => setDetailId(id)}
         onDelete={(id) => del.mutate(id)}

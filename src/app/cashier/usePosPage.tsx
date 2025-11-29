@@ -15,7 +15,6 @@ import { selectMenuItems } from "@/lib/cashier/pos-helpers";
 import type { Catalog as CatalogType, Table as TableType } from "@/types/types";
 import { useKitchenProgress } from "@/hooks/cashier/useKitchenProgress";
 import { useKitchenHistory } from "@/hooks/cashier/useKitchenHistory";
-import { useCancelSocketLive } from "@/hooks/cashier/socket/useCacelSocket";
 import { useKitchenVoids } from "@/hooks/cashier/socket/useKitchenVoids";
 export type CancelTarget = { orderItemId: string; name: string; qty: number };
 
@@ -25,9 +24,6 @@ export function usePosPage() {
 
   // cờ hiện thông báo bếp
   const [justChanged, setJustChanged] = useState(false);
-
-  
-
 
   // ===== local UI state =====
   const [tablePage, setTablePage] = useState(1);

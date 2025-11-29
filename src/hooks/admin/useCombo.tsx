@@ -56,7 +56,18 @@ export type ComboListResp = {
   totalPages: number;
 };
 
-export type ComboListQuery = { page?: number; limit?: number; search?: string };
+export type ComboListQuery = {
+  page?: number;
+  limit?: number;
+  // frontend name `search` maps to backend `q`
+  search?: string;
+  // backend filters
+  categoryId?: string;
+  priceMin?: number;
+  priceMax?: number;
+  sortBy?: "name" | "price" | "createdAt";
+  sortDir?: "ASC" | "DESC";
+};
 
 export type ComboComponent = { itemId: string; quantity: number };
 
@@ -117,13 +128,29 @@ export function useCombosQuery(
   const page = clamp(params.page, 1, 1e9);
   const limit = clamp(params.limit, 1, 100);
   const search = params.search?.trim() || undefined;
+  const categoryId = params.categoryId?.trim() || undefined;
+  const priceMin =
+    typeof params.priceMin === "number" ? Number(params.priceMin) : undefined;
+  const priceMax =
+    typeof params.priceMax === "number" ? Number(params.priceMax) : undefined;
+  const sortBy = params.sortBy || undefined;
+  const sortDir = params.sortDir || undefined;
 
   const q = useQuery<ComboListResp>({
     queryKey: ["combos", { page, limit, search }],
     queryFn: async () => {
       // API hiện trả: { code, success, message, data: [...], meta: {...} }
       const { data: res } = await api.get("/menucomboitem/list", {
-        params: { page, limit, search },
+        params: {
+          page,
+          limit,
+          q: search,
+          categoryId,
+          priceMin,
+          priceMax,
+          sortBy,
+          sortDir,
+        },
       });
 
       const mapped: ComboListResp = {

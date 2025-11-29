@@ -12,17 +12,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { AlertCircle } from "lucide-react";
 import {
   useComboDetailQuery,
   useUpdateComboMutation,
-  ComboComponent,
 } from "@/hooks/admin/useCombo";
-import {
-  getFriendlyMessageFromError,
-  mapBackendCodeToVI,
-} from "@/lib/errorMap";
 import { toast } from "sonner";
 import ComboComponentsBuilder, { ComboRow } from "./ComboComponentsBuilder";
+import mapServerError from "@/lib/mapServerError";
+
+type FormErrors = {
+  name?: string;
+  price?: string;
+  components?: string;
+  root?: string;
+};
 
 export default function ComboUpdateDialog({
   id,
@@ -39,23 +43,21 @@ export default function ComboUpdateDialog({
   const update = useUpdateComboMutation();
 
   const [name, setName] = useState("");
-  const [price, setPrice] = useState<number>(0);
+  const [price, setPrice] = useState<number | string>(0);
   const [desc, setDesc] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
-
-  // builder rows
   const [rows, setRows] = useState<ComboRow[]>([]);
-  // thành phần luôn hiển thị, có thể chỉnh sửa
-
+  const [errors, setErrors] = useState<FormErrors>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [lockedDueToOpenOrders, setLockedDueToOpenOrders] = useState(false);
 
-  // hydrate từ API
+  useEffect(() => {
+    if (open) setErrors({});
+  }, [open]);
+
   useEffect(() => {
     if (detail.data) {
       setName(detail.data.name ?? "");
-      // Defensive parse: backend may return null/undefined or non-numeric string
       const p = Number(detail.data.price ?? 0);
       setPrice(Number.isFinite(p) ? p : 0);
       setDesc(detail.data.description ?? "");
@@ -66,18 +68,11 @@ export default function ComboUpdateDialog({
           quantity: Number(c.quantity) || 1,
         }))
       );
-      // set preview from existing image when opening
-      if (detail.data.image) {
-        setImagePreview(detail.data.image);
-      } else {
-        setImagePreview(null);
-      }
-      // reset locked state when loading fresh detail
-      setLockedDueToOpenOrders(false);
+      if (detail.data.image) setImagePreview(detail.data.image);
+      else setImagePreview(null);
     }
   }, [detail.data]);
 
-  // clean up object URL when a new file is selected or component unmounts
   useEffect(() => {
     return () => {
       if (imagePreview && imagePreview.startsWith("blob:")) {
@@ -88,24 +83,98 @@ export default function ComboUpdateDialog({
     };
   }, [imagePreview]);
 
-  const validate = () => {
-    if (!name.trim()) return "Vui lòng nhập tên combo";
-    if (price <= 0) return "Giá combo phải > 0";
-    // Always validate components (they're always visible/editable now)
+  const validate = (): boolean => {
+    const newErrors: FormErrors = {};
+    let isValid = true;
+
+    if (!name.trim()) {
+      newErrors.name = "Vui lòng nhập tên combo.";
+      isValid = false;
+    }
+
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice <= 0) {
+      newErrors.price = "Giá combo phải lớn hơn 0.";
+      isValid = false;
+    }
+
     {
       const ids = rows.map((r) => r.itemId).filter(Boolean) as string[];
-      if (ids.length === 0) return "Vui lòng chọn ít nhất 1 món thành phần";
-      if (ids.length !== new Set(ids).size)
-        return "Danh sách thành phần có món trùng";
-      if (rows.some((r) => !r.itemId || !r.quantity || r.quantity <= 0))
-        return "Thiếu món hoặc số lượng không hợp lệ";
+      if (ids.length === 0) {
+        newErrors.components = "Vui lòng chọn ít nhất 1 món thành phần.";
+        isValid = false;
+      } else if (ids.length !== new Set(ids).size) {
+        newErrors.components = "Danh sách thành phần có món trùng.";
+        isValid = false;
+      } else if (
+        rows.some((r) => !r.itemId || !r.quantity || r.quantity <= 0)
+      ) {
+        newErrors.components = "Thiếu món hoặc số lượng không hợp lệ.";
+        isValid = false;
+      }
     }
-    return null;
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleUpdate = () => {
+    if (!id) return;
+    if (!validate()) return;
+
+    const file = fileRef.current?.files?.[0];
+    const components = rows.map((r) => ({
+      itemId: r.itemId!,
+      quantity: Number(r.quantity),
+    }));
+
+    update.mutate(
+      {
+        args: { id },
+        data: {
+          name: name.trim(),
+          comboPrice: Number(price),
+          description: desc,
+          isAvailable,
+          components,
+          image: file,
+        },
+      },
+      {
+        onSuccess: () => {
+          onUpdated?.();
+          onOpenChange(false);
+          toast.success("Cập nhật combo thành công");
+        },
+        onError: (error: any) => {
+          const { code, message } = mapServerError(error);
+          if (code === "COMBO_IN_USE_BY_OPEN_ORDERS") {
+            toast.error("Cập nhật thất bại", { description: message });
+            return;
+          }
+          if (
+            code === "COMBO_NAME_DUPLICATED" ||
+            code === "COMBO_NAME_REQUIRED"
+          ) {
+            setErrors((prev) => ({ ...prev, name: message }));
+            return;
+          }
+          setErrors((prev) => ({ ...prev, root: message }));
+          toast.error("Cập nhật thất bại", { description: message });
+        },
+      }
+    );
+  };
+
+  const clearError = (field: keyof FormErrors) => {
+    if (errors[field] || errors.root) {
+      setErrors((prev) => ({ ...prev, [field]: undefined, root: undefined }));
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Cập nhật combo</DialogTitle>
         </DialogHeader>
@@ -114,86 +183,108 @@ export default function ComboUpdateDialog({
           <div className="py-6 text-center">Đang tải…</div>
         ) : detail.error ? (
           <div className="py-6 text-center text-red-500">
-            {/* Hiện thông báo lỗi bằng tiếng Việt */}
             {detail.error.message ?? "Không tải được thông tin combo"}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
+            {errors.root && (
+              <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+                <AlertCircle className="h-4 w-4" />
+                {errors.root}
+              </div>
+            )}
+
             <div>
-              <Label>Tên</Label>
+              <Label className="mb-1.5 block">
+                Tên combo <span className="text-red-500">*</span>
+              </Label>
               <Input
-                disabled={lockedDueToOpenOrders}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  clearError("name");
+                }}
+                className={
+                  errors.name ? "border-red-500 focus-visible:ring-red-500" : ""
+                }
               />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {errors.name}
+                </p>
+              )}
             </div>
 
             <div>
-              <Label>Giá combo</Label>
+              <Label className="mb-1.5 block">
+                Giá combo <span className="text-red-500">*</span>
+              </Label>
               <Input
-                disabled={lockedDueToOpenOrders}
                 type="number"
                 value={Number.isFinite(price) ? price : 0}
                 onChange={(e) => {
                   const v = e.target.value;
-                  // keep value numeric; empty -> 0
                   const n = v === "" ? 0 : Number(v);
                   setPrice(Number.isFinite(n) ? n : 0);
+                  clearError("price");
                 }}
+                // --- CẬP NHẬT: Class ẩn mũi tên ---
+                className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                  errors.price
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : ""
+                }`}
               />
+              {errors.price && (
+                <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {errors.price}
+                </p>
+              )}
             </div>
 
             <div>
-              <Label>Mô tả</Label>
+              <Label className="mb-1.5 block">Mô tả</Label>
               <Textarea
-                disabled={lockedDueToOpenOrders}
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <Switch
-                disabled={lockedDueToOpenOrders}
-                checked={isAvailable}
-                onCheckedChange={setIsAvailable}
-              />
-              <span>Sẵn sàng</span>
+              <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
+              <span className="text-sm font-medium">Đang bán (Sẵn sàng)</span>
             </div>
 
-            {/* Thành phần luôn hiện sẵn để chỉnh sửa */}
             <div>
-              {lockedDueToOpenOrders && (
-                <div className="p-3 mb-2 rounded-md bg-yellow-50 border border-yellow-200 text-yellow-800">
-                  Combo đang được sử dụng trên đơn hàng đang mở, không thể cập
-                  nhật.
-                </div>
-              )}
-              <Label>Thành phần</Label>
-              {lockedDueToOpenOrders ? (
-                <div className="space-y-2">
-                  {(detail.data?.components || []).map((c: any) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center justify-between border rounded-md p-2"
-                    >
-                      <div className="font-medium">{c.item?.name ?? "—"}</div>
-                      <div className="text-sm text-muted-foreground">
-                        SL: {Number(c.quantity)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <ComboComponentsBuilder rows={rows} onChange={setRows} />
+              <Label className="mb-2 block">
+                Thành phần combo <span className="text-red-500">*</span>
+              </Label>
+              <div
+                className={
+                  errors.components
+                    ? "border border-red-200 bg-red-50 p-2 rounded"
+                    : ""
+                }
+              >
+                <ComboComponentsBuilder
+                  rows={rows}
+                  onChange={(newRows) => {
+                    setRows(newRows);
+                    clearError("components");
+                  }}
+                />
+              </div>
+              {errors.components && (
+                <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {errors.components}
+                </p>
               )}
             </div>
 
             <div>
-              <Label>Ảnh (tuỳ chọn)</Label>
+              <Label className="mb-1.5 block">Ảnh (tuỳ chọn)</Label>
               <div className="flex items-start gap-3">
                 <Input
-                  disabled={lockedDueToOpenOrders}
                   type="file"
                   ref={fileRef}
                   accept="image/*"
@@ -223,7 +314,7 @@ export default function ComboUpdateDialog({
                   />
                 ) : (
                   <div className="w-24 h-24 rounded-md border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">
-                    Không có ảnh
+                    No img
                   </div>
                 )}
               </div>
@@ -231,70 +322,15 @@ export default function ComboUpdateDialog({
           </div>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="mt-4">
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Đóng
           </Button>
           <Button
-            onClick={() => {
-              if (!id) return;
-              const err = validate();
-              if (err) return alert(err);
-
-              const file = fileRef.current?.files?.[0]; // optional
-              const components = rows.map((r) => ({
-                itemId: r.itemId!, // đã validate
-                quantity: Number(r.quantity),
-              }));
-
-              update.mutate(
-                {
-                  args: { id }, // ✅ path params phải nằm trong args
-                  data: {
-                    name,
-                    comboPrice: price,
-                    description: desc,
-                    isAvailable,
-                    components, // always send updated components
-                    image: file, // có thể undefined, ok vì UpdateComboDto là Partial
-                  },
-                },
-                {
-                  onSuccess: () => {
-                    onUpdated?.();
-                    onOpenChange(false);
-                  },
-                  onError: (e: any) => {
-                    const resp = e?.response?.data ?? {};
-                    const codeCandidate =
-                      resp.errorMessage ?? resp.code ?? resp.message;
-
-                    if (
-                      codeCandidate === "COMBO_IN_USE_BY_OPEN_ORDERS" ||
-                      resp.code === "COMBO_IN_USE_BY_OPEN_ORDERS" ||
-                      resp.errorMessage === "COMBO_IN_USE_BY_OPEN_ORDERS"
-                    ) {
-                      setLockedDueToOpenOrders(true);
-                      const desc =
-                        mapBackendCodeToVI("COMBO_IN_USE_BY_OPEN_ORDERS") ||
-                        "Combo đang được sử dụng trên đơn hàng đang mở.";
-                      toast.error("Không thể cập nhật", { description: desc });
-                      return;
-                    }
-
-                    const friendly = getFriendlyMessageFromError(e);
-                    toast.error("Cập nhật combo thất bại", {
-                      description: friendly,
-                    });
-                  },
-                }
-              );
-            }}
-            disabled={
-              update.isPending || detail.isLoading || lockedDueToOpenOrders
-            }
+            onClick={handleUpdate}
+            disabled={update.isPending || detail.isLoading}
           >
-            {update.isPending ? "Đang lưu…" : "Lưu"}
+            {update.isPending ? "Đang lưu…" : "Lưu thay đổi"}
           </Button>
         </DialogFooter>
       </DialogContent>
