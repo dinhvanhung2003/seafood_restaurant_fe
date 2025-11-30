@@ -57,15 +57,20 @@ export function useOrders() {
         nextOrderIds[tid] = o.id;
 
         // items hiện tại
-        const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
-          id: it.menuItem?.id ?? it.menuItemId,
-          qty: it.quantity,
-          rowId: it.id,
-          name: it.menuItem?.name,
-          // Ưu tiên it.price (đơn giá “chốt” theo hóa đơn), fallback menuItem.price
-          price: it.price != null ? Number(it.price) : Number(it.menuItem?.price ?? 0),
-          image: it.menuItem?.image,
-        }));
+      const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
+  id: it.menuItem?.id ?? it.menuItemId,
+  qty: it.quantity,
+  rowId: it.id,
+  name: it.menuItem?.name,
+  // Ưu tiên it.price (đơn giá “chốt” theo hóa đơn), fallback menuItem.price
+  price:
+    it.price != null
+      ? Number(it.price)
+      : Number(it.menuItem?.price ?? 0),
+  image: it.menuItem?.image,
+  note: it.note ?? null,   // 👈 THÊM DÒNG NÀY
+}));
+
 
         // dùng order.id làm tab id (ổn định)
         const tabId = o.id;

@@ -217,7 +217,8 @@ export default function POSPage() {
           onAddOrder={() => {}}
           onSwitchOrder={() => {}}
           onCloseOrder={() => {}}
-          onNotify={M.onNotify}
+            onUpdateNote={M.onUpdateNote} 
+           onNotify={M.onNotify}    
           onCheckout={M.handleCheckout}
           onCancelOrder={M.onCancelOrder}
           canCancel={M.hasOrder}

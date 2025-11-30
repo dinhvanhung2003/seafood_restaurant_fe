@@ -670,20 +670,22 @@ export default function MenuItemDetailDialog({
                           />
                         </div>
 
-                        <Input
-                          placeholder="Ghi chú"
-                          value={it.note ?? ""}
-                          onChange={(e) => {
-                            const arr = [...form.ingredients];
+                        <div className="min-w-0">
+                          <Input
+                            placeholder="Ghi chú"
+                            value={it.note ?? ""}
+                            onChange={(e) => {
+                              const arr = [...form.ingredients];
 
-                            arr[idx] = { ...arr[idx], note: e.target.value };
+                              arr[idx] = { ...arr[idx], note: e.target.value };
 
-                            setForm((s) =>
-                              s ? { ...s, ingredients: arr } : s
-                            );
-                          }}
-                          className="h-10"
-                        />
+                              setForm((s) =>
+                                s ? { ...s, ingredients: arr } : s
+                              );
+                            }}
+                            className="h-10 w-full"
+                          />
+                        </div>
 
                         <Button
                           variant="destructive"

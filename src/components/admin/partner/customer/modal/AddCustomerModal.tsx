@@ -2,40 +2,33 @@
 
 import * as React from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
 import { useCreateCustomer } from "@/hooks/admin/useCustomer";
+import {
+  createCustomerSchema,
+  CreateCustomerInput,
+} from "@/shared/schemas/customer";
 
 type CustomerType = "PERSONAL" | "COMPANY";
-type Gender = "" | "MALE" | "FEMALE" | "OTHER";
-
-type FormState = {
-  type: CustomerType;
-  code?: string;
-  name: string;
-  companyName?: string;
-  phone?: string;
-  email?: string;
-  gender: Gender;
-  birthday?: string;
-  address?: string;
-  province?: string;
-  district?: string;
-  ward?: string;
-  taxNo?: string;
-  identityNo?: string;
-  note?: string;
-};
+type Gender = "MALE" | "FEMALE" | "OTHER";
 
 export default function AddCustomerModal({
   open,
   onOpenChange,
-  onCreated, // <— NEW: POS sẽ nhận khách mới tạo
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -43,178 +36,251 @@ export default function AddCustomerModal({
 }) {
   const create = useCreateCustomer();
 
-  const [form, setForm] = React.useState<FormState>({
-    type: "PERSONAL",
-    name: "",
-    gender: "",
-  });
-
-  const set = (k: keyof FormState, v: any) =>
-    setForm((s) => ({ ...s, [k]: v }));
-
-  const resetMinimal = () =>
-    setForm({
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<CreateCustomerInput>({
+    resolver: zodResolver(createCustomerSchema),
+    defaultValues: {
       type: "PERSONAL",
       name: "",
-      gender: "",
-    });
+      code: "",
+      companyName: "",
+      phone: "",
+      email: "",
+      gender: undefined,
+      birthday: "",
+      address: "",
+      province: "",
+      district: "",
+      ward: "",
+      taxNo: "",
+      identityNo: "",
+      note: "",
+    },
+  });
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      toast.info("Tên khách hàng là bắt buộc");
-      return;
-    }
+  const type = watch("type");
 
+  const onSubmit = async (values: CreateCustomerInput) => {
     const payload: any = {
-      type: form.type,
-      name: form.name.trim(),
-      code: form.code || undefined,
-      companyName: form.type === "COMPANY" ? form.companyName || undefined : undefined,
-      phone: form.phone || undefined,
-      email: form.email || undefined,
-      gender: form.gender || undefined,
-      birthday: form.birthday || undefined,
-      address: form.address || undefined,
-      province: form.province || undefined,
-      district: form.district || undefined,
-      ward: form.ward || undefined,
-      taxNo: form.taxNo || undefined,
-      identityNo: form.identityNo || undefined,
-      note: form.note || undefined,
+      ...values,
+      code: values.code?.trim() || undefined,
+      companyName:
+        values.type === "COMPANY"
+          ? values.companyName?.trim() || undefined
+          : undefined,
+      phone: values.phone?.trim() || undefined,
+      email: values.email?.trim() || undefined,
+      taxNo: values.taxNo?.trim() || undefined,
+      identityNo: values.identityNo?.trim() || undefined,
+      birthday: values.birthday || undefined,
+      address: values.address?.trim() || undefined,
+      province: values.province?.trim() || undefined,
+      district: values.district?.trim() || undefined,
+      ward: values.ward?.trim() || undefined,
+      note: values.note?.trim() || undefined,
     };
 
     try {
-      const customer = await create.mutateAsync(payload); // <— NHẬN customer
-      onCreated?.(customer);                              // <— BẮN RA
+      const customer = await create.mutateAsync(payload);
+      toast.success("Tạo khách hàng thành công");
+      onCreated?.(customer);
       onOpenChange(false);
-      resetMinimal();
+      reset();
     } catch {
-      /* onError đã toast */
+      // onError đã toast
     }
+  };
+
+  const handleClose = () => {
+    onOpenChange(false);
+    reset();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-<DialogContent className="w-[98vw] max-w-none max-h-[90vh] overflow-auto p-6">
-
-
-
-
-
-        <DialogHeader>
-          <DialogTitle>Thêm khách hàng</DialogTitle>
+      <DialogContent
+        className="
+          w-[95vw] max-w-4xl 
+          max-h-[90vh] overflow-y-auto 
+          p-4 sm:p-6
+        "
+      >
+        <DialogHeader className="pb-2">
+          <DialogTitle className="text-lg font-semibold">
+            Thêm khách hàng
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-[132px_1fr_1fr] gap-x-5 gap-y-4 items-start">
-          <div className="col-span-1">
-            {/* <div className="h-[120px] w-[120px] rounded border bg-muted" />
-            <Button className="mt-2 w-[120px] bg-emerald-600 hover:bg-emerald-700">
-              Chọn ảnh
-            </Button> */}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Avatar + Form 2 cột trên màn hình rộng */}
+          <div className="grid gap-6 md:grid-cols-[160px,minmax(0,1fr)] items-start">
+            {/* Avatar vùng trái (placeholder)
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-28 w-28 rounded-full border bg-muted" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled
+              >
+                Chọn ảnh
+              </Button>
+            </div> */}
+
+            {/* Form vùng phải */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Loại khách */}
+              <div className="sm:col-span-2">
+                <Label>Loại khách</Label>
+                <Controller
+                  control={control}
+                  name="type"
+                  render={({ field }) => (
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={(v) => field.onChange(v as CustomerType)}
+                      className="mt-2 flex flex-wrap gap-4"
+                    >
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="PERSONAL" /> Cá nhân
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="COMPANY" /> Công ty
+                      </label>
+                    </RadioGroup>
+                  )}
+                />
+                {errors.type && (
+                  <p className="text-xs text-red-500 mt-1">
+                    {errors.type.message}
+                  </p>
+                )}
+              </div>
+
+              <Field label="Mã khách hàng" error={errors.code?.message}>
+                <Input placeholder="Mặc định" {...register("code")} />
+              </Field>
+
+              <Field
+                label={type === "COMPANY" ? "Công ty" : "Chi nhánh"}
+                error={errors.companyName?.message}
+              >
+                <Input
+                  {...register("companyName")}
+                  disabled={type !== "COMPANY"}
+                />
+              </Field>
+
+              <Field
+                label="Tên khách hàng/Công ty"
+                error={errors.name?.message}
+                className="sm:col-span-2"
+              >
+                <Input {...register("name")} />
+              </Field>
+
+              <Field label="Điện thoại" error={errors.phone?.message}>
+                <Input {...register("phone")} />
+              </Field>
+
+              <Field
+                label="Căn cước công dân"
+                error={errors.identityNo?.message}
+              >
+                <Input {...register("identityNo")} />
+              </Field>
+
+              <Field label="Email" error={errors.email?.message}>
+                <Input type="email" {...register("email")} />
+              </Field>
+
+              <Field label="Ngày sinh" error={errors.birthday?.message}>
+                <Input type="date" {...register("birthday")} />
+              </Field>
+
+              {/* Giới tính */}
+              <div className="space-y-1">
+                <Label>Giới tính</Label>
+                <Controller
+                  control={control}
+                  name="gender"
+                  render={({ field }) => (
+                    <RadioGroup
+                      value={field.value || ""}
+                      onValueChange={(v) =>
+                        field.onChange((v || undefined) as Gender | undefined)
+                      }
+                      className="mt-2 grid grid-cols-2 gap-3"
+                    >
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="MALE" /> Nam
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="FEMALE" /> Nữ
+                      </label>
+                    </RadioGroup>
+                  )}
+                />
+                {errors.gender && (
+                  <p className="text-xs text-red-500 mt-1">
+                    {errors.gender.message as string}
+                  </p>
+                )}
+              </div>
+
+              <Field label="Mã số thuế" error={errors.taxNo?.message}>
+                <Input {...register("taxNo")} />
+              </Field>
+
+              <Field
+                label="Địa chỉ"
+                error={errors.address?.message}
+                className="sm:col-span-2"
+              >
+                <Input {...register("address")} />
+              </Field>
+
+              <Field
+                label="Tỉnh / Thành phố"
+                error={errors.province?.message}
+              >
+                <Input {...register("province")} />
+              </Field>
+
+              <Field label="Quận / Huyện" error={errors.district?.message}>
+                <Input {...register("district")} />
+              </Field>
+
+              <Field label="Phường / Xã" error={errors.ward?.message}>
+                <Input {...register("ward")} />
+              </Field>
+
+              <Field
+                label="Ghi chú"
+                error={errors.note?.message}
+                className="sm:col-span-2"
+              >
+                <Input {...register("note")} />
+              </Field>
+            </div>
           </div>
 
-          <div className="col-span-2 grid grid-cols-2 gap-x-5 gap-y-4 min-w-0">
-            <div className="col-span-2">
-              <Label>Loại khách</Label>
-              <RadioGroup
-                value={form.type}
-                onValueChange={(v) => set("type", v as CustomerType)}
-                className="mt-2 flex gap-6"
-              >
-                <label className="flex items-center gap-2">
-                  <RadioGroupItem value="PERSONAL" /> Cá nhân
-                </label>
-                <label className="flex items-center gap-2">
-                  <RadioGroupItem value="COMPANY" /> Công ty
-                </label>
-              </RadioGroup>
-            </div>
-
-            <Field label="Mã khách hàng">
-              <Input
-                placeholder="Mặc định"
-                value={form.code || ""}
-                onChange={(e) => set("code", e.target.value)}
-              />
-            </Field>
-            <Field label={form.type === "COMPANY" ? "Công ty" : "Chi nhánh"}>
-              <Input
-                value={form.companyName || ""}
-                onChange={(e) => set("companyName", e.target.value)}
-                disabled={form.type !== "COMPANY"}
-              />
-            </Field>
-
-            <Field label="Tên khách hàng/Công ty">
-              <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
-            </Field>
-            <Field label="Mã số thuế">
-              <Input value={form.taxNo || ""} onChange={(e) => set("taxNo", e.target.value)} />
-            </Field>
-
-            <Field label="Điện thoại">
-              <Input value={form.phone || ""} onChange={(e) => set("phone", e.target.value)} />
-            </Field>
-            <Field label="Căn cước công dân">
-              <Input value={form.identityNo || ""} onChange={(e) => set("identityNo", e.target.value)} />
-            </Field>
-
-            <Field label="Ngày sinh">
-              <Input type="date" value={form.birthday || ""} onChange={(e) => set("birthday", e.target.value)} />
-            </Field>
-            <div className="space-y-1">
-              <Label>Giới tính</Label>
-              <RadioGroup
-                value={form.gender}
-                onValueChange={(v) => set("gender", v as Gender)}
-                className="mt-2 grid grid-cols-3 gap-3"
-              >
-                {/* <label className="flex items-center gap-2">
-                  <RadioGroupItem value="" /> Không
-                </label> */}
-                <label className="flex items-center gap-2">
-                  <RadioGroupItem value="MALE" /> Nam
-                </label>
-                <label className="flex items-center gap-2">
-                  <RadioGroupItem value="FEMALE" /> Nữ
-                </label>
-                {/* <label className="flex items-center gap-2">
-                  <RadioGroupItem value="OTHER" /> Khác
-                </label> */}
-              </RadioGroup>
-            </div>
-
-            <Field label="Email">
-              <Input type="email" value={form.email || ""} onChange={(e) => set("email", e.target.value)} />
-            </Field>
-            <Field label="Địa chỉ">
-              <Input value={form.address || ""} onChange={(e) => set("address", e.target.value)} />
-            </Field>
-
-            <Field label="Tỉnh / Thành phố">
-              <Input value={form.province || ""} onChange={(e) => set("province", e.target.value)} />
-            </Field>
-            <Field label="Quận / Huyện">
-              <Input value={form.district || ""} onChange={(e) => set("district", e.target.value)} />
-            </Field>
-
-            <Field label="Phường / Xã">
-              <Input value={form.ward || ""} onChange={(e) => set("ward", e.target.value)} />
-            </Field>
-            <Field label="Ghi chú">
-              <Input value={form.note || ""} onChange={(e) => set("note", e.target.value)} />
-            </Field>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Bỏ qua
-          </Button>
-          <Button onClick={handleSubmit} disabled={create.isPending}>
-            {create.isPending ? "Đang lưu..." : "Lưu"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={handleClose}>
+              Bỏ qua
+            </Button>
+            <Button type="submit" disabled={create.isPending}>
+              {create.isPending ? "Đang lưu..." : "Lưu"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -224,15 +290,25 @@ function Field({
   label,
   children,
   className,
+  error,
 }: {
   label: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  error?: string;
 }) {
   return (
-    <div className={["space-y-1 min-w-0", className].filter(Boolean).join(" ")}>
+    <div
+      className={[
+        "space-y-1 min-w-0",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <Label className="text-[13px]">{label}</Label>
       {children}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </div>
   );
 }

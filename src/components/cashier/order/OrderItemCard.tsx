@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, X, CookingPot } from "lucide-react";
 import { currency } from "@/utils/money";
@@ -34,6 +34,16 @@ export function OrderItemCard({
 }: Props) {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
 
+  // ⭐ localNote để hiển thị ngay lập tức
+  const [localNote, setLocalNote] = useState(order.note ?? "");
+
+
+
+  // khi props order.note đổi (refetch từ BE), sync lại localNote
+  useEffect(() => {
+    setLocalNote(order.note ?? "");
+  }, [order.note]);
+
   // món đã bị bếp huỷ hết nhưng vẫn để lại dòng cho thu ngân
   const isFullyCancelled = order.qty === 0 && voidQty > 0;
 
@@ -47,6 +57,9 @@ export function OrderItemCard({
       ? `-${Number((item as any).discountAmount ?? 0).toLocaleString()}đ`
       : null);
 
+  // ⭐ id dùng để update note: ưu tiên rowId (orderItemId), fallback id
+  const orderItemIdForNote = (order as any).rowId ?? order.id;
+const isPhantom = !orderItemIdForNote || String(orderItemIdForNote).startsWith("void-");
   return (
     <div
       className={
@@ -111,12 +124,19 @@ export function OrderItemCard({
 
       {/* Ghi chú & controls */}
       <div className="flex items-center justify-between mt-1">
-        <button
-          className="text-sm text-muted-foreground hover:underline"
-          onClick={() => setNoteModalOpen(true)}
-        >
-          {order.note?.length ? `📝 ${order.note}` : "Ghi chú/Món thêm"}
-        </button>
+       <button
+  className="text-sm text-muted-foreground hover:underline"
+  disabled={isPhantom}
+  onClick={() => {
+    if (isPhantom) return;
+    setNoteModalOpen(true);
+  }}
+>
+  {(localNote || order.note)?.length
+    ? `📝 ${localNote || order.note}`
+    : "Ghi chú"}
+</button>
+
 
         <div className="flex items-center gap-3">
           <div className="flex items-center border rounded-full overflow-hidden h-10">
@@ -154,7 +174,9 @@ export function OrderItemCard({
                 </div>
               </div>
             ) : (
-              <div className="text-sm font-medium">{currency(displayPrice)}</div>
+              <div className="text-sm font-medium">
+                {currency(displayPrice)}
+              </div>
             )}
           </div>
 
@@ -164,16 +186,30 @@ export function OrderItemCard({
         </div>
       </div>
 
-      <ItemNoteModal
-        open={noteModalOpen}
-        itemName={item.name}
-        defaultNote={order.note || ""}
-        onClose={() => setNoteModalOpen(false)}
-        onConfirm={(note) => {
-          onUpdateNote?.(order.id, note);
-          setNoteModalOpen(false);
-        }}
-      />
+    <ItemNoteModal
+  open={noteModalOpen}
+  itemName={item.name}
+  defaultNote={localNote || order.note || ""}
+  onClose={() => setNoteModalOpen(false)}
+  onConfirm={(note) => {
+    console.log("NOTE CONFIRM in Card", {
+      orderItemIdForNote,
+      isPhantom,
+      note,
+    });
+
+    setLocalNote(note);
+
+    if (!isPhantom && orderItemIdForNote) {
+      onUpdateNote?.(orderItemIdForNote, note);
+    }
+
+    setNoteModalOpen(false);
+  }}
+/>
+
+
+
     </div>
   );
 }
