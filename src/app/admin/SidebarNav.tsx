@@ -82,9 +82,6 @@ const NAV: NavItem[] = [
     children: [
       { label: "Hàng Hóa", href: "/admin/inventories/ingredients" },
       { label: "Nhập kho", href: "/admin/inventories/purchase" },
-      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
-      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
-      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
     ],
   },
   { label: "Sổ quỹ", href: "/admin/cashbook", icon: Wallet },

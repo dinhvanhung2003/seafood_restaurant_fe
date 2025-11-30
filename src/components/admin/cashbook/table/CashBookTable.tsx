@@ -55,7 +55,6 @@ export function CashbookTable({
           <TableHead>Đối tượng</TableHead>
           <TableHead>Nội dung</TableHead>
           <TableHead className="text-right">Số tiền</TableHead>
-          <TableHead className="w-[120px]">Hạch toán</TableHead>
           <TableHead className="w-[50px]"></TableHead>
         </TableRow>
       </TableHeader>
@@ -64,7 +63,7 @@ export function CashbookTable({
         {safeRows.length === 0 ? (
           <TableRow>
             <TableCell
-              colSpan={8}
+              colSpan={7}
               className="text-center text-sm text-muted-foreground py-6"
             >
               Không có dữ liệu
@@ -171,25 +170,6 @@ export function CashbookTable({
                     </span>
                   )}
                 </TableCell>
-
-                <TableCell>
-                  {r.isPostedToBusinessResult ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-slate-100 text-slate-600 border-slate-200 font-normal shadow-none"
-                    >
-                      Đã HT
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="bg-orange-50 text-orange-600 border-orange-200 font-normal hover:bg-orange-100 shadow-none"
-                    >
-                      Chưa HT
-                    </Badge>
-                  )}
-                </TableCell>
-
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
