@@ -327,7 +327,7 @@ const wasSentToKitchen = (it: any) => cancellableQty(it.id) > 0;
     await clear(selectedTable.id, activeItems);
   };
 
-
+const [priorityNext, setPriorityNext] = useState(false);
   const deltaItems = useMemo(() => {
   if (!currentOrderId) return [];
   return activeItems
@@ -338,7 +338,10 @@ const wasSentToKitchen = (it: any) => cancellableQty(it.id) > 0;
     .filter((d) => d.delta > 0);
 }, [activeItems, currentOrderId, progress]);
 
-
+const hasUnsentItems = useMemo(
+  () => deltaItems.length > 0,
+  [deltaItems]
+);
 
   const onCancelOrder = async () => {
     if (!selectedTable) return;
@@ -630,12 +633,11 @@ const onUpdateNote = (orderItemId: string, note: string) => {
     const orderId = currentOrderId;
     if (!orderId) throw new Error("Không có orderId");
 
-    const res = await api.post(`/kitchen/orders/${orderId}/notify-items`, {
+    await api.post(`/kitchen/orders/${orderId}/notify-items`, {
       items: deltaItems,
       tableName: selectedTable.name,
-      priority: true,          // ✅ thu ngân luôn gửi ưu tiên
-      source: "cashier",       // ✅ đánh dấu gửi từ cashier
-      // note: null            // nếu muốn có note riêng thì truyền thêm
+      priority: priorityNext,      // ✅ dùng cờ lần này
+      source: "cashier",
     });
 
     await Promise.all([
@@ -645,6 +647,7 @@ const onUpdateNote = (orderItemId: string, note: string) => {
 
     toast.success("Đã gửi bếp!");
     setJustChanged(false);
+    setPriorityNext(false);        // ✅ gửi xong thì bỏ tick ưu tiên
   } catch (e: any) {
     toast.error("Không thể gửi bếp", {
       description: e?.response?.data?.message || e.message,
@@ -653,6 +656,7 @@ const onUpdateNote = (orderItemId: string, note: string) => {
     setNotifying(false);
   }
 };
+
 
 useEffect(() => {
   if (!justChanged) return;
@@ -780,5 +784,11 @@ useEffect(() => {
     onChangeGuestCount,
     onChangeCustomer,
     onUpdateNote,
+
+
+       // ưu tiên
+    priorityNext,
+    setPriorityNext,
+    hasUnsentItems,
   };
 }

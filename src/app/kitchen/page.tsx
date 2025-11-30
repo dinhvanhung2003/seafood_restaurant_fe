@@ -50,6 +50,7 @@ export type ApiOrderItemExt = {
   menuItem: { id: string; name: string };
   order: { id: string; table?: { id: string; name: string } | null };
    note?: string | null; 
+    priority?: boolean | null;
 };
 
 // === types ===
@@ -74,18 +75,20 @@ function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
     .map(r => {
       const ts = Date.parse(r.createdAt) || Date.now();
       return {
-        id: r.id, // 👈 UI KEY = kitchen_tickets.id (duy nhất cho mỗi lần notify)
+        id: r.id,
         orderId: r.order.id,
         table: r.order?.table?.name ?? "—",
         createdAt: new Date(r.createdAt).toLocaleString(),
         createdTs: ts,
-      items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
-itemIds: [r.id], // PATCH theo ticket.id
-   note: r.note ?? undefined,    
+        items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
+        itemIds: [r.id],
+        note: r.note ?? undefined,
+        priority: r.priority ? "high" : "normal",   // ✅ map ra Ticket.priority
       } as Ticket;
     })
     .sort((a, b) => b.createdTs - a.createdTs);
 }
+
 
 
 

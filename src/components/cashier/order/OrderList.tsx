@@ -61,6 +61,10 @@ export function OrderList({
   onChangeGuestCount,
   onChangeCustomer,
   onUpdateNote: onUpdateNoteProp,
+    // thêm props mới
+  hasUnsentItems,
+  priorityNext,
+  onChangePriorityNext,
 }: {
   orderId?: string;
   table: Table | null;
@@ -89,7 +93,9 @@ export function OrderList({
     c: { id: string; name: string; phone?: string | null } | null
   ) => void | Promise<void>;
  onUpdateNote?: (id: string, note: string) => void;
-
+ hasUnsentItems: boolean;
+  priorityNext: boolean;
+  onChangePriorityNext: (val: boolean) => void;
 
 }) {
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
@@ -302,7 +308,28 @@ const mergedWithPhantom = useMemo(() => {
             <strong>Thông báo</strong> để gửi thông tin chế biến đến bar bếp.
           </div>
         )}
-
+ {hasUnsentItems && (
+          <div className="flex items-center justify-between text-sm text-slate-600 mb-1">
+            <label
+              htmlFor="priorityNext"
+              className="flex items-center gap-2 cursor-pointer select-none"
+            >
+              <input
+                id="priorityNext"
+                type="checkbox"
+                checked={priorityNext}
+                onChange={(e) => onChangePriorityNext(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Gửi ưu tiên cho lần này
+            </label>
+            {priorityNext && (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 font-semibold">
+                Ưu tiên
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setHistoryOpen(true)}>
