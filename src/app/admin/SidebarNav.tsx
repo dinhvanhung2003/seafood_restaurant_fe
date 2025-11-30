@@ -69,7 +69,10 @@ const NAV: NavItem[] = [
       { label: "Lịch làm việc", href: "/admin/employee/shift" },
       { label: "Bảng chấm công", href: "/admin/employee/attendance" },
       { label: "Bảng lương", href: "/admin/employee/payroll" },
-      { label: "Thiết lập chấm công", href: "/admin/employee/attendance-setting" },
+      {
+        label: "Thiết lập chấm công",
+        href: "/admin/employee/attendance-setting",
+      },
     ],
   },
   {
@@ -77,12 +80,8 @@ const NAV: NavItem[] = [
     href: "/admin/kho-hang",
     icon: Boxes,
     children: [
-      { label: "Danh sách tồn kho", href: "/admin/inventories/list" },
-      { label: "Nguyên liệu", href: "/admin/inventories/ingredients" },
+      { label: "Hàng Hóa", href: "/admin/inventories/ingredients" },
       { label: "Nhập kho", href: "/admin/inventories/purchase" },
-      { label: "Xuất kho", href: "/admin/kho-hang/xuat-kho" },
-      { label: "Kiểm kê kho", href: "/admin/kho-hang/kiem-ke" },
-      { label: "Lịch sử kho", href: "/admin/kho-hang/lich-su" },
     ],
   },
   { label: "Sổ quỹ", href: "/admin/cashbook", icon: Wallet },
@@ -91,8 +90,8 @@ const NAV: NavItem[] = [
     href: "/admin/report",
     icon: BarChart3,
     children: [
-      { label: "Bán hàng", href: "/admin/report/sale" },
-      { label: "Cuối ngày", href: "/admin/report/closing" },
+      // { label: "Bán hàng", href: "/admin/report/sale" },
+      { label: "Bán Hàng", href: "/admin/report/closing" },
       { label: "Nhân viên", href: "/admin/report/staff" },
       { label: "Nhà cung cấp", href: "/admin/report/supplier" },
       { label: "Khách hàng", href: "/admin/report/customer" },
@@ -130,7 +129,7 @@ export function SidebarNav({ variant }: { variant: "desktop" | "mobile" }) {
     <Link prefetch {...p} />
   );
 
-   const renderNav = () => (
+  const renderNav = () => (
     <ul className="px-2 space-y-1">
       {NAV.map((item) => {
         const Icon = item.icon;
@@ -236,12 +235,9 @@ export function SidebarNav({ variant }: { variant: "desktop" | "mobile" }) {
   // 👉 MOBILE: chỉ cần list menu, header + logout đã có ở MobileDrawer
   if (variant === "mobile") {
     return (
-      <nav className="py-2 overflow-y-auto flex-1 min-h-0">
-        {renderNav()}
-      </nav>
+      <nav className="py-2 overflow-y-auto flex-1 min-h-0">{renderNav()}</nav>
     );
   }
 
   return null;
-
 }

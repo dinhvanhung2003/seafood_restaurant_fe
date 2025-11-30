@@ -330,7 +330,7 @@ export default function IngredientsListPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button onClick={() => setOpenAdd(true)}>+ Thêm nguyên liệu</Button>
+            <Button onClick={() => setOpenAdd(true)}>+ Thêm Hàng Hóa</Button>
           </div>
         </div>
 

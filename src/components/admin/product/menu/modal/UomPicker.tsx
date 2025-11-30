@@ -34,7 +34,7 @@ export function UomPicker({
       onValueChange={onChange}
       disabled={disabled || isLoading || !hasUoms}
     >
-      <SelectTrigger>
+      <SelectTrigger className="w-full">
         <SelectValue placeholder={isLoading ? "Đang tải..." : "Chọn ĐV"} />
       </SelectTrigger>
       <SelectContent>

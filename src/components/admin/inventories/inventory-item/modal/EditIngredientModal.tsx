@@ -142,7 +142,7 @@ export default function EditIngredientModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Cập nhật nguyên liệu</DialogTitle>
+          <DialogTitle>Cập Nhật Hàng Hóa</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4">

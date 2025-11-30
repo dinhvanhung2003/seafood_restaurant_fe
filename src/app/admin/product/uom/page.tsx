@@ -138,7 +138,6 @@ export default function UomListPage() {
       toast.error("Không thể ngưng hoạt động", (e as Error)?.message),
   });
 
-  // Hàm xử lý khi bấm nút thùng rác
   const handleVerifyDelete = async (u: { code: string; name: string }) => {
     try {
       setDeleteConf({
@@ -146,20 +145,14 @@ export default function UomListPage() {
         code: u.code,
         name: u.name,
         type: "DELETE",
-        isLoadingCheck: true, // Bật loading
+        isLoadingCheck: true,
       });
 
       const c = u.code;
-      // Kiểm tra xem đơn vị tính có đang được sử dụng không
-      const [invRes, convFromRes, convToRes] = await Promise.all([
+      const [invRes, convToRes] = await Promise.all([
         api
           .get("/inventoryitems/list-ingredients", {
             params: { limit: 1, baseUomCode: c },
-          })
-          .catch(() => ({ data: { data: [] } } as any)),
-        api
-          .get("/uomconversion", {
-            params: { limit: 1, fromCode: c },
           })
           .catch(() => ({ data: { data: [] } } as any)),
         api
@@ -170,12 +163,10 @@ export default function UomListPage() {
       ]);
 
       const usedInInv = (invRes?.data?.data ?? []).length > 0;
-      const usedInConv =
-        (convFromRes?.data?.data ?? []).length > 0 ||
-        (convToRes?.data?.data ?? []).length > 0;
-      const isUsed = usedInInv || usedInConv;
+      // Chỉ kiểm tra toCode
+      const usedInConv = (convToRes?.data?.data ?? []).length > 0;
+      const isUsed = usedInInv || usedInConv; // Cập nhật trạng thái dialog
 
-      // Cập nhật trạng thái dialog dựa trên kết quả kiểm tra
       setDeleteConf({
         isOpen: true,
         code: u.code,
