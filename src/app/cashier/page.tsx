@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, Grid3X3, LayoutGrid, Search, UtensilsCrossed } from "lucide-react";
-import { LogOut, Menu as MenuIcon, UserCircle2 } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { signOut } from "next-auth/react";
 import { Monitor } from "lucide-react";
 import { Settings } from "lucide-react";
@@ -20,7 +18,7 @@ import { MenuGrid } from "@/components/cashier/menu/MenuGrid";
 import { OrderList } from "@/components/cashier/order/OrderList";
 import CheckoutModal from "@/components/cashier/modals/CheckoutModal";
 import CancelOneItemModal from "@/components/cashier/modals/CancelModal";
-
+import { CashierDrawer } from "@/components/cashier/drawer/CashierDrawer";
 import { usePosPage } from "./usePosPage";
 
 export default function POSPage() {
@@ -35,61 +33,11 @@ export default function POSPage() {
         </span>
       </div>
 
-      {/* Drawer / Menu user */}
-      <Sheet>
-        <SheetTrigger asChild>
-          <button className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-sm hover:bg-white/20">
-            <UserCircle2 className="h-4 w-4" />
-            <span className="hidden text-xs md:inline">
-              Thu ngân
-            </span>
-            <MenuIcon className="h-4 w-4" />
-          </button>
-        </SheetTrigger>
+      <CashierDrawer />
+         
+       
 
-        <SheetContent side="right" className="flex h-full w-80 flex-col p-0">
-          {/* Header trong drawer */}
-          <SheetHeader className="border-b border-slate-200 px-4 py-3 text-left">
-            <SheetTitle className="flex items-center gap-2">
-              <UserCircle2 className="h-6 w-6 text-slate-700" />
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold">Thu ngân</span>
-                <span className="text-xs text-slate-500">POS nhà hàng</span>
-              </div>
-            </SheetTitle>
-          </SheetHeader>
-
-          {/* Menu trong drawer */}
-          <div className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-            <div className="mb-2 px-2 text-[11px] font-semibold uppercase text-slate-500">
-              Chức năng
-            </div>
-
-            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
-              <Monitor className="h-4 w-4" />
-              <span>Màn hình bếp</span>
-            </button>
-
-            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
-              <Settings className="h-4 w-4" />
-              <span>Cài đặt chung</span>
-            </button>
-
-            {/* Bạn có thể thêm các mục khác: Lập phiếu thu, Trả hàng, Phím tắt,... */}
-          </div>
-
-          {/* Logout */}
-          <div className="border-t border-slate-200 p-2">
-            <button
-              onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              className="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-red-600 hover:bg-red-50"
-            >
-              <LogOut className="h-5 w-5" />
-              <span>Đăng xuất</span>
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
+        
     </header>
       <div className="grid h-[calc(100dvh-56px)] grid-cols-1 gap-3 p-3 min-h-0 md:grid-cols-[3fr_2fr]">
         {/* Left */}

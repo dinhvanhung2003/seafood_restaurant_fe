@@ -49,6 +49,7 @@ const NAV: NavItem[] = [
     children: [
       { label: "Hóa đơn", href: "/admin/transaction/invoice" },
       { label: "Phiếu trả hàng nhập", href: "/admin/purchasereturn" },
+        { label: "Trả hàng", href: "/admin/returns" },
     ],
   },
   {
