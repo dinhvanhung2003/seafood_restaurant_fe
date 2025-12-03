@@ -54,7 +54,7 @@ export function OrderList({
   justChanged,
   kitchenVoids,
   onClearKitchenVoid,
-
+   createdByName,
   // thêm các props 
    guestCount,
   customer,
@@ -96,6 +96,7 @@ export function OrderList({
  hasUnsentItems: boolean;
   priorityNext: boolean;
   onChangePriorityNext: (val: boolean) => void;
+     createdByName?: string;
 
 }) {
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
@@ -332,6 +333,12 @@ const mergedWithPhantom = useMemo(() => {
         )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+         {/*  Hiển thị tên người order */}
+             {createdByName && (
+              <span className="text-xs text-slate-600 italic mr-2 max-w-[120px] truncate">
+                {createdByName}
+              </span>
+            )}
             <Button variant="outline" onClick={() => setHistoryOpen(true)}>
               <Clock className="w-4 h-4 mr-1" />
             </Button>

@@ -677,8 +677,19 @@ useEffect(() => {
     };
 
     const onChanged = (p: { orderId: string; tableId: string; reason: string }) => hit(p.orderId);
-    const onMerged = (_: { toOrderId: string; fromOrderId: string }) => hit(currentOrderId);
-    const onSplit = (_: { toOrderId: string; fromOrderId: string }) => hit(currentOrderId);
+    const onMerged = (p: { toOrderId: string; fromOrderId: string }) => {
+    // gộp xong thì đơn đích là toOrderId
+    hit(p.toOrderId);
+  };
+      const onSplit = (p: { toOrderId: string; fromOrderId: string }) => {
+    // tách đơn: có thể đang xem from hoặc to → check cả 2
+    if (currentOrderId === p.fromOrderId || currentOrderId === p.toOrderId) {
+      hit(currentOrderId);
+    } else {
+      // vẫn refetch danh sách đơn
+      hit();
+    }
+  };
   const onMetaUpdated = (p: {
     orderId: string;
     tableId: string;
@@ -709,6 +720,24 @@ useEffect(() => {
   // dọn side effect
   // reset khi chuyển order khác hoặc vừa notify xong
   useEffect(() => { setJustChanged(false); }, [currentOrderId]);
+  // 👉 Tên người order (từ createdBy)
+   const createdByName = useMemo(() => {
+    const u = currentOrderRow?.createdBy as any;
+    if (!u) return "";
+
+    const profile = u.profile;
+    if (profile?.fullName) return profile.fullName; // 👈 lấy tên chuẩn
+
+    // fallback nếu chưa có profile
+    return (
+      u.username ||
+      (u.email ? String(u.email).split("@")[0] : "") ||
+      u.phoneNumber ||
+      u.role ||
+      ""
+    );
+  }, [currentOrderRow]);
+
 
   return {
     // ui state
@@ -729,7 +758,7 @@ useEffect(() => {
     tablesWithStart,
     menuCategories, filteredMenuItems, menuCatalog,
     counts,
-
+    createdByName,
     // order-related
     activeItems, orderTotal,
     currentOrderId,

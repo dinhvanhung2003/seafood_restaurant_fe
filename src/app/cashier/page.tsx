@@ -217,6 +217,7 @@ export default function POSPage() {
           total={M.orderTotal}
           onChangeQty={M.onChangeQty}
           justChanged={M.justChanged}
+                createdByName={M.createdByName}
             hasUnsentItems={M.hasUnsentItems}
   priorityNext={M.priorityNext}
   onChangePriorityNext={M.setPriorityNext}
