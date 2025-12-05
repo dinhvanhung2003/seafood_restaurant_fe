@@ -33,7 +33,7 @@ export default function POSPage() {
         </span>
       </div>
 
-      <CashierDrawer />
+     <CashierDrawer currentTableId={M.selectedTable?.id} />
          
        
 

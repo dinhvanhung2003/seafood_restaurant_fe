@@ -2,7 +2,7 @@
 import React from "react";
 import { SidebarNav } from "./SidebarNav";
 import { MobileTopBar } from "@/app/admin/MobileTopNav";
-
+import  AdminChatWidget  from "@/components/admin/chat/AdminChatWidget";
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -19,6 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Content scroll theo chiều dọc, không trượt navbar */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           {children}
+            <AdminChatWidget />
         </main>
       </div>
     </div>

@@ -120,3 +120,35 @@ export function usePRUpdateDraftOrPost() {
     },
   });
 }
+
+// ===== Pay Receipt (trả nợ NCC) =====
+export interface PRPayPayload {
+  id: string;           // id phiếu nhập
+  addAmountPaid: number; // số tiền TRẢ THÊM lần này
+}
+
+export interface PRPayResponse {
+  id: string;
+  status: string;       // PAID / OWING
+  amountPaid: number;   // tổng đã trả sau lần này
+  grandTotal: number;   // tổng tiền hóa đơn
+  remaining: number;    // còn phải trả
+  paidInFull: boolean;  // true = đã trả hết
+}
+export function usePRPayReceipt() {
+  const qc = useQueryClient();
+  return useMutation<PRPayResponse, unknown, PRPayPayload>({
+    mutationFn: async ({ id, addAmountPaid }) => {
+      const { data } = await api.post<PRPayResponse>(
+        `/purchasereceipt/${id}/pay`,  
+        { addAmountPaid },             
+      );
+      return data;
+    },
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["pr-list"] });
+      qc.invalidateQueries({ queryKey: ["pr-one", vars.id] });
+    },
+  });
+}
+

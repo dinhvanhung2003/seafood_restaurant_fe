@@ -378,21 +378,21 @@ const mergedWithPhantom = useMemo(() => {
 
         <div className="mt-2 flex items-center gap-2">
           <Button
-            className="h-12 rounded-xl border"
+            className="h-12 w-60 rounded-xl border"
             onClick={onNotify}
             disabled={!hasTable || !canNotify}
           >
-            Thông báo
+            Thông báo (F10)
           </Button>
 
-          <Button
+          {/* <Button
             variant="outline"
             className="h-12 flex-1 rounded-xl text-black border-2"
             onClick={onCancelOrder ?? (() => {})}
             disabled={!hasTable || !canCancel || !onCancelOrder}
           >
             Huỷ đơn
-          </Button>
+          </Button> */}
 
           <Button
             className="h-12 flex-1 rounded-xl bg-[#0B63E5] text-base text-white hover:bg-[#0959cb]"

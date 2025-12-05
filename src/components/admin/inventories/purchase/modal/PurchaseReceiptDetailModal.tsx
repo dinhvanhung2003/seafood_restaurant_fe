@@ -11,6 +11,9 @@ import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { printPurchaseReceipt } from "@/lib/print/purchase_receipt";
 import { useRouter } from "next/navigation";
+import { usePRPayReceipt } from "@/hooks/admin/usePurchase";  
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 type ReceiptItem = {
   id: string;
   itemId: string;
@@ -61,6 +64,11 @@ export default function PurchaseReceiptDetailModal({
 }) {
   const [data, setData] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  const [payOpen, setPayOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState<string>("");
+
+  const { mutate: payReceipt, isPending: paying } = usePRPayReceipt();
   const router = useRouter();
 
   useEffect(() => {
@@ -79,7 +87,9 @@ export default function PurchaseReceiptDetailModal({
     // đổi sang mở trang tạo với query id
     router.push(`/admin/inventories/purchase/new?id=${data.id}`);
   };
-
+ const remaining = data
+    ? Math.max(0, data.grandTotal - data.amountPaid)
+    : 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* rộng theo viewport, không tràn */}
@@ -224,54 +234,162 @@ export default function PurchaseReceiptDetailModal({
                         {money(data.amountPaid)}
                       </td>
                     </tr>
-                    <tr>
-                      <td colSpan={5} className="px-3 py-2 text-right">
-                        Còn phải trả
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-red-500 text-lg">
-                        {money(data.grandTotal - data.amountPaid)}
-                      </td>
-                    </tr>
+                   <tr>
+  <td colSpan={5} className="px-3 py-2 text-right">
+    Còn phải trả
+  </td>
+  <td className="px-3 py-2 text-right font-bold text-red-500 text-lg">
+    {money(remaining)}
+  </td>
+</tr>
+
                   </tfoot>
                 </table>
               </div>
 
               <div className="flex justify-end gap-2">
-                {/* Hiện nút SỬA khi là nháp */}
-                {data.status === "DRAFT" && (
-                  <Button variant="secondary" onClick={handleEdit}>
-                    Sửa
-                  </Button>
-                )}
+  {/* Hiện nút SỬA khi là nháp */}
+  {data.status === "DRAFT" && (
+    <Button variant="secondary" onClick={handleEdit}>
+      Sửa
+    </Button>
+  )}
 
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!data) return;
-                    printPurchaseReceipt(data, {
-                      openInNewTab: false, // hoặc true nếu bạn thích mở tab mới
-                      currencyLocale: "vi-VN",
-                      currencyPrefix: "", // nếu muốn thêm "₫ " thì set "₫ "
-                      title: "PHIẾU NHẬP HÀNG",
-                      company: {
-                        name: "Nhà hàng Hải Sản",
-                        address: "Nguyễn Văn Bảo, Gò Vấp, TP.HCM",
-                        phone: "0909 000 000",
-                        taxCode: "0123456789",
-                        // logoUrl: "/logo.png" // nếu có
-                      },
-                      footerText: "Phiếu in từ hệ thống",
-                    });
-                  }}
-                >
-                  In/PDF
-                </Button>
-                <Button onClick={() => onOpenChange(false)}>Đóng</Button>
-              </div>
+  {/* Nút thanh toán NCC nếu còn nợ */}
+  {remaining > 0 && (
+    <Button
+      variant="default"
+      onClick={() => {
+        setPayAmount(String(remaining)); // mặc định trả hết
+        setPayOpen(true);
+      }}
+    >
+      Thanh toán NCC
+    </Button>
+  )}
+
+  <Button
+    variant="outline"
+    onClick={() => {
+      if (!data) return;
+      printPurchaseReceipt(data, {
+        openInNewTab: false,
+        currencyLocale: "vi-VN",
+        currencyPrefix: "",
+        title: "PHIẾU NHẬP HÀNG",
+        company: {
+          name: "Nhà hàng Hải Sản",
+          address: "Nguyễn Văn Bảo, Gò Vấp, TP.HCM",
+          phone: "0909 000 000",
+          taxCode: "0123456789",
+        },
+        footerText: "Phiếu in từ hệ thống",
+      });
+    }}
+  >
+    In/PDF
+  </Button>
+  <Button onClick={() => onOpenChange(false)}>Đóng</Button>
+</div>
+
             </>
           )}
+          
         </div>
+        <Dialog open={payOpen} onOpenChange={setPayOpen}>
+  <DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle>Thanh toán NCC</DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-3">
+      <div className="text-sm text-slate-600">
+        Phiếu: <span className="font-semibold">{data?.code}</span>
+      </div>
+      <div className="text-sm">
+        Tổng hóa đơn: <span className="font-semibold">{money(data?.grandTotal)}</span>
+      </div>
+      <div className="text-sm">
+        Đã thanh toán:{" "}
+        <span className="font-semibold">{money(data?.amountPaid)}</span>
+      </div>
+      <div className="text-sm">
+        Còn phải trả:{" "}
+        <span className="font-semibold text-red-500">{money(remaining)}</span>
+      </div>
+
+      <div className="space-y-1">
+        <div className="text-sm text-slate-600">Số tiền thanh toán thêm</div>
+        <Input
+          type="number"
+          min={0}
+          max={remaining}
+          value={payAmount}
+          onChange={(e) => setPayAmount(e.target.value)}
+        />
+        <div className="text-xs text-slate-500">
+          Không được vượt quá số còn phải trả.
+        </div>
+      </div>
+    </div>
+
+    <div className="flex justify-end gap-2 mt-4">
+      <Button
+        variant="outline"
+        onClick={() => setPayOpen(false)}
+        disabled={paying}
+      >
+        Hủy
+      </Button>
+      <Button
+        onClick={() => {
+          if (!data) return;
+          const amount = Number(payAmount || 0);
+          if (!amount || amount <= 0) {
+            toast.error("Vui lòng nhập số tiền hợp lệ");
+            return;
+          }
+          if (amount > remaining) {
+            toast.error("Số tiền không được lớn hơn số còn phải trả");
+            return;
+          }
+
+          payReceipt(
+            { id: data.id, addAmountPaid: amount },
+            {
+              onSuccess: (res) => {
+                // Cập nhật lại state local để không cần reload
+                setData((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        amountPaid: res.amountPaid,
+                        // nếu BE trả về remaining, có thể dùng cho hiển thị
+                        // grandTotal: res.grandTotal, // nếu muốn sync theo BE
+                        status: res.status,
+                      }
+                    : prev
+                );
+                toast.success("Thanh toán thành công");
+                setPayOpen(false);
+              },
+              onError: (err: any) => {
+                console.error(err);
+                toast.error("Thanh toán thất bại");
+              },
+            }
+          );
+        }}
+        disabled={paying}
+      >
+        {paying ? "Đang lưu..." : "Xác nhận thanh toán"}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
       </DialogContent>
+
     </Dialog>
   );
 }

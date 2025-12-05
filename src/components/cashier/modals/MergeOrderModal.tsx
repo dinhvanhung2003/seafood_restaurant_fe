@@ -89,9 +89,9 @@ const visibleTables = React.useMemo(
           <label className="flex items-center gap-2">
             <input type="radio" checked readOnly /> Ghép đơn
           </label>
-          <label className="flex items-center gap-2 opacity-50">
+          {/* <label className="flex items-center gap-2 opacity-50">
             <input type="radio" disabled /> Tách đơn (sắp có)
-          </label>
+          </label> */}
         </div>
 
         {/* Select bàn đích */}

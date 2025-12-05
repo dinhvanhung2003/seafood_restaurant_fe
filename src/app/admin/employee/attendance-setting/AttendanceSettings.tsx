@@ -95,21 +95,36 @@ export default function AttendanceSettings() {
           <div className="space-y-2">
             {geo.data?.length ? (
               geo.data.map((g) => (
-                <div key={g.id} className="flex items-center justify-between border rounded p-2">
-                  <div>
-                    <div className="font-medium">{g.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {g.centerLat?.toFixed(6)}, {g.centerLng?.toFixed(6)} • {g.radiusMeters}m
-                    </div>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => delGeo.mutate(g.id)}
-                  >
-                    Xoá
-                  </Button>
-                </div>
+              <div
+  key={g.id}
+  className="flex items-center justify-between border rounded p-2 cursor-pointer hover:bg-accent"
+  onClick={() => {
+    setName(g.name);
+    setPlace({
+      lat: g.centerLat,
+      lng: g.centerLng,
+      radius: g.radiusMeters,
+    });
+  }}
+>
+  <div>
+    <div className="font-medium">{g.name}</div>
+    <div className="text-xs text-muted-foreground">
+      {g.centerLat?.toFixed(6)}, {g.centerLng?.toFixed(6)} • {g.radiusMeters}m
+    </div>
+  </div>
+  <Button
+    variant="destructive"
+    size="sm"
+    onClick={(e) => {
+      e.stopPropagation(); // tránh bấm Xóa mà lại zoom tới vị trí
+      delGeo.mutate(g.id);
+    }}
+  >
+    Xoá
+  </Button>
+</div>
+
               ))
             ) : (
               <div className="text-sm text-muted-foreground">Chưa có vùng nào</div>
