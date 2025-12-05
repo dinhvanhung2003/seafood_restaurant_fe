@@ -50,30 +50,34 @@ export default function TopItemsChart() {
       <div className="h-[360px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={rows}
-            layout="vertical"
-            margin={{ left: isMobile ? 40 : 80, right: 16, top: 8, bottom: 8 }}
-          >
-            <XAxis type="number" tick={{ fontSize: 10 }} />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={isMobile ? 120 : 200}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-            />
-            <Tooltip formatter={(v: number) => v.toLocaleString()} />
-            <Bar dataKey="value">
-              <LabelList
-                dataKey="value"
-                position="right"
-                formatter={(label: any) => {
-                  const n = Number(label);
-                  return Number.isFinite(n) ? n.toLocaleString() : label ?? "";
-                }}
-              />
-            </Bar>
-          </BarChart>
+  data={rows}
+  layout="vertical"
+  margin={{ left: isMobile ? 40 : 80, right: 16, top: 8, bottom: 8 }}
+>
+  <XAxis type="number" tick={{ fontSize: 10 }} />
+  <YAxis
+    type="category"
+    dataKey="name"
+    width={isMobile ? 120 : 200}
+    tickLine={false}
+    tick={{ fontSize: 10 }}
+  />
+  <Tooltip formatter={(v: number) => v.toLocaleString()} />
+
+  <Bar dataKey="value" fill="#284369ff" radius={[0, 4, 4, 0]}>
+  <LabelList
+    dataKey="value"
+    position="right"
+    fill="#0A2B61"
+    formatter={(label: any) => {
+      const n = Number(label);
+      return Number.isFinite(n) ? n.toLocaleString() : label ?? "";
+    }}
+  />
+</Bar>
+
+</BarChart>
+
         </ResponsiveContainer>
       </div>
     </div>

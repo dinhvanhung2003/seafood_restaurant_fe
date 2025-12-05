@@ -87,14 +87,14 @@ export function CashbookDetailModal({
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">Hạch toán KQKD</div>
+              {/* <div className="text-sm text-muted-foreground">Hạch toán KQKD</div>
               <div>
                 {item.isPostedToBusinessResult ? (
                   <Badge variant="outline">Đã HT</Badge>
                 ) : (
                   <Badge variant="destructive">Chưa HT</Badge>
                 )}
-              </div>
+              </div> */}
             </div>
 
             <Separator />

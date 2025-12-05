@@ -54,13 +54,17 @@ export function OrderList({
   justChanged,
   kitchenVoids,
   onClearKitchenVoid,
-
+   createdByName,
   // thêm các props 
    guestCount,
   customer,
   onChangeGuestCount,
   onChangeCustomer,
   onUpdateNote: onUpdateNoteProp,
+    // thêm props mới
+  hasUnsentItems,
+  priorityNext,
+  onChangePriorityNext,
 }: {
   orderId?: string;
   table: Table | null;
@@ -89,7 +93,10 @@ export function OrderList({
     c: { id: string; name: string; phone?: string | null } | null
   ) => void | Promise<void>;
  onUpdateNote?: (id: string, note: string) => void;
-
+ hasUnsentItems: boolean;
+  priorityNext: boolean;
+  onChangePriorityNext: (val: boolean) => void;
+     createdByName?: string;
 
 }) {
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
@@ -302,9 +309,36 @@ const mergedWithPhantom = useMemo(() => {
             <strong>Thông báo</strong> để gửi thông tin chế biến đến bar bếp.
           </div>
         )}
-
+ {hasUnsentItems && (
+          <div className="flex items-center justify-between text-sm text-slate-600 mb-1">
+            <label
+              htmlFor="priorityNext"
+              className="flex items-center gap-2 cursor-pointer select-none"
+            >
+              <input
+                id="priorityNext"
+                type="checkbox"
+                checked={priorityNext}
+                onChange={(e) => onChangePriorityNext(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Gửi ưu tiên cho lần này
+            </label>
+            {priorityNext && (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 font-semibold">
+                Ưu tiên
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+         {/*  Hiển thị tên người order */}
+             {createdByName && (
+              <span className="text-xs text-slate-600 italic mr-2 max-w-[120px] truncate">
+                {createdByName}
+              </span>
+            )}
             <Button variant="outline" onClick={() => setHistoryOpen(true)}>
               <Clock className="w-4 h-4 mr-1" />
             </Button>
@@ -344,21 +378,21 @@ const mergedWithPhantom = useMemo(() => {
 
         <div className="mt-2 flex items-center gap-2">
           <Button
-            className="h-12 rounded-xl border"
+            className="h-12 w-60 rounded-xl border"
             onClick={onNotify}
             disabled={!hasTable || !canNotify}
           >
-            Thông báo
+            Thông báo (F10)
           </Button>
 
-          <Button
+          {/* <Button
             variant="outline"
             className="h-12 flex-1 rounded-xl text-black border-2"
             onClick={onCancelOrder ?? (() => {})}
             disabled={!hasTable || !canCancel || !onCancelOrder}
           >
             Huỷ đơn
-          </Button>
+          </Button> */}
 
           <Button
             className="h-12 flex-1 rounded-xl bg-[#0B63E5] text-base text-white hover:bg-[#0959cb]"

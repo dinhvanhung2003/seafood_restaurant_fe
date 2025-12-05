@@ -4,7 +4,14 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useEmployee } from "@/hooks/admin/useEmployee";
 import { useWeekSchedules } from "@/hooks/admin/useSchedule";
 import ScheduleCell from "@/components/admin/employee/work-schedule/table/ScheduleCell";
@@ -14,8 +21,8 @@ import ScheduleCell from "@/components/admin/employee/work-schedule/table/Schedu
 // Thứ 2 của tuần (local)
 function startOfWeek(d: Date) {
   const x = new Date(d);
-  const dow = x.getDay();         // 0..6 (0=CN)
-  const delta = (dow + 6) % 7;    // 0 -> Thứ 2, ..., 6 -> CN
+  const dow = x.getDay(); // 0..6 (0=CN)
+  const delta = (dow + 6) % 7; // 0 -> Thứ 2, ..., 6 -> CN
   x.setDate(x.getDate() - delta);
   x.setHours(0, 0, 0, 0);
   return x;
@@ -37,9 +44,8 @@ function addDays(d: Date, n: number) {
 
 // ISO week → Monday (local)
 function mondayOfISOWeek(year: number, week: number) {
-  // Theo ISO, tuần 1 là tuần chứa ngày 4/1
-  const jan4 = new Date(year, 0, 4);         // LOCAL
-  const dow = jan4.getDay() || 7;            // 1..7 (Mon..Sun)
+  const jan4 = new Date(year, 0, 4); // LOCAL
+  const dow = jan4.getDay() || 7; // 1..7 (Mon..Sun)
   const mon = new Date(jan4);
   mon.setDate(jan4.getDate() - dow + 1 + (week - 1) * 7);
   mon.setHours(0, 0, 0, 0);
@@ -47,7 +53,15 @@ function mondayOfISOWeek(year: number, week: number) {
 }
 
 function viDayLabel(idx: number) {
-  return ["Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy","Chủ nhật"][idx];
+  return [
+    "Thứ hai",
+    "Thứ ba",
+    "Thứ tư",
+    "Thứ năm",
+    "Thứ sáu",
+    "Thứ bảy",
+    "Chủ nhật",
+  ][idx];
 }
 
 /* ================= Page ================= */
@@ -55,49 +69,98 @@ function viDayLabel(idx: number) {
 export default function WorkSchedulePage() {
   // Tuần hiện tại (anchor = Thứ 2)
   const [anchor, setAnchor] = useState<Date>(startOfWeek(new Date()));
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(anchor, i)), [anchor]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(anchor, i)),
+    [anchor]
+  );
 
   // range YYYY-MM-DD local
   const start = formatYMD(weekDays[0]);
-  const end   = formatYMD(weekDays[6]);
+  const end = formatYMD(weekDays[6]);
+
+  // filter theo tên NV
+  const [search, setSearch] = useState("");
+
   // Nhân viên
-  const { rows: employees, isLoading: empLoading } = useEmployee(1,10,"");
+  const { rows: employees, isLoading: empLoading } = useEmployee(1, 10, "");
+
+  // Danh sách nhân viên sau khi lọc theo tên
+  const filteredEmployees = useMemo(() => {
+    const kw = search.trim().toLowerCase();
+    if (!kw) return employees;
+
+    return employees.filter((emp) => {
+      const name =
+        (emp.fullName || emp.username || emp.email || "").toLowerCase();
+      return name.includes(kw);
+    });
+  }, [employees, search]);
+
+  // Chỉ query lịch cho những NV đang lọc
+  const userIds = useMemo(
+    () => (filteredEmployees.length ? filteredEmployees.map((e) => e.id) : []),
+    [filteredEmployees]
+  );
 
   // Lịch theo tuần
-  const { data: items = [], isLoading } = useWeekSchedules(start, end);
+  const { data: items = [], isLoading } = useWeekSchedules(
+    start,
+    end,
+    userIds.length ? userIds : undefined
+  );
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-semibold">Lịch làm việc</h1>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, -7))}>
-            ◀ Tuần trước
-          </Button>
-
-          <div className="min-w-[220px]">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          {/* Ô lọc tên nhân viên */}
+          <div className="w-full md:w-[220px]">
             <Input
-              type="week"
-              onChange={(e) => {
-                const v = e.target.value; // "YYYY-W##"
-                if (!v) return;
-                const [yStr, wStr] = v.split("-W");
-                const y = Number(yStr);
-                const w = Number(wStr);
-                setAnchor(startOfWeek(mondayOfISOWeek(y, w)));
-              }}
-              placeholder="Chọn tuần"
+              placeholder="Tìm nhân viên..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
-          <Button variant="outline" onClick={() => setAnchor(startOfWeek(new Date()))}>
-            Tuần này
-          </Button>
-          <Button variant="outline" onClick={() => setAnchor(addDays(anchor, 7))}>
-            Tuần sau ▶
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAnchor(addDays(anchor, -7))}
+            >
+              ◀ Tuần trước
+            </Button>
+
+            <div className="min-w-[180px]">
+              <Input
+                type="week"
+                onChange={(e) => {
+                  const v = e.target.value; // "YYYY-W##"
+                  if (!v) return;
+                  const [yStr, wStr] = v.split("-W");
+                  const y = Number(yStr);
+                  const w = Number(wStr);
+                  setAnchor(startOfWeek(mondayOfISOWeek(y, w)));
+                }}
+                placeholder="Chọn tuần"
+              />
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setAnchor(startOfWeek(new Date()))}
+            >
+              Tuần này
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setAnchor(addDays(anchor, 7))}
+            >
+              Tuần sau ▶
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -115,7 +178,9 @@ export default function WorkSchedulePage() {
                   </div>
                 </TableHead>
               ))}
-              <TableHead className="w-[140px] text-right">Lương dự kiến</TableHead>
+              <TableHead className="w-[140px] text-right">
+                Lương dự kiến
+              </TableHead>
             </TableRow>
           </TableHeader>
 
@@ -128,21 +193,39 @@ export default function WorkSchedulePage() {
               </TableRow>
             ) : employees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={9}
+                  className="py-10 text-center text-muted-foreground"
+                >
                   Chưa có nhân viên
                 </TableCell>
               </TableRow>
+            ) : filteredEmployees.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={9}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  Không tìm thấy nhân viên phù hợp
+                </TableCell>
+              </TableRow>
             ) : (
-              employees.map((emp) => (
+              filteredEmployees.map((emp) => (
                 <TableRow key={emp.id} className="align-top">
                   <TableCell>
-                    <div className="font-medium">{emp.fullName || emp.username || emp.email}</div>
-                    <div className="text-xs text-muted-foreground">{emp.id.slice(0, 8).toUpperCase()}</div>
+                    <div className="font-medium">
+                      {emp.fullName || emp.username || emp.email}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {emp.id.slice(0, 8).toUpperCase()}
+                    </div>
                   </TableCell>
 
                   {weekDays.map((d, idx) => {
-                    const iso = formatYMD(d); // <-- LOCAL
-                    const cells = items.filter((x: any) => x.user.id === emp.id && x.date === iso);
+                    const iso = formatYMD(d); // LOCAL
+                    const cells = items.filter(
+                      (x: any) => x.user.id === emp.id && x.date === iso
+                    );
                     const chips = cells.map((it: any) => ({
                       id: it.id,
                       name: it.shift.name,
@@ -157,7 +240,11 @@ export default function WorkSchedulePage() {
                             Đang tải…
                           </div>
                         ) : (
-                          <ScheduleCell userId={emp.id} dateISO={iso} shifts={chips} />
+                          <ScheduleCell
+                            userId={emp.id}
+                            dateISO={iso}
+                            shifts={chips}
+                          />
                         )}
                       </TableCell>
                     );
@@ -165,7 +252,9 @@ export default function WorkSchedulePage() {
 
                   <TableCell className="text-right align-top">
                     <div className="font-medium">—</div>
-                    <div className="text-xs text-muted-foreground">chưa tính</div>
+                    <div className="text-xs text-muted-foreground">
+                      chưa tính
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -179,19 +268,31 @@ export default function WorkSchedulePage() {
         {empLoading ? (
           <Card className="p-6 text-center">Đang tải nhân viên…</Card>
         ) : employees.length === 0 ? (
-          <Card className="p-6 text-center text-muted-foreground">Chưa có nhân viên</Card>
+          <Card className="p-6 text-center text-muted-foreground">
+            Chưa có nhân viên
+          </Card>
+        ) : filteredEmployees.length === 0 ? (
+          <Card className="p-6 text-center text-muted-foreground">
+            Không tìm thấy nhân viên phù hợp
+          </Card>
         ) : (
-          employees.map((emp) => (
+          filteredEmployees.map((emp) => (
             <Card key={emp.id} className="p-4">
               <div className="mb-3">
-                <div className="font-medium">{emp.fullName || emp.username || emp.email}</div>
-                <div className="text-xs text-muted-foreground">{emp.id.slice(0, 8).toUpperCase()}</div>
+                <div className="font-medium">
+                  {emp.fullName || emp.username || emp.email}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {emp.id.slice(0, 8).toUpperCase()}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {weekDays.map((d, i) => {
-                  const iso = formatYMD(d); // <-- LOCAL
-                  const cells = items.filter((x: any) => x.user.id === emp.id && x.date === iso);
+                  const iso = formatYMD(d); // LOCAL
+                  const cells = items.filter(
+                    (x: any) => x.user.id === emp.id && x.date === iso
+                  );
                   const chips = cells.map((it: any) => ({
                     id: it.id,
                     name: it.shift.name,
@@ -203,16 +304,24 @@ export default function WorkSchedulePage() {
                   return (
                     <div key={i} className="rounded-lg border p-3">
                       <div className="mb-2">
-                        <div className="text-sm font-medium">{viDayLabel(i)}</div>
+                        <div className="text-sm font-medium">
+                          {viDayLabel(i)}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {d.toLocaleDateString("vi-VN")}
                         </div>
                       </div>
 
                       {isLoading && chips.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">Đang tải…</div>
+                        <div className="text-xs text-muted-foreground">
+                          Đang tải…
+                        </div>
                       ) : (
-                        <ScheduleCell userId={emp.id} dateISO={iso} shifts={chips} />
+                        <ScheduleCell
+                          userId={emp.id}
+                          dateISO={iso}
+                          shifts={chips}
+                        />
                       )}
                     </div>
                   );

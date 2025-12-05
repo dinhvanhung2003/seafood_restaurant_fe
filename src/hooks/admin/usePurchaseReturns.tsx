@@ -249,3 +249,34 @@ export function useChangeStatusPurchaseReturn() {
     },
   });
 }
+
+
+
+export function usePurchaseReturnPay() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    any,
+    unknown,
+    { id: string; paidAmount: number; refundAmount?: number }
+  >({
+    mutationFn: async ({ id, paidAmount, refundAmount }) => {
+      // BE update() đang nằm trong PurchasereturnService
+      // Controller nên là PATCH /purchasereturn/:id
+      const { data } = await api.patch(`/purchasereturn/${id}`, {
+        // gửi paidAmount mới (TỔNG đã trả), không phải “trả thêm”
+        paidAmount,
+        // nếu muốn cho phép chỉnh luôn refundAmount thì gửi thêm
+        ...(refundAmount !== undefined ? { refundAmount } : {}),
+      });
+      return data;
+    },
+    onSuccess: (_res, vars) => {
+      // reload list + chi tiết
+      qc.invalidateQueries({ queryKey: ["purchase-returns"] });
+      qc.invalidateQueries({
+        queryKey: ["purchase-return-detail", vars.id],
+      });
+    },
+  });
+}

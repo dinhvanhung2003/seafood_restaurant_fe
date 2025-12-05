@@ -279,8 +279,12 @@ export default function IngredientsListPage() {
       : catAnyList;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
+
+    <> 
+    <h1 className="text-xl font-medium">Hàng hóa</h1>
+     <div className="mx-auto max-w-6xl px-4 py-6 grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
       {/* Sidebar filters */}
+     
       <aside className="space-y-4">
         <div className="rounded-2xl border p-4">
           <div className="text-sm font-medium mb-3">Tồn kho</div>
@@ -314,8 +318,13 @@ export default function IngredientsListPage() {
 
       {/* Main */}
       <div>
+         <div className="mb-4 flex items-center justify-between gap-3">
+  
+    
+  </div>
         {/* Top bar: search + add + page size */}
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          
           <div className="flex items-center gap-2">
             {isLoading ? (
               <Skeleton className="h-9 w-80" />
@@ -892,6 +901,7 @@ export default function IngredientsListPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </div>
+    </div></>
+  
   );
 }

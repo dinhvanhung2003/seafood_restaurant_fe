@@ -71,22 +71,32 @@ export default function SalesSeriesChart({
               data={points}
               margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" />
               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v: number) => v.toLocaleString()} />
-              <Line type="monotone" dataKey="value" dot />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#0A2B61"        // xanh đậm vừa
+                dot={{ r: 3, stroke: "#0A2B61", fill: "#0A2B61" }}
+                activeDot={{ r: 5 }}
+              />
             </LineChart>
           ) : (
-            <BarChart
-              data={points}
-              margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
-            >
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => v.toLocaleString()} />
-              <Bar dataKey="value" />
-            </BarChart>
+       <BarChart
+  data={points}
+  margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
+>
+  <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" />
+  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+  <YAxis tick={{ fontSize: 10 }} />
+  <Tooltip formatter={(v: number) => v.toLocaleString()} />
+
+  {/* MÀU CỘT MỚI */}
+  <Bar dataKey="value" fill="#0A2B61" />
+</BarChart>
+
           )}
         </ResponsiveContainer>
       </div>

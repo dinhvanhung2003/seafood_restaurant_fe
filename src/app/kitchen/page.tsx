@@ -50,6 +50,7 @@ export type ApiOrderItemExt = {
   menuItem: { id: string; name: string };
   order: { id: string; table?: { id: string; name: string } | null };
    note?: string | null; 
+    priority?: boolean | null;
 };
 
 // === types ===
@@ -74,18 +75,20 @@ function mapRowsToTickets(rows: ApiOrderItemExt[]): Ticket[] {
     .map(r => {
       const ts = Date.parse(r.createdAt) || Date.now();
       return {
-        id: r.id, // 👈 UI KEY = kitchen_tickets.id (duy nhất cho mỗi lần notify)
+        id: r.id,
         orderId: r.order.id,
         table: r.order?.table?.name ?? "—",
         createdAt: new Date(r.createdAt).toLocaleString(),
         createdTs: ts,
-      items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
-itemIds: [r.id], // PATCH theo ticket.id
-   note: r.note ?? undefined,    
+        items: [{ menuItemId: r.menuItem.id, name: r.menuItem.name, qty: r.quantity }],
+        itemIds: [r.id],
+        note: r.note ?? undefined,
+        priority: r.priority ? "high" : "normal",   // ✅ map ra Ticket.priority
       } as Ticket;
     })
     .sort((a, b) => b.createdTs - a.createdTs);
 }
+
 
 
 
@@ -143,19 +146,21 @@ function TicketCard({
 >
 
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className={["font-semibold text-slate-800", voided ? "line-through" : ""].join(" ")}>
-            {t.table}
-          </div>
-          {t.justArrived && !voided && <Badge className="bg-emerald-600">NEW</Badge>}
-          {t.priority === "high" && !voided && <Badge className="bg-red-600">Ưu tiên</Badge>}
-          {voided && (
-            <Badge variant="destructive" className="gap-1">
-              <BanIcon className="h-3.5 w-3.5" />
-              Voided
-            </Badge>
-          )}
-        </div>
+       <div className="flex items-center gap-2">
+  {/* Bàn: KHÔNG line-through nữa */}
+  <div className="font-semibold text-slate-800">
+    {t.table}
+  </div>
+  {t.justArrived && !voided && <Badge className="bg-emerald-600">NEW</Badge>}
+  {t.priority === "high" && !voided && <Badge className="bg-red-600">Ưu tiên</Badge>}
+  {voided && (
+    <Badge variant="destructive" className="gap-1">
+      <BanIcon className="h-3.5 w-3.5" />
+      Hủy
+    </Badge>
+  )}
+</div>
+
         <div className="flex items-center text-xs text-slate-500">
           <Clock4 className="mr-1 h-4 w-4" />
           {t.createdAt}
@@ -265,12 +270,14 @@ export default function KitchenScreen() {
   const [listCooking, setListCooking] = useState<Ticket[]>([]);
 const [listReady,  setListReady]  = useState<Ticket[]>([]);
   const processedBatchIdsRef = useRef<Set<string>>(new Set());
+  const processedVoidsRef = useRef<Set<string>>(new Set());
   const [voidedIds, setVoidedIds] = useState<Set<string>>(new Set());
 const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 const [voidModalOpen, setVoidModalOpen] = useState(false);
 const [voidTicket, setVoidTicket] = useState<Ticket | null>(null);
 
-
+const processedMergedRef = useRef<Set<string>>(new Set());
+const processedSplitsRef = useRef<Set<string>>(new Set());
 
 const openVoidModal = (t: Ticket) => {
   setVoidTicket(t);
@@ -375,12 +382,13 @@ const voidFromKitchen = async (t: Ticket, qty?: number, reason?: string) => {
 
 
 useEffect(() => {
-  setListCooking(mapRowsToTickets(qPreparingItems.data ?? []));
+  setListCooking(prev => mergeApiWithVoided(qPreparingItems.data, prev));
 }, [qPreparingItems.data]);
 
 useEffect(() => {
-  setListReady(mapRowsToTickets(qReadyItems.data ?? []));
+  setListReady(prev => mergeApiWithVoided(qReadyItems.data, prev));
 }, [qReadyItems.data]);
+
 function removeOrderEverywhere(orderId: string) {
   setSocketTickets(prev => {
     const next = { ...prev };
@@ -513,71 +521,101 @@ const onVoidedFromNewGateway = (p: {
   qty: number;
   reason?: string;
   by?: string;
+  ticketId:string;
 }) => {
   console.log("[kitchen:void_synced] payload = ", p);
-
-  const by = p.by ?? "cashier";
-
-  // 🔥 Nếu chính bếp bấm "Hủy món" thì bỏ qua
-  // UI bếp đã được cập nhật bằng refetch trong voidFromKitchen()
-  if (by === "kitchen") {
+const key = `${p.ticketId}:${p.orderId}:${p.menuItemId}:${p.qty}`;
+  if (processedVoidsRef.current.has(key)) {
     return;
   }
+  processedVoidsRef.current.add(key);
+  const who =
+    p.by === "kitchen"
+      ? "Bếp"
+      : p.by === "cashier"
+      ? "Thu ngân"
+      : "Hệ thống";
 
-  const applyVoid = (
-    setter: (updater: (prev: Ticket[]) => Ticket[]) => void
-  ) => {
-    setter((prev) => {
-      const next: Ticket[] = [];
+const applyVoid = (
+  setter: React.Dispatch<React.SetStateAction<Ticket[]>>
+) => {
+  setter(prev => {
+    // 1) Bỏ hết các phiếu void cũ của cùng ticket/menu trong list này
+    const base: Ticket[] = [];
+    for (const t of prev) {
+      const it = t.items[0];
+      const sameVoid =
+        t.voided &&
+        t.orderId === p.orderId &&
+        it?.menuItemId === p.menuItemId &&
+        (!p.ticketId || t.id.startsWith(`${p.ticketId}:`));
 
-      for (const t of prev) {
-        const it = t.items[0];
+      if (!sameVoid) base.push(t);
+    }
 
-        if (t.orderId === p.orderId && it?.menuItemId === p.menuItemId) {
-          const originalQty = it.qty;
-          const cancelled = Math.min(originalQty, p.qty);
-          const remain = originalQty - cancelled;
+    // 2) Từ base, tạo lại 1 phiếu void mới + 1 phiếu còn lại (nếu còn qty)
+    const next: Ticket[] = [];
 
+    for (const t of base) {
+      const it = t.items[0];
+
+      const isTarget =
+        t.orderId === p.orderId &&
+        it?.menuItemId === p.menuItemId &&
+        (!p.ticketId || t.id === p.ticketId) &&
+        !t.voided;
+
+      if (isTarget) {
+        const originalQty = it.qty;
+        const cancelled = Math.min(originalQty, p.qty);
+        const remain = originalQty - cancelled;
+
+        if (cancelled > 0) {
           const voidTicketId = `${t.id}:void:${Date.now()}`;
 
           const voidTicket: Ticket = {
             ...t,
             id: voidTicketId,
             items: [{ ...it, qty: cancelled }],
+            voided: true,
           };
           next.push(voidTicket);
 
-          setVoidedIds((old) => {
+          setVoidedIds(old => {
             const s = new Set(old);
             s.add(voidTicketId);
             return s;
           });
-
-          if (remain > 0) {
-            const remainTicket: Ticket = {
-              ...t,
-              items: [{ ...it, qty: remain }],
-            };
-            next.push(remainTicket);
-          }
-        } else {
-          next.push(t);
         }
+
+        if (remain > 0) {
+          next.push({
+            ...t,
+            items: [{ ...it, qty: remain }],
+          });
+        }
+      } else {
+        next.push(t);
       }
+    }
 
-      return next;
-    });
-  };
+    return next;
+  });
+};
 
-  // ❗ Quan trọng: huỷ từ cashier/waiter CHỈ tác động tới PENDING/CONFIRMED
-  // nên chỉ apply cho listNew, KHÔNG động vào listCooking/listReady
+
+  // 👉 luôn apply cho NEW (pending/confirmed)
   applyVoid(setListNew);
+  // 👉 và cả PREPARING để bếp vẫn thấy phiếu đỏ sau khi refetch
+  applyVoid(setListCooking);
+  // Nếu muốn READY cũng hiện phiếu đỏ thì mở thêm dòng này:
+  applyVoid(setListReady);
 
-  const who = by === "kitchen" ? "Bếp" : "Thu ngân";
   toast.error(`${who} đã hủy món`, {
     description: p.reason || undefined,
   });
 };
+
 
 
 
@@ -592,7 +630,138 @@ const onVoidedFromNewGateway = (p: {
     qc.invalidateQueries({ queryKey: ["items", "READY"] });
   };
   s.on("kitchen:ticket_status_changed", onStatusChanged);
+const onOrdersMerged = (p: {
+  fromOrderId: string;
+  toOrderId: string;
+  fromTableId?: string | null;
+  toTableId?: string | null;
+}) => {
+  const mergedNote = "Phiếu cũ đã được ghép sang đơn khác";
+  const key = `merged:${p.fromOrderId}->${p.toOrderId}`;
+  if (processedMergedRef.current.has(key)) return;
+  processedMergedRef.current.add(key);
+  const spawnVoidedCopies = (
+    setter: React.Dispatch<React.SetStateAction<Ticket[]>>
+  ) => {
+    const newVoidIds: string[] = [];
 
+    setter(prev => {
+      const now = Date.now();
+      const next: Ticket[] = [...prev];
+
+      prev.forEach((t, idx) => {
+        if (t.orderId !== p.fromOrderId) return;
+  if (t.voided) return;
+        // ticket “ảo” đại diện phiếu cũ
+        const voidId = `${t.id}:merged:${now}:${idx}`;
+        newVoidIds.push(voidId);
+
+        const note = t.note
+          ? `${t.note} — [MERGED] ${mergedNote}`
+          : `[MERGED] ${mergedNote}`;
+
+        // cho phiếu cũ lên đầu list để bếp dễ thấy
+        next.unshift({
+          ...t,
+          id: voidId,
+          note,
+          voided:true
+        });
+      });
+
+      return next;
+    });
+
+    // đánh dấu các id clone là void để TicketCard render màu đỏ + text Voided
+    if (newVoidIds.length) {
+      setVoidedIds(old => {
+        const s = new Set(old);
+        newVoidIds.forEach(id => s.add(id));
+        return s;
+      });
+    }
+  };
+
+  // ✅ Áp cho cả 3 cột: NEW + PREPARING + READY
+  spawnVoidedCopies(setListNew);
+  spawnVoidedCopies(setListCooking);
+  spawnVoidedCopies(setListReady);
+
+  // Refetch 3 cột để ticket “thật” nhảy sang đơn đích
+  const hit = (k: string) => qc.invalidateQueries({ queryKey: ["items", k] });
+  hit("NEW_ROWS");
+  hit("PREPARING");
+  hit("READY");
+
+  toast.info("Đã gộp đơn", {
+    description: "Phiếu cũ đã được đánh dấu, bếp bấm Clear để ẩn.",
+  });
+};
+
+const onOrdersSplit = (p: {
+  fromOrderId: string;
+  toOrderId: string;
+  movedMenuItemIds?: string[];  // 👈 thêm
+}) => {
+  console.log("[kitchen] split event", p);
+
+  const note = "Phiếu cũ đã tách sang đơn khác";
+  const key = `split:${p.fromOrderId}:${p.toOrderId}`;
+  if (processedSplitsRef.current.has(key)) return;
+  processedSplitsRef.current.add(key);
+
+  const movedSet = new Set(p.movedMenuItemIds ?? []); // có thể rỗng
+
+  const spawnVoidedCopies = (
+    setter: React.Dispatch<React.SetStateAction<Ticket[]>>
+  ) => {
+    setter(prev => {
+      const now = Date.now();
+      const next = [...prev];
+
+      prev.forEach((t, idx) => {
+        if (t.orderId !== p.fromOrderId) return;
+        if (t.voided) return;
+
+        const it = t.items[0];
+
+        // ✅ nếu có movedSet thì CHỈ đánh dấu những món có trong danh sách
+        if (movedSet.size && !movedSet.has(it.menuItemId)) return;
+
+        const voidId = `${t.id}:split:${now}:${idx}`;
+
+        next.unshift({
+          ...t,
+          id: voidId,
+          voided: true,
+          note,
+        });
+      });
+
+      return next;
+    });
+  };
+
+  // áp cho cả 3 cột
+  spawnVoidedCopies(setListNew);
+  spawnVoidedCopies(setListCooking);
+  spawnVoidedCopies(setListReady);
+
+  // refetch để load phiếu mới của đơn đích
+  qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
+  qc.invalidateQueries({ queryKey: ["items", "PREPARING"] });
+  qc.invalidateQueries({ queryKey: ["items", "READY"] });
+
+  toast.info("Đã tách đơn", {
+    description: "Phiếu cũ đánh dấu (bếp bấm Clear để ẩn)",
+  });
+};
+
+
+s.on("orders:split", onOrdersSplit);
+
+
+  s.on("orders:merged", onOrdersMerged);
   // cleanup
   return () => {
     s.off("cashier:notify_item", onSingle);
@@ -603,6 +772,8 @@ const onVoidedFromNewGateway = (p: {
     s.off("kitchen:ticket_status_changed", onStatusChanged);
     s.off("connect", onConnect);
     s.off("disconnect", onDisconnect);
+       s.off("orders:merged", onOrdersMerged);
+         s.off("orders:split", onOrdersSplit); 
   };
 }, [qc]);
 
@@ -631,22 +802,9 @@ useEffect(() => {
 
 
 useEffect(() => {
-  if (!qNewRows.data) return;
+  setListNew(prev => mergeApiWithVoided(qNewRows.data, prev));
+}, [qNewRows.data]);
 
-  const apiTickets = mapRowsToTickets(qNewRows.data);
-
-  setListNew(prev => {
-    const apiIds = new Set(apiTickets.map(t => t.id));
-
-    // giữ lại các ticket đã bị void (voidedIds) mà API không trả nữa
-    const preservedVoided = prev.filter(
-      t => voidedIds.has(t.id) && !apiIds.has(t.id)
-    );
-
-    // ticket thường lấy từ API, ticket đã void lấy từ prev
-    return [...preservedVoided, ...apiTickets];
-  });
-}, [qNewRows.data, voidedIds]);
 
 
   /* =============== Actions =============== */
@@ -727,7 +885,7 @@ useEffect(() => {
                       key={t.id}
                       t={t}
                       variant="new"
-                      voided={voidedIds.has(t.id)}
+                     voided={t.voided || voidedIds.has(t.id)}
                       onStart={startCooking}
                       onClear={clearTicket} 
                        onVoidFromKitchen={openVoidModal}
@@ -771,7 +929,7 @@ useEffect(() => {
   key={t.id}
   t={t}
   variant="preparing"
-  voided={voidedIds.has(t.id)}
+  voided={t.voided || voidedIds.has(t.id)}
   onComplete={markReady}
   onClear={clearTicket}
   onDelete={(t) => {
@@ -814,7 +972,7 @@ useEffect(() => {
   key={t.id}
   t={t}
   variant="ready"
-  voided={voidedIds.has(t.id)}
+  voided={t.voided || voidedIds.has(t.id)}
   onServe={serve}
   onClear={clearTicket}
  onDelete={(t) => {
@@ -927,4 +1085,21 @@ function VoidForm({
       </DialogFooter>
     </>
   );
+}
+function mergeApiWithVoided(
+  apiRows: ApiOrderItemExt[] | undefined,
+  prev: Ticket[]
+): Ticket[] {
+  if (!apiRows) return prev;
+
+  const apiTickets = mapRowsToTickets(apiRows);
+  const apiIds = new Set(apiTickets.map(t => t.id));
+
+  // Giữ lại mọi phiếu đã void (voided === true) mà API KHÔNG trả nữa
+  const preservedVoided = prev.filter(
+    t => t.voided && !apiIds.has(t.id)
+  );
+
+  // phiếu voided (cũ) + phiếu thật từ API
+  return [...preservedVoided, ...apiTickets];
 }

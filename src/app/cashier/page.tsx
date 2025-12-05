@@ -6,7 +6,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, Grid3X3, LayoutGrid, Search, UtensilsCrossed } from "lucide-react";
-
+import { signOut } from "next-auth/react";
+import { Monitor } from "lucide-react";
+import { Settings } from "lucide-react";
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { StatusFilter } from "@/components/cashier/filters/StatusFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
@@ -16,7 +18,7 @@ import { MenuGrid } from "@/components/cashier/menu/MenuGrid";
 import { OrderList } from "@/components/cashier/order/OrderList";
 import CheckoutModal from "@/components/cashier/modals/CheckoutModal";
 import CancelOneItemModal from "@/components/cashier/modals/CancelModal";
-
+import { CashierDrawer } from "@/components/cashier/drawer/CashierDrawer";
 import { usePosPage } from "./usePosPage";
 
 export default function POSPage() {
@@ -24,6 +26,19 @@ export default function POSPage() {
 
   return (
     <div className="h-[100dvh] w-full text-slate-900 bg-[#0A2B61]">
+      <header className="flex h-14 items-center justify-between px-4 text-white border-b border-[#0A3978]">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold uppercase tracking-wide">
+          Màn thu ngân
+        </span>
+      </div>
+
+     <CashierDrawer currentTableId={M.selectedTable?.id} />
+         
+       
+
+        
+    </header>
       <div className="grid h-[calc(100dvh-56px)] grid-cols-1 gap-3 p-3 min-h-0 md:grid-cols-[3fr_2fr]">
         {/* Left */}
         <Card className="bg-white shadow rounded-xl h-full flex flex-col">
@@ -202,6 +217,10 @@ export default function POSPage() {
           total={M.orderTotal}
           onChangeQty={M.onChangeQty}
           justChanged={M.justChanged}
+                createdByName={M.createdByName}
+            hasUnsentItems={M.hasUnsentItems}
+  priorityNext={M.priorityNext}
+  onChangePriorityNext={M.setPriorityNext}
           onClear={M.onClear}
           orderTabs={
             M.selectedTable && (M as any).orders?.[M.selectedTable.id]
