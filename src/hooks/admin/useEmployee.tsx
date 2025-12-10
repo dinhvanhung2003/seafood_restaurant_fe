@@ -70,59 +70,20 @@ export function useEmployee(page: number, limit: number, q: string) {
 
   const items = listQuery.data?.data ?? [];
   const meta = listQuery.data?.meta ?? { total: 0, page, limit, pages: 0 };
-
-  // CREATE (optimistic chỉ khi đang ở trang 1 để không lệch phân trang)
   const createMutation = useMutation({
-    mutationFn: (payload: CreateUserPayload) => createUser(payload),
-    onMutate: async (payload) => {
-      const key = employeesKey(page, limit, q);
-      await qc.cancelQueries({ queryKey: key });
-      const previous = qc.getQueryData<ListUsersResp>(key);
+  mutationFn: (payload: CreateUserPayload) => createUser(payload),
 
-      if (meta.page === 1) {
-        const optimistic: UserItem = {
-          id: crypto.randomUUID(),
-          email: payload.email,
-          phoneNumber: payload.phoneNumber ?? "",
-          username: payload.username ?? "",
-          role: payload.role,
-          profile: { fullName: payload.profile.fullName },
-        };
+  onSuccess: () => {
+    qc.invalidateQueries({ queryKey: ["employees-users"] });
+    toast.success("Đã thêm nhân viên");
+  },
 
-        qc.setQueryData<ListUsersResp>(key, (old) => {
-          const curr =
-            old ??
-            ({
-              code: 200,
-              success: true,
-              message: "OK",
-              data: [],
-              meta: { total: 0, page: 1, limit, pages: 1 },
-            } as ListUsersResp);
-          return {
-            ...curr,
-            data: [optimistic, ...(curr.data ?? [])],
-            meta: { ...curr.meta, total: (curr.meta?.total ?? 0) + 1 },
-          };
-        });
+  onError: (e: any) => {
+    const msg = e?.response?.data?.message || "Thêm nhân viên thất bại";
+    toast.error(msg);
+  }
+});
 
-        toast.success("Đã thêm nhân viên", {
-          description: optimistic.profile?.fullName,
-          duration: 1200,
-        });
-      }
-
-      return { previous };
-    },
-    onError: (_e, _p, ctx) => {
-      const key = employeesKey(page, limit, q);
-      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
-      toast.error("Thêm nhân viên thất bại");
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["employees-users"] });
-    },
-  });
 
   return {
     rows: items.map(toRow),

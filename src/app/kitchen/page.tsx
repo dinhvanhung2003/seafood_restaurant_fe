@@ -611,9 +611,11 @@ const applyVoid = (
   // Nếu muốn READY cũng hiện phiếu đỏ thì mở thêm dòng này:
   applyVoid(setListReady);
 
-  toast.error(`${who} đã hủy món`, {
-    description: p.reason || undefined,
-  });
+  if (p.by && p.by !== "kitchen") {
+    toast.error(`${who} đã hủy món`, {
+      description: p.reason || undefined,
+    });
+  }
 };
 
 

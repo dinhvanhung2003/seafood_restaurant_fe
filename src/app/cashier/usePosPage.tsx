@@ -29,7 +29,7 @@ export function usePosPage() {
   // ===== local UI state =====
   const [tablePage, setTablePage] = useState(1);
   const [tableLimit, setTableLimit] = useState(24);
-  const [areaId, setAreaId] = useState<string | undefined>(undefined); // chọn theo ID để query BE
+  const [areaId, setAreaId] = useState<string | undefined>(undefined);
   // state filter cho bảng có phân trang 
 
   const [cancelOneOpen, setCancelOneOpen] = useState(false);
@@ -38,7 +38,7 @@ export function usePosPage() {
   const [localOrderCreatedAt, setLocalOrderCreatedAt] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
   const [menuPage, setMenuPage] = useState(1);
-  const [menuLimit] = useState(12);
+  const [menuLimit] = useState(100);
   const [selectedFloor, setSelectedFloor] = useState<string>("Tất cả");
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "using" | "empty">("all");

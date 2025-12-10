@@ -81,9 +81,3 @@ export function CustomerFilter({
 }
 
 export default CustomerFilter;
-{
-  /* Auto fetch via hook; button not required */
-}
-{
-  /* <Button onClick={onFetch} disabled={loading}>{loading ? 'Đang tải...' : 'Xem báo cáo'}</Button> */
-}

@@ -87,7 +87,7 @@ export default function PayPayrollDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-       <AppDialogContent>   
+       <AppDialogContent className="sm:max-w-[900px] p-6">   
         
         <DialogHeader>
           <DialogTitle>

@@ -58,9 +58,17 @@ export function ReturnInvoicePickerModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-     <DialogContent
-  className="w-[min(98vw,1280px)] max-h-[85vh] p-0"
+   <DialogContent
+  className="
+    w-[95vw]
+    max-w-[1500px] sm:max-w-[1500px]
+    max-h-[85vh]
+    p-0
+  "
 >
+
+
+
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="text-lg font-semibold">
             Chọn hóa đơn trả hàng

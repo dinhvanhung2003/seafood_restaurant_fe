@@ -21,6 +21,7 @@ import MergeOrderModal from "@/components/cashier/modals/MergeOrderModal";
 import SplitOrderModal from "@/components/cashier/modals/SplitOrderModal";
 import { useCustomer } from "@/hooks/cashier/useCustomers";
 import { KitchenVoidsMap } from "@/hooks/cashier/socket/useKitchenVoids";
+import { useHotkeys } from "react-hotkeys-hook";
 
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 
@@ -110,7 +111,25 @@ export function OrderList({
   const [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
- 
+  //  useHotkeys(
+  //   "f10",
+  //   (e) => {
+  //     e.preventDefault();
+  //     if (!hasTable || !canNotify) return;
+  //     onNotify();
+  //   },
+  //   [hasTable, canNotify, onNotify]
+  // );
+
+  useHotkeys(
+    "f9",
+    (e) => {
+      e.preventDefault();
+      if (!hasTable) return;
+      onCheckout();
+    },
+    [hasTable, onCheckout]
+  );
 const selectedCus = customer;
   const [q, setQ] = useState("");
   const { data: results = [] } = useCustomer(q);

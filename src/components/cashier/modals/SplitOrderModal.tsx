@@ -8,7 +8,10 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { toast } from "sonner";
 
 import { useSplitOrderMutate } from "@/hooks/cashier/useSplitOrder";
-import { useOpenOrdersInTable } from "@/hooks/cashier/useOpenOrders";
+import {
+  useOpenOrdersInTable,
+  type TargetOrderSummary,
+} from "@/hooks/cashier/useOpenOrders";
 import { useTablesWithOpenOrders, useTablesWithoutOpenOrders } from "@/hooks/cashier/useTableForSplit";
 
 type OrderItemVM = { id: string; name: string; quantity: number };
@@ -192,13 +195,13 @@ export default function SplitOrderModal({
                     }
                   />
                 </SelectTrigger>
-                <SelectContent>
-                  {targetOrders.map((o) => (
-                    <SelectItem key={o.orderId} value={o.orderId}>
-                      {o.code} — {(o.total ?? 0).toLocaleString()}đ
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <SelectContent>
+  {targetOrders.map((o: TargetOrderSummary) => (
+    <SelectItem key={o.orderId} value={o.orderId}>
+      {o.orderCode} — {Number(o.totalAmount ?? 0).toLocaleString("vi-VN")}đ
+    </SelectItem>
+  ))}
+</SelectContent>
               </Select>
             </div>
           )}

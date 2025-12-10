@@ -26,30 +26,61 @@ type FormValues = {
 
 export default function CreateEmployeeDialog() {
   const { createUser, createStatus } = useEmployee(1, 10, "");
-  const { control, register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+    setError,              // 👈 THÊM DÒNG NÀY
+  } = useForm<FormValues>({
     defaultValues: {
-      email: "", phoneNumber: "", username: "", password: "", role: "WAITER",
+      email: "",
+      phoneNumber: "",
+      username: "",
+      password: "",
+      role: "WAITER",
       profile: { fullName: "", dob: "", address: "" },
     },
     mode: "onTouched",
   });
+const vnPhoneRegex =
+  /^(0[3|5|7|8|9][0-9]{8}|(\+84|84)[3|5|7|8|9][0-9]{8})$/;
 
-  const onSubmit = handleSubmit((values) => {
-    const payload: CreateUserPayload = {
-      email: values.email,
-      password: values.password,
-      role: values.role,
-      phoneNumber: values.phoneNumber || "",
-      username: values.username || "",
-      profile: {
-        fullName: values.profile.fullName,
-        dob: toISODate(values.profile.dob)!,
-        address: values.profile.address,
-      },
-    };
-    createUser(payload).then(() => { reset(); setOpen(false); });
-  });
+ const onSubmit = handleSubmit(async (values) => {
+  const payload: CreateUserPayload = {
+    email: values.email,
+    password: values.password,
+    role: values.role,
+    phoneNumber: values.phoneNumber || "",
+    username: values.username || "",
+    profile: {
+      fullName: values.profile.fullName,
+      dob: toISODate(values.profile.dob)!,
+      address: values.profile.address,
+    },
+  };
 
+  try {
+    await createUser(payload);
+    reset();
+    setOpen(false);
+  } catch (e: any) {
+    const msg = e?.response?.data?.message || "Thêm nhân viên thất bại";
+
+    // nếu BE trả đúng message trùng SĐT thì map vào field
+    if (msg.includes("Số điện thoại")) {
+      setError("phoneNumber", {
+        type: "server",
+        message: msg,
+      });
+    } else if (msg.includes("Email")) {
+      setError("email", { type: "server", message: msg });
+    } else if (msg.includes("Username")) {
+      setError("username", { type: "server", message: msg });
+    }
+  }
+});
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -76,11 +107,23 @@ export default function CreateEmployeeDialog() {
             {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>}
           </div>
 
-          <div>
-            <Label>Số điện thoại *</Label>
-            <Input {...register("phoneNumber", { required: "Vui lòng nhập số điện thoại" })} />
-            {errors.phoneNumber && <p className="text-sm text-red-500 mt-1">{errors.phoneNumber.message}</p>}
-          </div>
+       <div>
+  <Label>Số điện thoại *</Label>
+  <Input
+    {...register("phoneNumber", {
+      required: "Vui lòng nhập số điện thoại",
+      pattern: {
+        value: vnPhoneRegex,
+        message: "Số điện thoại Việt Nam không hợp lệ (10 số)",
+      },
+    })}
+  />
+  {errors.phoneNumber && (
+    <p className="text-sm text-red-500 mt-1">
+      {errors.phoneNumber.message}
+    </p>
+  )}
+</div>
 
           <div>
             <Label>Username *</Label>

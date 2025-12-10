@@ -6,9 +6,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, Grid3X3, LayoutGrid, Search, UtensilsCrossed } from "lucide-react";
-import { signOut } from "next-auth/react";
-import { Monitor } from "lucide-react";
-import { Settings } from "lucide-react";
 import { FloorFilter } from "@/components/cashier/filters/FloorFilter";
 import { StatusFilter } from "@/components/cashier/filters/StatusFilter";
 import { SearchField } from "@/components/cashier/inputs/SearchFiled";
@@ -20,9 +17,55 @@ import CheckoutModal from "@/components/cashier/modals/CheckoutModal";
 import CancelOneItemModal from "@/components/cashier/modals/CancelModal";
 import { CashierDrawer } from "@/components/cashier/drawer/CashierDrawer";
 import { usePosPage } from "./usePosPage";
-
+import { useHotkeys } from "react-hotkeys-hook"; 
 export default function POSPage() {
   const M = usePosPage();
+// ================== HOTKEYS ==================
+
+// F2 → Tìm bàn
+useHotkeys(
+  "f2",
+  (e) => {
+    e.preventDefault();
+    // chuyển sang tab Phòng/Bàn
+    M.setActiveTab("tables");
+
+    // nếu chưa bật search thì bật search
+    if (!M.isSearching) {
+      M.enterSearch();
+      return;
+    }
+
+    // nếu đã search thì focus lại ô input
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>(
+        'input[placeholder="Tìm theo tên bàn"]'
+      );
+      el?.focus();
+      el?.select();
+    }, 0);
+  },
+  [M.isSearching]
+);
+
+// F3 → Tìm món
+useHotkeys(
+  "f3",
+  (e) => {
+    e.preventDefault();
+    // chuyển sang tab Thực đơn
+    M.setActiveTab("menu");
+
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>(
+        'input[placeholder="Tìm món (F3)"]'
+      );
+      el?.focus();
+      el?.select();
+    }, 0);
+  },
+  []
+);
 
   return (
     <div className="h-[100dvh] w-full text-slate-900 bg-[#0A2B61]">
@@ -109,7 +152,7 @@ export default function POSPage() {
                       </button>
                       <div className="flex-1">
                         <SearchField
-                          placeholder="Tìm theo tên bàn"
+                          placeholder="Tìm theo tên bàn (F2)"
                           value={M.tableSearch}
                           onChange={M.setTableSearch}
                           autoFocus

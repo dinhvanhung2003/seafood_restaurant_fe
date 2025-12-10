@@ -15,8 +15,8 @@ import { toast } from "sonner";
 import {
   useOpenOrderTables,
   useOpenOrdersInTable,
- 
-} from "@/hooks/cashier/useOpenOrders"; // ⬅️ đổi import cho đúng tên hook
+  type TargetOrderSummary,
+} from "@/hooks/cashier/useOpenOrders"; 
 import { useMergeOrderMutate } from "@/hooks/cashier/useMergeOrder";
 type Props = {
   open: boolean;
@@ -120,8 +120,8 @@ const visibleTables = React.useMemo(
         {/* Danh sách đơn của bàn đích */}
         <div className="mt-4 border rounded-md overflow-hidden">
           <div className="grid grid-cols-4 bg-slate-100 px-3 py-2 text-sm font-semibold">
-            <div>Khách hàng</div>
-            <div>Mã đơn</div>
+            <div>Chọn</div> 
+            {/* <div>Mã đơn</div>  */}
             <div>Số lượng hàng</div>
             <div className="text-right pr-2">Tổng tiền</div>
           </div>
@@ -136,33 +136,28 @@ const visibleTables = React.useMemo(
               <div className="p-4 text-sm text-slate-500">Bàn chưa có hoá đơn nào</div>
             )}
 
-            {targetOrders.map((o) => (
-              <label
-                key={o.orderId}
-                className="grid grid-cols-4 items-center px-3 py-2 border-t cursor-pointer hover:bg-slate-50"
-              >
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedTargetOrder === o.orderId}
-                    onCheckedChange={(checked) =>
-                      setSelectedTargetOrder(checked ? o.orderId : undefined)
-                    }
-                  />
-                  <span>{o.customerName ?? "Khách lẻ"}</span>
-                </div>
+         {targetOrders.map((o: TargetOrderSummary) => (
+  <label key={o.orderId} className="grid grid-cols-4 ...">
+    <div className="flex items-center gap-2">
+      <Checkbox
+        checked={selectedTargetOrder === o.orderId}
+        className="text-center ml-6"
+        onCheckedChange={(checked) =>
+          setSelectedTargetOrder(checked ? o.orderId : undefined)
+        }
+      />
+      {/* <span>{o.customerName ?? "Khách lẻ"}</span> */}
+    </div>
 
-                {/* Ví dụ mã hiển thị: Bàn 10 -> 10-AB12 */}
-                <div>
-                  {o.code ??
-                    (o.orderId ? `${(o.tableName ?? "").split(" ").pop()}-${o.orderId.slice(0, 4)}` : "")}
-                </div>
+    {/* <div>{o.orderCode}</div> */}
+    <div className="text-center">{o.itemsCount ?? 0}</div>
+    <div className="text-right pr-2">
+      {Number(o.totalAmount ?? 0).toLocaleString("vi-VN")}
+    </div>
+  </label>
+))}
 
-                <div>{o.itemsCount ?? 0}</div>
-                <div className="text-right pr-2">
-                  {(o.total ?? 0).toLocaleString()}
-                </div>
-              </label>
-            ))}
+
           </div>
         </div>
 

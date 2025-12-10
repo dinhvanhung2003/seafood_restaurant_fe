@@ -2,6 +2,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import Image from "next/image";
 import {
   Table,
   TableBody,
@@ -162,7 +163,7 @@ export default function MenuTable({
                   <TableCell>
                     <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-100 border shadow-sm">
                       {m.image ? (
-                        <img
+                        <Image
                           src={m.image}
                           alt={m.name}
                           width={64}

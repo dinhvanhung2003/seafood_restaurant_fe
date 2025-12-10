@@ -30,7 +30,6 @@ import { SlidersHorizontal } from "lucide-react";
 import { customerColumns } from "./Column";
 import type { CustomerRow } from "@/lib/admin/partner/customer/api";
 import ColumnToggleKiot from "./ColumnToggle";
-import ExcelDataIO from "@/utils/ExcelDataIO";
 import { toast } from "sonner";
 const STORAGE_KEY = "customer_table_visible_cols_v1";
 
@@ -116,12 +115,12 @@ export default function CustomerTable({ data, onRowClick }: Props) {
       {/* Hàng action */}
       <div className="flex items-center justify-end gap-2">
         <div className="flex items-center gap-2">
-          <ExcelDataIO
+          {/* <ExcelDataIO
             data={customers}
             fileName="customers.xlsx"
             columns={["code", "name", "phone", "address"]}
             onImport={handleImport}
-          />
+          /> */}
         </div>
         <ColumnToggleKiot table={table} />
       </div>
