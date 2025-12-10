@@ -322,7 +322,7 @@ const mergedWithPhantom = useMemo(() => {
       <Separator className="my-2" />
 
       <div className="space-y-2 p-3">
-        {justChanged && canNotify && (
+      {canNotify && (hasUnsentItems || justChanged) && (
           <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
             🔔 Bạn vừa cập nhật đơn hàng. Click{" "}
             <strong>Thông báo</strong> để gửi thông tin chế biến đến bar bếp.

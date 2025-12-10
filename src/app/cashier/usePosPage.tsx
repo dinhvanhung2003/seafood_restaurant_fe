@@ -175,8 +175,8 @@ useEffect(() => {
         ? "Thu ngân"
         : "Hệ thống";
 
-    // (nếu muốn đẹp hơn thì map menuItemId -> name, tạm để vậy cũng được)
-    toast.error(`🍳 ${who} đã hủy ${p.qty} phần món ${p.menuItemId}`, {
+    // (nếu muốn đẹp hơn thì map menuItemId -> name)
+    toast.error(`🍳 ${"Bếp"} đã hủy ${p.qty} phần món`, {
       description: p.reason,
     });
 
@@ -719,14 +719,16 @@ useEffect(() => {
 
   // dọn side effect
   // reset khi chuyển order khác hoặc vừa notify xong
-  useEffect(() => { setJustChanged(false); }, [currentOrderId]);
-  // 👉 Tên người order (từ createdBy)
+  useEffect(() => {
+  setJustChanged(false);
+}, [selectedTable?.id]);
+  //  Tên người order (từ createdBy)
    const createdByName = useMemo(() => {
     const u = currentOrderRow?.createdBy as any;
     if (!u) return "";
 
     const profile = u.profile;
-    if (profile?.fullName) return profile.fullName; // 👈 lấy tên chuẩn
+    if (profile?.fullName) return profile.fullName; //  lấy tên chuẩn
 
     // fallback nếu chưa có profile
     return (
