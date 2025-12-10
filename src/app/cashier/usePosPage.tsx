@@ -29,7 +29,7 @@ export function usePosPage() {
   // ===== local UI state =====
   const [tablePage, setTablePage] = useState(1);
   const [tableLimit, setTableLimit] = useState(24);
-  const [areaId, setAreaId] = useState<string | undefined>(undefined); // chọn theo ID để query BE
+  const [areaId, setAreaId] = useState<string | undefined>(undefined);
   // state filter cho bảng có phân trang 
 
   const [cancelOneOpen, setCancelOneOpen] = useState(false);
@@ -38,7 +38,7 @@ export function usePosPage() {
   const [localOrderCreatedAt, setLocalOrderCreatedAt] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
   const [menuPage, setMenuPage] = useState(1);
-  const [menuLimit] = useState(12);
+  const [menuLimit] = useState(100);
   const [selectedFloor, setSelectedFloor] = useState<string>("Tất cả");
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "using" | "empty">("all");
@@ -175,8 +175,8 @@ useEffect(() => {
         ? "Thu ngân"
         : "Hệ thống";
 
-    // (nếu muốn đẹp hơn thì map menuItemId -> name, tạm để vậy cũng được)
-    toast.error(`🍳 ${who} đã hủy ${p.qty} phần món ${p.menuItemId}`, {
+    // (nếu muốn đẹp hơn thì map menuItemId -> name)
+    toast.error(`🍳 ${"Bếp"} đã hủy ${p.qty} phần món`, {
       description: p.reason,
     });
 
@@ -719,14 +719,16 @@ useEffect(() => {
 
   // dọn side effect
   // reset khi chuyển order khác hoặc vừa notify xong
-  useEffect(() => { setJustChanged(false); }, [currentOrderId]);
-  // 👉 Tên người order (từ createdBy)
+  useEffect(() => {
+  setJustChanged(false);
+}, [selectedTable?.id]);
+  //  Tên người order (từ createdBy)
    const createdByName = useMemo(() => {
     const u = currentOrderRow?.createdBy as any;
     if (!u) return "";
 
     const profile = u.profile;
-    if (profile?.fullName) return profile.fullName; // 👈 lấy tên chuẩn
+    if (profile?.fullName) return profile.fullName; //  lấy tên chuẩn
 
     // fallback nếu chưa có profile
     return (

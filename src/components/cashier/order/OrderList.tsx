@@ -21,6 +21,7 @@ import MergeOrderModal from "@/components/cashier/modals/MergeOrderModal";
 import SplitOrderModal from "@/components/cashier/modals/SplitOrderModal";
 import { useCustomer } from "@/hooks/cashier/useCustomers";
 import { KitchenVoidsMap } from "@/hooks/cashier/socket/useKitchenVoids";
+import { useHotkeys } from "react-hotkeys-hook";
 
 type OrderTabs = { activeId: string; orders: { id: string; label: string }[] };
 
@@ -110,7 +111,25 @@ export function OrderList({
   const [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
- 
+  //  useHotkeys(
+  //   "f10",
+  //   (e) => {
+  //     e.preventDefault();
+  //     if (!hasTable || !canNotify) return;
+  //     onNotify();
+  //   },
+  //   [hasTable, canNotify, onNotify]
+  // );
+
+  useHotkeys(
+    "f9",
+    (e) => {
+      e.preventDefault();
+      if (!hasTable) return;
+      onCheckout();
+    },
+    [hasTable, onCheckout]
+  );
 const selectedCus = customer;
   const [q, setQ] = useState("");
   const { data: results = [] } = useCustomer(q);
@@ -303,7 +322,7 @@ const mergedWithPhantom = useMemo(() => {
       <Separator className="my-2" />
 
       <div className="space-y-2 p-3">
-        {justChanged && canNotify && (
+      {canNotify && (hasUnsentItems || justChanged) && (
           <div className="rounded-md bg-yellow-50 p-2 text-center text-sm text-muted-foreground">
             🔔 Bạn vừa cập nhật đơn hàng. Click{" "}
             <strong>Thông báo</strong> để gửi thông tin chế biến đến bar bếp.

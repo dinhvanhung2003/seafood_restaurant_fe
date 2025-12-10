@@ -272,10 +272,10 @@ export function ReturnDetailModal({
                 {formatCurrency(totalGoodsAmount)}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">
+            {/* <p className="text-[11px] text-slate-500">
               Hệ thống sẽ kiểm tra lại số lượng đã trả trước đó, nếu vượt quá sẽ
               bị chặn (NO_ITEMS_TO_RETURN).
-            </p>
+            </p> */}
 
             <div className="space-y-2">
               <div className="font-medium text-slate-700">
@@ -290,7 +290,7 @@ export function ReturnDetailModal({
                 >
                   Tiền mặt
                 </Button>
-                <Button
+                {/* <Button
                   type="button"
                   variant={
                     refundMethod === "BANK_TRANSFER" ? "default" : "outline"
@@ -307,7 +307,7 @@ export function ReturnDetailModal({
                   onClick={() => setRefundMethod("CARD")}
                 >
                   Thẻ
-                </Button>
+                </Button> */}
               </div>
             </div>
 

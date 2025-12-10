@@ -48,11 +48,8 @@ export default function CustomersPage() {
         {isLoading ? (
           <div>Đang tải...</div>
         ) : (
-          // Always render CustomerTable and pass onRowClick handler
           <CustomerTable data={data?.data ?? []} onRowClick={onRowClick} />
         )}
-
-        {/* Detail modal — render outside of ternary so it's always mounted when needed */}
         <CustomerDetailModal
           open={detailOpen}
           setOpen={setDetailOpen}

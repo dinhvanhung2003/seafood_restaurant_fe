@@ -32,8 +32,8 @@ async function fetchMenu(params: {
   categoryId?: string;
   withPromotions?: boolean;
 }): Promise<MenuPage<MenuItemWithPromo>> {
-  const safeLimit = Math.max(1, Math.min(Number(params.limit ?? 12), 100));
-
+  const safeLimit = Math.max(1, Math.min(Number(params.limit ?? 50), 100));
+  console.log(safeLimit)
   const res = await api.get<ListResponse<MenuItemWithPromo>>(
     "/menuitems/list-menuitems",
     {
@@ -42,7 +42,6 @@ async function fetchMenu(params: {
         limit: safeLimit,
         sortBy: "name",
         order: "ASC",
-        // nếu BE nhận boolean dạng string:
         withPromotions:
           typeof params.withPromotions === "boolean"
             ? String(params.withPromotions)

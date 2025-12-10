@@ -353,7 +353,7 @@ const voidFromKitchen = async (t: Ticket, qty?: number, reason?: string) => {
       reason: reasonMsg,    // 👈 lý do
     });
 
-    toast.success("Đã hủy món và thông báo cho thu ngân");
+    toast.success("Đã hủy món và thông báo cho thu ngân,phục vụ");
 
     // refetch 3 cột để thấy phần còn lại
     qc.invalidateQueries({ queryKey: ["items", "NEW_ROWS"] });
@@ -611,9 +611,11 @@ const applyVoid = (
   // Nếu muốn READY cũng hiện phiếu đỏ thì mở thêm dòng này:
   applyVoid(setListReady);
 
-  toast.error(`${who} đã hủy món`, {
-    description: p.reason || undefined,
-  });
+  if (p.by && p.by !== "kitchen") {
+    toast.error(`${"Bếp"} đã hủy món`, {
+      description: p.reason || undefined,
+    });
+  }
 };
 
 
