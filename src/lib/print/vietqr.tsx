@@ -56,13 +56,13 @@ const vnd = (n: number) => n.toLocaleString("vi-VN");
 export default function PaymentQrSlip(props: PaymentQrSlipProps) {
   const [showQR, setShowQR] = useState(true);
 
-  const vatAmount = useMemo(
-    () => Math.round(((props.vatRate ?? 0) / 100) * Math.max(0, props.subtotal - (props.discount ?? 0))),
-    [props.vatRate, props.subtotal, props.discount]
-  );
-  const grandTotal = useMemo(
-    () => Math.max(0, props.subtotal - (props.discount ?? 0)) + vatAmount,
-    [props.subtotal, props.discount, vatAmount]
+  // const vatAmount = useMemo(
+  //   () => Math.round(((props.vatRate ?? 0) / 100) * Math.max(0, props.subtotal - (props.discount ?? 0))),
+  //   [props.vatRate, props.subtotal, props.discount]
+  // );
+  const netTotal = useMemo(
+    () => Math.max(0, props.subtotal - (props.discount ?? 0)),
+    [props.subtotal, props.discount]
   );
 
   const handlePrint = () => window.print();
@@ -119,7 +119,7 @@ export default function PaymentQrSlip(props: PaymentQrSlipProps) {
 
         {/* Totals */}
         <div className="mt-2 space-y-1">
-          <div className="flex justify-between">
+          {/* <div className="flex justify-between">
             <span>Thành tiền:</span>
             <b>{vnd(props.subtotal)} đ</b>
           </div>
@@ -128,16 +128,16 @@ export default function PaymentQrSlip(props: PaymentQrSlipProps) {
               <span>Giảm giá:</span>
               <b>-{vnd(props.discount)} đ</b>
             </div>
-          )}
-          {!!props.vatRate && props.vatRate > 0 && (
+          )} */}
+          {/* {!!props.vatRate && props.vatRate > 0 && (
             <div className="flex justify-between">
-              <span>Thuế (VAT: {props.vatRate}%):</span>
-              <b>{vnd(vatAmount)} đ</b>
+              {/* <span>Thuế (VAT: {props.vatRate}%):</span> */}
+              {/* <b>{vnd(vatAmount)} đ</b>
             </div>
-          )}
+          )} */} 
           <div className="flex justify-between border-t pt-1">
             <span className="font-medium">Tổng tiền:</span>
-            <b className="text-[13px]">{vnd(grandTotal)} đ</b>
+            <b className="text-[13px]">{vnd(netTotal)} đ</b>
           </div>
         </div>
 
