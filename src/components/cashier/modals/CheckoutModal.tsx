@@ -643,34 +643,39 @@ useEffect(() => {
     }
   };
 
-  const finalize = () => {
-    if (!readyToFinish) return;
-    const paidAmount = readyToFinish.paidAmount;
+ const finalize = () => {
+  if (!readyToFinish) return;
 
-    const receipt: Receipt = {
-      id: readyToFinish.invoiceId,
-      tableId: table.id,
-      tableName: `${table.name} / ${table.floor}`,
-      createdAt: new Date().toLocaleString(),
-      cashier: "Thu ngân",
-      items: lines,
-      subtotal,
-      discount,
-      total: totalUI,
-      paid: paidAmount,
-      change: 0,
-      method: "vietqr",
-      customerName: selectedCus?.name ?? "Khách lẻ",
-      guestCount,
-    };
+  // raw từ socket (nếu cần log/debug)
+  const rawPaid = Number(readyToFinish.paidAmount ?? 0);
 
-    printReceipt(receipt);
-    onSuccess(receipt);
-    clearSelectedCus();
-    resetGuest();
-    setInvoice(null);
-    onClose();
+  // TIỀN DÙNG ĐỂ IN – luôn bằng tổng phải trả trên invoice
+  const paidAmount = totalUI;
+
+  const receipt: Receipt = {
+    id: readyToFinish.invoiceId,
+    tableId: table.id,
+    tableName: `${table.name} / ${table.floor}`,
+    createdAt: new Date().toLocaleString(),
+    cashier: "Thu ngân",
+    items: lines,
+    subtotal,
+    discount,
+    total: totalUI,
+    paid: paidAmount,                    
+    change: Math.max(0, rawPaid - totalUI),
+    method: "vietqr",
+    customerName: selectedCus?.name ?? "Khách lẻ",
+    guestCount,
   };
+
+  printReceipt(receipt);
+  onSuccess(receipt);
+  clearSelectedCus();
+  resetGuest();
+  setInvoice(null);
+  onClose();
+};
 
   const gridCols = qr
     ? "lg:grid-cols-[2fr_1fr_380px]"
