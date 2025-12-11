@@ -18,6 +18,7 @@ import CancelOneItemModal from "@/components/cashier/modals/CancelModal";
 import { CashierDrawer } from "@/components/cashier/drawer/CashierDrawer";
 import { usePosPage } from "./usePosPage";
 import { useHotkeys } from "react-hotkeys-hook"; 
+import AdminChatWidget from "@/components/admin/chat/AdminChatWidget";
 export default function POSPage() {
   const M = usePosPage();
 // ================== HOTKEYS ==================
@@ -314,7 +315,7 @@ useHotkeys(
   item={M.cancelOne}
   onConfirm={M.confirmCancelOne}
 />
-
+ <AdminChatWidget />
       </div>
     </div>
   );
