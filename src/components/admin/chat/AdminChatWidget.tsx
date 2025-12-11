@@ -114,9 +114,6 @@ export default function AdminChatWidget() {
                 <CardTitle className="text-sm font-semibold">
                   Trợ lý nhà hàng
                 </CardTitle>
-                <Badge variant="outline" className="ml-1 text-[10px]">
-                  MANAGER
-                </Badge>
               </div>
 
               <Button

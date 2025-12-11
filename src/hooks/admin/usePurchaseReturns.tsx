@@ -94,7 +94,7 @@ export function usePurchaseReturns(params: {
 }) {
   const {
     page = 1,
-    limit = 20,
+    limit = 10,
     supplierId,
     status,
     sortBy = "createdAt",
@@ -249,8 +249,6 @@ export function useChangeStatusPurchaseReturn() {
     },
   });
 }
-
-
 
 export function usePurchaseReturnPay() {
   const qc = useQueryClient();
