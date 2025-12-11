@@ -1,46 +1,83 @@
-// dùng chung web/mobile
+// src/hooks/common/useInvoiceSocket.ts
+"use client";
+
 import { useEffect, useRef } from "react";
-import { getSocket } from "@/lib/socket";            // đã có sẵn của bạn
+import { getSocket } from "@/lib/socket";
 import { useQueryClient } from "@tanstack/react-query";
 
-type Options = {
-  onPaid?: (p: { invoiceId: string; amount?: number; method?: string }) => void;
-  onPartial?: (p: { invoiceId: string; amount: number; remaining: number }) => void;
-  // các queryKeys bạn muốn tự invalidates thêm
-  extraInvalidate?: Array<{ key: unknown[] }>;
+type PaidPayload = {
+  invoiceId: string;
+  orderId?: string | null;
+  tableId?: string | null;
+  tableName?: string | null;
+  amount?: number;
+  method?: string | number;
+  paidAt?: string;
 };
 
-/** Lắng nghe sự kiện thanh toán của 1 invoice cụ thể */
-export function useInvoiceSocket(invoiceId?: string, opts: Options = {}) {
+type PartialPayload = {
+  invoiceId: string;
+  orderId?: string | null;
+  amount: number;
+  remaining: number;
+};
+
+type ExtraInvalidate = { key: unknown[] };
+
+type Options = {
+  onPaid?: (p: PaidPayload) => void;
+  onPartial?: (p: PartialPayload) => void;
+  extraInvalidate?: ExtraInvalidate[];
+};
+
+/**
+ * Hook dùng chung Web / Mobile để lắng nghe socket thanh toán của 1 invoice
+ */
+export function useInvoiceSocket(
+  invoiceId: string | null | undefined,
+  opts: Options = {}
+) {
   const qc = useQueryClient();
   const joined = useRef(false);
 
   useEffect(() => {
     if (!invoiceId) return;
 
-    const s = getSocket(); // trỏ tới namespace /realtime
+    const s = getSocket();
+    if (!s) return;
+
     const join = () => {
       if (!joined.current) {
         s.emit("join_invoice", { invoiceId });
         joined.current = true;
       }
     };
-    s.connected ? join() : s.once("connect", join);
 
-    const onPaid = (p: any) => {
-      // refetch dữ liệu liên quan
+    if (s.connected) join();
+    else s.once("connect", join);
+
+    const invalidateAll = () => {
+      // invalidate chung cho mọi app (web/mobile)
       qc.invalidateQueries({ queryKey: ["invoice.detail", invoiceId] });
       qc.invalidateQueries({ queryKey: ["invoices.list"] });
       qc.invalidateQueries({ queryKey: ["active-orders"] });
       qc.invalidateQueries({ queryKey: ["pos-tables"] });
-      opts.extraInvalidate?.forEach(({ key }) => qc.invalidateQueries({ queryKey: key }));
 
+      // cho từng màn tự bơm thêm key
+      opts.extraInvalidate?.forEach(({ key }) => {
+        qc.invalidateQueries({ queryKey: key });
+      });
+    };
+
+    const onPaid = (p: PaidPayload) => {
+      if (p.invoiceId !== invoiceId) return;
+      invalidateAll();
       opts.onPaid?.(p);
     };
 
-    const onPartial = (p: any) => {
-      qc.invalidateQueries({ queryKey: ["invoice.detail", invoiceId] });
-      qc.invalidateQueries({ queryKey: ["invoices.list"] });
+    const onPartial = (p: PartialPayload) => {
+      if (p.invoiceId !== invoiceId) return;
+      invalidateAll();
       opts.onPartial?.(p);
     };
 
@@ -48,10 +85,14 @@ export function useInvoiceSocket(invoiceId?: string, opts: Options = {}) {
     s.on("invoice.partial", onPartial);
 
     return () => {
-      try { s.emit("leave_invoice", { invoiceId }); } catch {}
+      try {
+        s.emit("leave_invoice", { invoiceId });
+      } catch {}
+
       s.off("invoice.paid", onPaid);
       s.off("invoice.partial", onPartial);
       joined.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 }
