@@ -31,7 +31,7 @@ export const customerColumns: ColumnDef<CustomerRow>[] = [
   { accessorKey: "note", header: "Ghi chú" },
   { accessorKey: "company", header: "Công ty" },
   { accessorKey: "taxCode", header: "Mã số thuế" },
-  { accessorKey: "totalSales", header: "Tổng bán" },
-  { accessorKey: "totalPoints", header: "Tổng điểm" },
-  { accessorKey: "status", header: "Trạng thái" },
+  // { accessorKey: "totalSales", header: "Tổng bán" },
+  // { accessorKey: "totalPoints", header: "Tổng điểm" },
+  // { accessorKey: "status", header: "Trạng thái" },
 ];

@@ -80,7 +80,7 @@ export default function SidebarFilter({
         </RadioGroup>
       </div>
 
-      <div className="space-y-2">
+      {/* <div className="space-y-2">
         <Label>Ngày tạo</Label>
         <Input
           type="date"
@@ -106,9 +106,9 @@ export default function SidebarFilter({
           value={filters.birthdayTo ?? ""}
           onChange={(e) => set("birthdayTo", e.target.value)}
         />
-      </div>
+      </div> */}
 
-      <div className="space-y-2">
+      {/* <div className="space-y-2">
         <Label>Tỉnh / Thành phố</Label>
         <Input
           value={filters.province ?? ""}
@@ -124,7 +124,7 @@ export default function SidebarFilter({
           value={filters.ward ?? ""}
           onChange={(e) => set("ward", e.target.value)}
         />
-      </div>
+      </div> */}
     </div>
   );
 }
