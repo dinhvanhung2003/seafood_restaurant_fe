@@ -1,7 +1,7 @@
-// src/components/payments/PaymentSlipPrint.tsx
 "use client";
 
 type Line = { name: string; qty: number; total: number };
+
 export type PaymentSlipPrintProps = {
   shopName: string;
   shopAddress: string;
@@ -12,12 +12,11 @@ export type PaymentSlipPrintProps = {
   checkInTime?: string;
   checkOutTime?: string;
   items: Line[];
-  subtotal: number;
-  discount?: number;
-  vatRate?: number;
-  amount: number;
+  subtotal: number;      // tổng tiền hàng (trước giảm)
+  discount?: number;     // có cũng được, nhưng không dùng để tính tổng nữa
+  vatRate?: number;      // bỏ không dùng
+  amount: number;        // KHÁCH CẦN TRẢ – lấy theo QR
   addInfo: string;
-  // QR hiển thị trên phiếu (giống panel)
   imgUrl?: string;
   qrPayload: string;
 };
@@ -25,8 +24,10 @@ export type PaymentSlipPrintProps = {
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 
 export default function PaymentSlipPrint(p: PaymentSlipPrintProps) {
-  const vatAmt = Math.round(((p.vatRate ?? 0) / 100) * Math.max(0, p.subtotal - (p.discount ?? 0)));
-  const grandTotal = Math.max(0, p.subtotal - (p.discount ?? 0)) + vatAmt;
+  // Tổng giảm giá hiển thị = chênh lệch giữa subtotal và số tiền khách phải trả
+  const discountDisplay = Math.max(0, p.subtotal - p.amount);
+  // Tổng tiền in trên phiếu = đúng bằng số tiền khách trả / QR
+  const grandTotal = p.amount;
 
   return (
     <>
@@ -42,6 +43,7 @@ export default function PaymentSlipPrint(p: PaymentSlipPrintProps) {
 
       <div id="qr-slip" className="print-only mx-auto bg-white text-[12px] p-3 rounded-md">
         <div className="text-center font-semibold tracking-wide">PHIẾU TẠM TÍNH</div>
+
         <div className="mt-2">
           <div className="font-medium">{p.shopName}</div>
           <div className="text-slate-600">{p.shopAddress}</div>
@@ -71,25 +73,53 @@ export default function PaymentSlipPrint(p: PaymentSlipPrintProps) {
         </div>
 
         <div className="mt-2 space-y-1">
-          <div className="flex justify-between"><span>Thành tiền:</span><b>{vnd(p.subtotal)} đ</b></div>
-          {!!p.discount && <div className="flex justify-between"><span>Giảm giá:</span><b>-{vnd(p.discount)} đ</b></div>}
-          {!!p.vatRate && <div className="flex justify-between"><span>Thuế (VAT: {p.vatRate}%):</span><b>{vnd(vatAmt)} đ</b></div>}
-          <div className="flex justify-between border-t pt-1"><span className="font-medium">Tổng tiền:</span><b>{vnd(grandTotal)} đ</b></div>
+          <div className="flex justify-between">
+            <span>Thành tiền:</span>
+            <b>{vnd(p.subtotal)} đ</b>
+          </div>
+
+          {!!discountDisplay && discountDisplay > 0 && (
+            <div className="flex justify-between">
+              <span>Giảm giá:</span>
+              <b>-{vnd(discountDisplay)} đ</b>
+            </div>
+          )}
+
+          {/* Bỏ VAT hoàn toàn */}
+
+          <div className="flex justify-between border-t pt-1">
+            <span className="font-medium">Tổng tiền:</span>
+            <b>{vnd(grandTotal)} đ</b>
+          </div>
         </div>
 
         <div className="mt-2 text-center font-medium">QR thanh toán</div>
         <div className="mt-1 flex justify-center">
           {p.imgUrl ? (
-            <img src={p.imgUrl} alt="QR" className="w-[224px] h-[224px] object-contain border rounded bg-white" />
+            <img
+              src={p.imgUrl}
+              alt="QR"
+              className="w-[224px] h-[224px] object-contain border rounded bg-white"
+            />
           ) : (
-            // ảnh QR fallback: nếu muốn bắt buộc render bằng react-qr-code, import và dùng tương tự Panel
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=224x224&data=${encodeURIComponent(p.qrPayload)}`} className="w-[224px] h-[224px]" />
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=224x224&data=${encodeURIComponent(
+                p.qrPayload
+              )}`}
+              className="w-[224px] h-[224px]"
+            />
           )}
         </div>
 
         <div className="mt-2 text-[12px]">
-          <div className="flex justify-between"><span>Số tiền</span><b>{vnd(p.amount)} đ</b></div>
-          <div className="flex justify-between"><span>Nội dung</span><b className="break-all">{p.addInfo}</b></div>
+          <div className="flex justify-between">
+            <span>Số tiền</span>
+            <b>{vnd(p.amount)} đ</b>
+          </div>
+          <div className="flex justify-between">
+            <span>Nội dung</span>
+            <b className="break-all">{p.addInfo}</b>
+          </div>
         </div>
       </div>
     </>

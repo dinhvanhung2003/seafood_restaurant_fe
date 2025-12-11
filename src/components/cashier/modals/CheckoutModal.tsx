@@ -265,10 +265,25 @@ if (invItems.length) {
 
   // đồng bộ paid theo total UI khi total đổi
   useEffect(() => setPaid(totalUI), [totalUI]);
-  useEffect(() => {
-    if (!open) return;
-    ensureInvoice().catch(() => {});
-  }, [open]);
+  // chỉ lo chuyện đồng bộ / reset khi đổi orderId
+useEffect(() => {
+  if (!open || !orderId) return;
+
+  // Nếu đã có invoice nhưng KHÁC order hiện tại -> reset (trường hợp vừa chuyển bàn / ghép đơn)
+  if (invoice && invoice.order?.id !== orderId) {
+    setInvoice(null);
+    setDiscount(0);
+    setPaid(0);
+    setQr(null);
+    setWaiting(false);
+    setReadyToFinish(null);
+  }
+
+  // Gọi đảm bảo invoice, nhưng nếu state đã có invoice đúng orderId thì chỉ return, không POST thêm
+  ensureInvoice().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [open, orderId, table.id]);
+
 
   const canConfirm = totalUI > 0 && paid >= totalUI;
 
@@ -287,54 +302,62 @@ if (invItems.length) {
     }
     return { status: "TIMEOUT" };
   };
+console.log("POST body", {
+  customerId: selectedCus?.id ?? null,
+  guestCount,
+});
+ const ensureInvoice = async () => {
+  if (!orderId) {
+    toast.error(
+      "Chưa có Order cho bàn này. Vui lòng 'Gửi bếp' trước khi thanh toán."
+    );
+    throw new Error("NO_ORDER");
+  }
 
-  const ensureInvoice = async () => {
-    if (invoice) return invoice;
+  // Nếu invoice hiện tại đã đúng order + đúng customer + đúng guestCount
+  // thì khỏi gọi lại BE
+  if (
+    invoice &&
+    invoice.order?.id === orderId &&
+    (invoice.customer?.id ?? null) === (selectedCus?.id ?? null) &&
+    (invoice.guestCount ?? null) === (guestCount ?? null)
+  ) {
+    return invoice;
+  }
 
-    if (!orderId) {
-      toast.error(
-        "Chưa có Order cho bàn này. Vui lòng 'Gửi bếp' trước khi thanh toán."
+  const invRes = await api.post(`/invoices/from-order/${orderId}`, {
+    customerId: selectedCus?.id ?? null,
+    guestCount: guestCount ?? null,   // 👈 GỬI LÊN Ở ĐÂY
+  });
+
+  const inv = invRes.data;
+  const mergedInv = { ...inv } as any;
+
+  if (mergedInv?.order?.items && Array.isArray(mergedInv.order.items)) {
+    mergedInv.order = { ...mergedInv.order };
+    mergedInv.order.items = mergedInv.order.items.map((it: any) => {
+      const menuId = it.menuItem?.id ?? it.id;
+      const catalogItem = catalog.items.find((x) => x.id === menuId);
+
+      const origin = Number(
+        catalogItem?.price ?? it.menuItem?.price ?? it.price ?? 0
       );
-      throw new Error("NO_ORDER");
-    }
+      const price = Number((catalogItem as any)?.priceAfterDiscount ?? origin);
 
-    const invRes = await api.post(`/invoices/from-order/${orderId}`, {
-      customerId: selectedCus?.id ?? null,
+      return {
+        ...it,
+        price,
+        menuItem: { ...(it.menuItem ?? {}), price: origin },
+      };
     });
-    const inv = invRes.data;
-    const mergedInv = { ...inv } as any;
-    if (mergedInv?.order?.items && Array.isArray(mergedInv.order.items)) {
-      mergedInv.order = { ...mergedInv.order };
-      mergedInv.order.items = mergedInv.order.items.map((it: any) => {
-        const menuId = it.menuItem?.id ?? it.id;
-        const catalogItem = catalog.items.find((x) => x.id === menuId);
+  }
 
-        const origin = Number(
-          catalogItem?.price ?? it.menuItem?.price ?? it.price ?? 0
-        );
-        const price = Number(
-          (catalogItem as any)?.priceAfterDiscount ?? origin
-        );
+  setInvoice(mergedInv);
+  setDiscount(Number(mergedInv.discountTotal ?? 0));
+  setPaid(Number(mergedInv.finalAmount ?? mergedInv.totalAmount ?? 0));
+  return mergedInv;
+};
 
-        return {
-          ...it,
-          price,
-          menuItem: { ...(it.menuItem ?? {}), price: origin },
-        };
-      });
-    }
-
-    setInvoice(mergedInv);
-    // setHasAppliedPromotion(
-    //   (mergedInv?.invoicePromotions ?? []).some(
-    //     (ip: any) => ip?.applyWith === "ORDER"
-    //   ) || Number(mergedInv?.discountTotal ?? 0) > 0
-    // );
-
-    setDiscount(Number(mergedInv.discountTotal ?? 0));
-    setPaid(Number(mergedInv.finalAmount ?? mergedInv.totalAmount ?? 0));
-    return mergedInv;
-  };
 
   // const openPromotion = async () => {
   //   try {
@@ -379,7 +402,7 @@ useEffect(() => {
 
   // lấy invoice mới theo orderId mới
   ensureInvoice().catch(() => {});
-}, [orderId, table.id, open]);
+}, [orderId, table.id, open, selectedCus?.id, guestCount]);
 
 
 
@@ -670,15 +693,17 @@ const invoiceId = invoice?.id ?? null;
 // 2) Lắng nghe socket: PAID / PARTIAL
 useInvoiceSocket(invoiceId, {
   extraInvalidate: [
-    { key: ["order.detail.byTable", table.id] },     // tableId -> table.id
+    { key: ["order.detail.byTable", table.id] },
     { key: ["kitchen-progress-by-order"] },
   ],
   onPaid: ({ amount, method }) => {
+    // Nếu là thanh toán tiền mặt thì bỏ qua, vì đã xử lý/in ở handleConfirm
+    if (method === "CASH" || method === "cash") return;
+
     toast.success("Đã thanh toán thành công", {
-      description: `${(amount ?? 0).toLocaleString("vi-VN")} đ · ${method || "BANK"}`
+      description: `${(amount ?? 0).toLocaleString("vi-VN")} đ · ${method || "BANK"}`,
     });
-    // Đóng modal -> danh sách bàn/đơn tự refetch theo extraInvalidate
-    onClose();                                       // onOpenChange(false) -> onClose()
+    onClose();
   },
   onPartial: ({ amount, remaining }) => {
     toast.info("Đã nhận thanh toán một phần", {
@@ -686,6 +711,7 @@ useInvoiceSocket(invoiceId, {
     });
   },
 });
+
 
 
 
@@ -873,12 +899,12 @@ useInvoiceSocket(invoiceId, {
                           Tiền mặt
                         </Label>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      {/* <div className="flex items-center space-x-2">
                         <RadioGroupItem id="m4" value="vnpay" />
                         <Label htmlFor="m4" className="flex items-center gap-1">
                           VNPay
                         </Label>
-                      </div>
+                      </div> */}
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem id="m2" value="vietqr" />
                         <Label htmlFor="m2" className="flex items-center gap-1">
