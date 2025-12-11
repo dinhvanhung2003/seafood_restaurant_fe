@@ -528,115 +528,46 @@ useEffect(() => {
         return;
       }
 
-      // ===== VIETQR (PayOS) =====
-      if (method === "vietqr") {
-        // Request link using the UI-visible total so the QR matches what the
-        // cashier sees (totalUI). Backend may compute a different invoice
-        // finalAmount later, but for payment link generation use the UI value.
-        const requestedLinkAmount = Math.max(0, Math.round(totalUI));
+      
+if (method === "vietqr") {
+  const requestedLinkAmount = Math.max(0, Math.round(totalUI));
 
-        const link = await api
-          .post("/payments/payos/create-link", {
-            invoiceId: inv.id,
-            amount: requestedLinkAmount,
-            buyerName: table.name,
-          })
-          .then((r) => r.data);
+  const link = await api
+    .post("/payments/payos/create-link", {
+      invoiceId: inv.id,
+      amount: requestedLinkAmount,
+      buyerName: table.name,
+    })
+    .then((r) => r.data);
 
-        const isImg =
-          typeof link.qrCode === "string" &&
-          /^(https?:|data:)/i.test(link.qrCode);
+  const isImg =
+    typeof link.qrCode === "string" &&
+    /^(https?:|data:)/i.test(link.qrCode);
 
-        // If provider returns an explicit amount, prefer it for display;
-        // otherwise use the amount we requested based on UI.
-        const providerAmount =
-          link &&
-          (link.amount || link.total || link.payAmount || link.amountPaid)
-            ? Number(
-                link.amount ?? link.total ?? link.payAmount ?? link.amountPaid
-              )
-            : null;
-        const displayAmount = Number(providerAmount ?? requestedLinkAmount);
+  const providerAmount =
+    link &&
+    (link.amount || link.total || link.payAmount || link.amountPaid)
+      ? Number(
+          link.amount ?? link.total ?? link.payAmount ?? link.amountPaid
+        )
+      : null;
+  const displayAmount = Number(providerAmount ?? requestedLinkAmount);
 
-        setQr({
-          kind: "payos",
-          invoiceId: inv.id,
-          imgUrl: isImg ? link.qrCode : undefined,
-          qrPayload: isImg ? link.checkoutUrl : link.qrCode,
-          checkoutUrl: link.checkoutUrl,
-          amount: displayAmount,
-          addInfo: `INV:${inv.id.slice(0, 12)}`,
-        });
+  setQr({
+    kind: "payos",
+    invoiceId: inv.id,
+    imgUrl: isImg ? link.qrCode : undefined,
+    qrPayload: isImg ? link.checkoutUrl : link.qrCode,
+    checkoutUrl: link.checkoutUrl,
+    amount: displayAmount,
+    addInfo: `INV:${inv.id.slice(0, 12)}`,
+  });
 
-        setWaiting(true);
-        setReadyToFinish(null);
-
-        try {
-          const { waitUntilPaid } = await import("@/lib/paysocket");
-          const r = await waitUntilPaid(inv.id, 10 * 60 * 1000);
-          setReadyToFinish({ invoiceId: inv.id, paidAmount: r.paidAmount });
-          toast.success("Đã nhận tiền qua VietQR");
-        } catch (e: any) {
-          toast.error(
-            e?.message === "TIMEOUT"
-              ? "Quá thời gian chờ thanh toán"
-              : "Lỗi khi chờ thanh toán"
-          );
-        } finally {
-          setWaiting(false);
-        }
-        return;
-      }
-
-      // ===== VNPAY =====
-      if (method === "vnpay") {
-        const { data } = await api.post(`/payments/vnpay/create`, {
-          invoiceId: inv.id,
-          amount: amountToPay,
-        });
-
-        if (!data?.payUrl || !data?.vnp_TxnRef) {
-          toast.error("Không tạo được URL VNPay");
-          return;
-        }
-
-        window.open(data.payUrl, "_blank");
-        const result = await pollPaymentUntilDone(
-          data.vnp_TxnRef,
-          15 * 60 * 1000
-        );
-
-        if (result.status === "PAID") {
-          const receipt: Receipt = {
-            id: inv.id,
-            tableId: table.id,
-            tableName: `${table.name} / ${table.floor}`,
-            createdAt: new Date().toLocaleString(),
-            cashier: "Thu ngân",
-            items: lines,
-            subtotal,
-            discount,
-            total: totalUI,
-            paid: amountToPay,
-            change: 0,
-            method: "vnpay",
-          };
-          printReceipt(receipt);
-          onSuccess(receipt);
-          clearSelectedCus();
-          resetGuest();
-          setInvoice(null);
-          onClose();
-          toast.success("Thanh toán VNPay thành công");
-        } else if (result.status === "FAILED") {
-          toast.error("Thanh toán VNPay thất bại");
-        } else if (result.status === "EXPIRED") {
-          toast.error("Mã thanh toán đã hết hạn");
-        } else {
-          toast.error("Không nhận được kết quả thanh toán (timeout)");
-        }
-        return;
-      }
+  // chỉ bật trạng thái "đang chờ", còn việc PAID do socket xử lý
+  setWaiting(true);
+  setReadyToFinish(null);
+  return;
+}
     } catch (e: any) {
       const msg = e?.response?.data?.message || e.message || "Lỗi thanh toán";
       toast.error("Thanh toán thất bại", { description: msg });
@@ -719,17 +650,31 @@ useInvoiceSocket(invoiceId, {
     { key: ["kitchen-progress-by-order"] },
   ],
   onPaid: ({ amount, method }) => {
-    // Nếu là thanh toán tiền mặt thì bỏ qua, vì đã xử lý/in ở handleConfirm
+    if (!invoiceId) return;
+
+    // Tiền mặt đã xử lý ở handleConfirm -> bỏ qua
     if (method === "CASH" || method === "cash") return;
 
-    toast.success("Đã thanh toán thành công", {
-      description: `${(amount ?? 0).toLocaleString("vi-VN")} đ · ${method || "BANK"}`,
+    // VietQR / bank transfer: dừng trạng thái chờ, bật nút "Hoàn tất & in hoá đơn"
+    setWaiting(false);
+    setReadyToFinish({
+      invoiceId,
+      paidAmount: Number(amount ?? 0),
     });
-    onClose();
+
+    toast.success("Đã thanh toán thành công", {
+      description: `${(amount ?? 0).toLocaleString(
+        "vi-VN"
+      )} đ · ${method || "BANK"}`,
+    });
+
+    // KHÔNG onClose() ở đây nữa, để user bấm nút Hoàn tất & in hoá đơn
   },
   onPartial: ({ amount, remaining }) => {
     toast.info("Đã nhận thanh toán một phần", {
-      description: `Nhận: ${(amount ?? 0).toLocaleString("vi-VN")} đ, còn lại: ${(remaining ?? 0).toLocaleString("vi-VN")} đ`,
+      description: `Nhận: ${(amount ?? 0).toLocaleString(
+        "vi-VN"
+      )} đ, còn lại: ${(remaining ?? 0).toLocaleString("vi-VN")} đ`,
     });
   },
 });
