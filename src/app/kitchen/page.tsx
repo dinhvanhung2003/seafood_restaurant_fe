@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import AdminChatWidget from "@/components/admin/chat/AdminChatWidget";
 import {
   useQuery,
   useMutation,
@@ -30,6 +31,7 @@ import {
   Ban as BanIcon,
 } from "lucide-react";
 import api from "@/lib/axios";
+
 
 /* =============== Types =============== */
 type ItemStatus =
@@ -850,6 +852,7 @@ useEffect(() => {
     <div className="flex h-screen flex-col bg-[#0B3C86] text-white">
       <div className="flex items-center justify-between px-4 py-2">
         <div className="text-lg font-semibold">Màn Bếp</div>
+         <AdminChatWidget />
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -1028,6 +1031,7 @@ useEffect(() => {
         />
       </div>
     </DialogContent>
+    
   </Dialog>
 )}
 

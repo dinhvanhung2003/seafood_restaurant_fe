@@ -178,9 +178,9 @@ export default function WorkSchedulePage() {
                   </div>
                 </TableHead>
               ))}
-              <TableHead className="w-[140px] text-right">
+              {/* <TableHead className="w-[140px] text-right">
                 Lương dự kiến
-              </TableHead>
+              </TableHead> */}
             </TableRow>
           </TableHeader>
 
@@ -216,9 +216,9 @@ export default function WorkSchedulePage() {
                     <div className="font-medium">
                       {emp.fullName || emp.username || emp.email}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    {/* <div className="text-xs text-muted-foreground">
                       {emp.id.slice(0, 8).toUpperCase()}
-                    </div>
+                    </div> */}
                   </TableCell>
 
                   {weekDays.map((d, idx) => {
@@ -250,12 +250,12 @@ export default function WorkSchedulePage() {
                     );
                   })}
 
-                  <TableCell className="text-right align-top">
+                  {/* <TableCell className="text-right align-top">
                     <div className="font-medium">—</div>
                     <div className="text-xs text-muted-foreground">
                       chưa tính
                     </div>
-                  </TableCell>
+                  </TableCell> */}
                 </TableRow>
               ))
             )}
