@@ -307,12 +307,12 @@ console.log("POST body", {
   guestCount,
 });
  const ensureInvoice = async () => {
-  if (!orderId) {
-    toast.error(
-      "Chưa có Order cho bàn này. Vui lòng 'Gửi bếp' trước khi thanh toán."
-    );
-    throw new Error("NO_ORDER");
-  }
+  // if (!orderId) {
+  //   toast.error(
+  //     "Chưa có Order cho bàn này. Vui lòng 'Gửi bếp' trước khi thanh toán."
+  //   );
+  //   throw new Error("NO_ORDER");
+  // }
 
   // Nếu invoice hiện tại đã đúng order + đúng customer + đúng guestCount
   // thì khỏi gọi lại BE
@@ -327,7 +327,7 @@ console.log("POST body", {
 
   const invRes = await api.post(`/invoices/from-order/${orderId}`, {
     customerId: selectedCus?.id ?? null,
-    guestCount: guestCount ?? null,   // 👈 GỬI LÊN Ở ĐÂY
+    guestCount: guestCount ?? null,  
   });
 
   const inv = invRes.data;
@@ -644,13 +644,28 @@ useEffect(() => {
   };
 
  const finalize = () => {
-  if (!readyToFinish) return;
+  if (!readyToFinish || !invoice) return;
 
-  // raw từ socket (nếu cần log/debug)
+  // số tiền BE đã thu (để tính tiền thừa nếu cần)
   const rawPaid = Number(readyToFinish.paidAmount ?? 0);
 
-  // TIỀN DÙNG ĐỂ IN – luôn bằng tổng phải trả trên invoice
-  const paidAmount = totalUI;
+  // Lấy số liệu từ invoice cho chắc
+  const invSubtotal =
+    invoice.totalAmount != null
+      ? Number(invoice.totalAmount)
+      : subtotal; // fallback FE
+
+  const invDiscount =
+    invoice.discountTotal != null
+      ? Number(invoice.discountTotal)
+      : discount || 0;
+
+  const invTotal =
+    invoice.finalAmount != null
+      ? Number(invoice.finalAmount)
+      : totalUI; // đã dùng ở UI “Khách cần trả”
+
+  const paidAmount = invTotal; // khách thanh toán đúng bằng số phải trả
 
   const receipt: Receipt = {
     id: readyToFinish.invoiceId,
@@ -659,16 +674,17 @@ useEffect(() => {
     createdAt: new Date().toLocaleString(),
     cashier: "Thu ngân",
     items: lines,
-    subtotal,
-    discount,
-    total: totalUI,
-    paid: paidAmount,                    
-    change: Math.max(0, rawPaid - totalUI),
+    subtotal: invSubtotal,
+    discount: invDiscount,
+    total: invTotal,
+    paid: paidAmount,
+    change: Math.max(0, rawPaid - invTotal), // nếu sau này PayOS gửi dư thì vẫn thể hiện tiền thừa
     method: "vietqr",
     customerName: selectedCus?.name ?? "Khách lẻ",
     guestCount,
   };
 
+  console.log("VietQR receipt gửi sang printReceipt:", receipt);
   printReceipt(receipt);
   onSuccess(receipt);
   clearSelectedCus();
@@ -676,6 +692,7 @@ useEffect(() => {
   setInvoice(null);
   onClose();
 };
+
 
   const gridCols = qr
     ? "lg:grid-cols-[2fr_1fr_380px]"
