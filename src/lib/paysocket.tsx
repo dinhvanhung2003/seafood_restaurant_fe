@@ -1,9 +1,9 @@
 import api from "@/lib/axios";
-import { getSocket } from "@/lib/socket";
+import { getPaymentSocket } from "@/lib/paymentSocket";
 
 export async function waitUntilPaid(invoiceId: string, timeoutMs = 10*60*1000) {
   return new Promise<{ paidAmount:number }>(async (resolve, reject) => {
-    const sock = getSocket();
+    const sock =  getPaymentSocket(); 
     let done = false;
     let paidAmount = 0;
 

@@ -2,7 +2,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getSocket } from "@/lib/socket";
+import { getPaymentSocket } from "@/lib/paymentSocket";
+
 import { useQueryClient } from "@tanstack/react-query";
 
 type PaidPayload = {
@@ -43,7 +44,7 @@ export function useInvoiceSocket(
   useEffect(() => {
     if (!invoiceId) return;
 
-    const s = getSocket();
+    const s = getPaymentSocket();
     if (!s) return;
 
     const join = () => {

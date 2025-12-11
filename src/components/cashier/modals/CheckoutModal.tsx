@@ -26,7 +26,7 @@ import { Percent, ReceiptText } from "lucide-react";
 import { useCashierStore } from "@/store/cashier";
 import PromotionPicker from "./PromotionPicker";
 import { useInvoiceSocket } from "@/hooks/cashier/socket/useInvoiceSocket";
-
+import { waitUntilPaid } from "@/lib/paysocket";
 type PayMethod = "cash" | "card" | "vnpay" | "vietqr";
 
 type ReceiptLine = {
@@ -269,17 +269,15 @@ if (invItems.length) {
 useEffect(() => {
   if (!open || !orderId) return;
 
-  // Nếu đã có invoice nhưng KHÁC order hiện tại -> reset (trường hợp vừa chuyển bàn / ghép đơn)
-  if (invoice && invoice.order?.id !== orderId) {
-    setInvoice(null);
-    setDiscount(0);
-    setPaid(0);
-    setQr(null);
-    setWaiting(false);
-    setReadyToFinish(null);
-  }
+  // Reset toàn bộ UI khi đổi order/bàn hoặc mở modal mới
+  setInvoice(null);
+  setDiscount(0);
+  setPaid(0);
+  setQr(null);
+  setWaiting(false);
+  setReadyToFinish(null);
+  setMethod("cash"); // 🔥 reset về tiền mặt
 
-  // Gọi đảm bảo invoice, nhưng nếu state đã có invoice đúng orderId thì chỉ return, không POST thêm
   ensureInvoice().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [open, orderId, table.id]);
@@ -389,20 +387,20 @@ console.log("POST body", {
 
 
 // xóa effect
-useEffect(() => {
-  if (!open) return;
+// useEffect(() => {
+//   if (!open) return;
 
-  // reset toàn bộ state phụ thuộc order
-  setInvoice(null);
-  setDiscount(0);
-  setPaid(0);
-  setQr(null);
-  setWaiting(false);
-  setReadyToFinish(null);
+//   // reset toàn bộ state phụ thuộc order
+//   setInvoice(null);
+//   setDiscount(0);
+//   setPaid(0);
+//   setQr(null);
+//   setWaiting(false);
+//   setReadyToFinish(null);
 
-  // lấy invoice mới theo orderId mới
-  ensureInvoice().catch(() => {});
-}, [orderId, table.id, open, selectedCus?.id, guestCount]);
+//   // lấy invoice mới theo orderId mới
+//   ensureInvoice().catch(() => {});
+// }, [orderId, table.id, open, selectedCus?.id, guestCount]);
 
 
 
@@ -551,6 +549,7 @@ if (method === "vietqr") {
           link.amount ?? link.total ?? link.payAmount ?? link.amountPaid
         )
       : null;
+
   const displayAmount = Number(providerAmount ?? requestedLinkAmount);
 
   setQr({
@@ -563,11 +562,14 @@ if (method === "vietqr") {
     addInfo: `INV:${inv.id.slice(0, 12)}`,
   });
 
-  // chỉ bật trạng thái "đang chờ", còn việc PAID do socket xử lý
+  // Chỉ bật trạng thái chờ, để socket quyết định khi nào xong
   setWaiting(true);
   setReadyToFinish(null);
+
   return;
 }
+
+
     } catch (e: any) {
       const msg = e?.response?.data?.message || e.message || "Lỗi thanh toán";
       toast.error("Thanh toán thất bại", { description: msg });
@@ -577,14 +579,12 @@ if (method === "vietqr") {
  const finalize = () => {
   if (!readyToFinish || !invoice) return;
 
-  // số tiền BE đã thu (để tính tiền thừa nếu cần)
-  const rawPaid = Number(readyToFinish.paidAmount ?? 0);
+  const { invoiceId, paidAmount: rawPaid } = readyToFinish;
 
-  // Lấy số liệu từ invoice cho chắc
   const invSubtotal =
     invoice.totalAmount != null
       ? Number(invoice.totalAmount)
-      : subtotal; // fallback FE
+      : subtotal;
 
   const invDiscount =
     invoice.discountTotal != null
@@ -594,12 +594,12 @@ if (method === "vietqr") {
   const invTotal =
     invoice.finalAmount != null
       ? Number(invoice.finalAmount)
-      : totalUI; // đã dùng ở UI “Khách cần trả”
+      : totalUI;
 
-  const paidAmount = invTotal; // khách thanh toán đúng bằng số phải trả
+  const paidAmount = invTotal;
 
   const receipt: Receipt = {
-    id: readyToFinish.invoiceId,
+    id: invoiceId,
     tableId: table.id,
     tableName: `${table.name} / ${table.floor}`,
     createdAt: new Date().toLocaleString(),
@@ -609,7 +609,7 @@ if (method === "vietqr") {
     discount: invDiscount,
     total: invTotal,
     paid: paidAmount,
-    change: Math.max(0, rawPaid - invTotal), // nếu sau này PayOS gửi dư thì vẫn thể hiện tiền thừa
+    change: Math.max(0, rawPaid - invTotal),
     method: "vietqr",
     customerName: selectedCus?.name ?? "Khách lẻ",
     guestCount,
@@ -620,9 +620,12 @@ if (method === "vietqr") {
   onSuccess(receipt);
   clearSelectedCus();
   resetGuest();
+   setQr(null);
   setInvoice(null);
   onClose();
 };
+
+
 
 
   const gridCols = qr
@@ -643,41 +646,37 @@ if (method === "vietqr") {
 
 const invoiceId = invoice?.id ?? null;
 
-// 2) Lắng nghe socket: PAID / PARTIAL
 useInvoiceSocket(invoiceId, {
   extraInvalidate: [
     { key: ["order.detail.byTable", table.id] },
     { key: ["kitchen-progress-by-order"] },
   ],
-  onPaid: ({ amount, method }) => {
-    if (!invoiceId) return;
+  onPaid: (p) => {
+    const { invoiceId: paidInvoiceId, amount, method: payMethod } = p;
 
-    // Tiền mặt đã xử lý ở handleConfirm -> bỏ qua
-    if (method === "CASH" || method === "cash") return;
+    // Không phải invoice hiện tại -> bỏ
+    if (!invoiceId || paidInvoiceId !== invoiceId) return;
 
-    // VietQR / bank transfer: dừng trạng thái chờ, bật nút "Hoàn tất & in hoá đơn"
+    // Nếu event từ thanh toán tiền mặt -> bỏ
+    if (payMethod === "CASH" || payMethod === "cash") return;
+
+    // Nếu trong modal đang ở chế độ TIỀN MẶT thì cũng bỏ
+    // (tránh trường hợp event paid từ chỗ khác)
+    if (method !== "vietqr") return;
+
     setWaiting(false);
     setReadyToFinish({
       invoiceId,
       paidAmount: Number(amount ?? 0),
     });
 
-    toast.success("Đã thanh toán thành công", {
-      description: `${(amount ?? 0).toLocaleString(
-        "vi-VN"
-      )} đ · ${method || "BANK"}`,
-    });
-
-    // KHÔNG onClose() ở đây nữa, để user bấm nút Hoàn tất & in hoá đơn
+    toast.success("Đã thanh toán VietQR thành công");
   },
-  onPartial: ({ amount, remaining }) => {
-    toast.info("Đã nhận thanh toán một phần", {
-      description: `Nhận: ${(amount ?? 0).toLocaleString(
-        "vi-VN"
-      )} đ, còn lại: ${(remaining ?? 0).toLocaleString("vi-VN")} đ`,
-    });
+  onPartial: () => {
+    // có thể bỏ toast ở đây luôn cho đỡ ồn
   },
 });
+
 
 
 
