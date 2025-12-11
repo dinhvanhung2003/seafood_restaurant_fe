@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useInvoiceDetail } from '@/hooks/admin/useInvoice';
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useInvoiceDetail } from "@/hooks/admin/useInvoice";
 
-const currency = (n: number | string) => Number(n ?? 0).toLocaleString('vi-VN');
+const currency = (n: number | string) => Number(n ?? 0).toLocaleString("vi-VN");
 
 type Props = {
   open: boolean;
@@ -18,7 +18,11 @@ type Props = {
   invoiceId?: string;
 };
 
-export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: Props) {
+export default function InvoiceDetailDialog({
+  open,
+  onOpenChange,
+  invoiceId,
+}: Props) {
   // Khi đóng modal, tránh gọi API thừa
   const enabled = open && !!invoiceId;
   const { data, isLoading, isError } = useInvoiceDetail(invoiceId, { enabled });
@@ -44,16 +48,21 @@ export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: P
               <Skeleton className="h-64 w-full" />
             </div>
           ) : isError || !data ? (
-            <div className="text-sm text-red-600">Không tải được chi tiết hóa đơn.</div>
+            <div className="text-sm text-red-600">
+              Không tải được chi tiết hóa đơn.
+            </div>
           ) : (
             <>
               {/* Info row */}
               <div className="grid grid-cols-4 gap-3 text-sm">
                 <Info label="Mã HĐ" value={data.invoiceNumber} />
-                <Info label="Thời gian" value={new Date(data.createdAt).toLocaleString()} />
-                <Info label="Bàn" value={data.table?.name ?? '—'} />
-                <Info label="Khách" value={data.customer?.name ?? 'Khách lẻ'} />
-                <Info label="Số khách" value={data.guestCount ?? '—'} />
+                <Info
+                  label="Thời gian"
+                  value={new Date(data.createdAt).toLocaleString()}
+                />
+                <Info label="Bàn" value={data.table?.name ?? "—"} />
+                <Info label="Khách" value={data.customer?.name ?? "Khách lẻ"} />
+                <Info label="Số khách" value={data.guestCount ?? "—"} />
                 <Info label="Trạng thái" value={data.status} />
               </div>
 
@@ -73,8 +82,12 @@ export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: P
                       <tr key={row.id} className="border-t">
                         <Td>{row.name}</Td>
                         <Td className="text-right">{row.qty}</Td>
-                        <Td className="text-right">{currency(row.unitPrice)}</Td>
-                        <Td className="text-right">{currency(row.lineTotal)}</Td>
+                        <Td className="text-right">
+                          {currency(row.unitPrice)}
+                        </Td>
+                        <Td className="text-right">
+                          {currency(row.lineTotal)}
+                        </Td>
                       </tr>
                     ))}
                   </tbody>
@@ -83,7 +96,10 @@ export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: P
 
               {/* Totals */}
               <div className="grid grid-cols-4 gap-3 text-sm mt-3">
-                <Info label="Tổng tiền hàng" value={currency(data.totalAmount)} />
+                <Info
+                  label="Tổng tiền hàng"
+                  value={currency(data.totalAmount)}
+                />
                 <Info label="Đã thu (TM)" value={currency(data.paidCash)} />
                 <Info label="Đã thu (NH)" value={currency(data.paidBank)} />
                 <Info label="Khách cần trả" value={currency(data.remaining)} />
@@ -107,8 +123,14 @@ export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: P
                       {data.payments.length > 0 ? (
                         data.payments.map((p: any) => (
                           <tr key={p.id} className="border-t">
-                            <Td>{p.method === 'CASH' ? 'Tiền mặt' : 'VNPay'}</Td>
-                            <Td>{p.txnRef ?? '—'}</Td>
+                            <Td>
+                              {p.method === "CASH"
+                                ? "Tiền mặt"
+                                : p.method === "VIETQR"
+                                ? "VietQR"
+                                : p.method}
+                            </Td>
+                            <Td>{p.txnRef ?? "—"}</Td>
                             <Td>{p.status}</Td>
                             <Td className="text-right">{currency(p.amount)}</Td>
                             <Td>{new Date(p.createdAt).toLocaleString()}</Td>
@@ -116,7 +138,10 @@ export default function InvoiceDetailDialog({ open, onOpenChange, invoiceId }: P
                         ))
                       ) : (
                         <tr>
-                          <Td colSpan={5} className="py-4 text-center text-slate-500">
+                          <Td
+                            colSpan={5}
+                            className="py-4 text-center text-slate-500"
+                          >
                             Chưa có thanh toán
                           </Td>
                         </tr>
@@ -138,7 +163,11 @@ function Th({
   className,
 }: React.PropsWithChildren<{ className?: string }>) {
   return (
-    <th className={['px-3 py-2 text-left font-medium', className].filter(Boolean).join(' ')}>
+    <th
+      className={["px-3 py-2 text-left font-medium", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {children}
     </th>
   );
@@ -149,7 +178,10 @@ function Td({
   colSpan,
 }: React.PropsWithChildren<{ className?: string; colSpan?: number }>) {
   return (
-    <td className={['px-3 py-2', className].filter(Boolean).join(' ')} colSpan={colSpan}>
+    <td
+      className={["px-3 py-2", className].filter(Boolean).join(" ")}
+      colSpan={colSpan}
+    >
       {children}
     </td>
   );

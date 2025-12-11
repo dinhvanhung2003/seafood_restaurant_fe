@@ -629,10 +629,10 @@ export default function IngredientsListPage() {
                             : "bg-green-100 text-green-700"
                         }`}
                       >
-                        {i.quantity}
+                        {Number(i.quantity ?? 0).toLocaleString('vi-VN')}
                       </span>
                     </td>
-                    <td className="px-4 py-2">{i.alertThreshold}</td>
+                    <td className="px-4 py-2">{Number(i.alertThreshold ?? 0).toLocaleString('vi-VN')}</td>
                     <td
                       className="px-4 py-2 text-gray-600 max-w-[150px] truncate"
                       title={i.description}
