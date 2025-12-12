@@ -53,7 +53,7 @@ export function MenuCard({
       <button onClick={onAdd} className="group text-left w-full">
         <div className="h-28 w-full bg-slate-100 relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.image} alt="" className="h-full w-full object-cover" />
+          <img src={item.image} alt="" className="h-full w-full object-contain" />
           {/* CHIP “Giảm …đ” – chỉ hiện khi có KM */}
           {hasPromo && (
             <span className="absolute bottom-2 right-2 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-semibold ring-1 ring-emerald-500/40">

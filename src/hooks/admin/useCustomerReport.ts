@@ -34,6 +34,7 @@ export function useCustomerReport() {
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState<any[]>([]);
     const [summary, setSummary] = useState<any | undefined>(undefined);
+    const [top10Customers, setTop10Customers] = useState<any[]>([]);
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
     const [meta, setMeta] = useState<{ total: number; page: number; limit: number; pages: number } | undefined>(undefined);
@@ -111,11 +112,31 @@ export function useCustomerReport() {
                 }
                 : undefined;
             setSummary(norm);
+
+            // Fetch top 10 customers for chart (only if we have paginated data)
+            if (hasValidServerMeta && m?.total > limit) {
+                try {
+                    const topRes = await api.get('/report/customer-sales', {
+                        params: { ...range, customerQ, page: 1, limit: 10 },
+                    });
+                    const topBody = topRes.data as any;
+                    const topPayload = topBody?.data ?? topBody;
+                    const topList = topPayload?.rows ?? topPayload?.data ?? [];
+                    setTop10Customers(Array.isArray(topList) ? topList.slice(0, 10) : []);
+                } catch (err) {
+                    console.error('Failed to fetch top 10 customers', err);
+                    setTop10Customers(arrList.slice(0, 10)); // fallback to current page
+                }
+            } else {
+                // No pagination or small dataset, use current rows
+                setTop10Customers(arrList.slice(0, 10));
+            }
         } catch (e) {
             console.error('Fetch customer report failed', e);
             setRows([]);
             setSummary(undefined);
             setMeta(undefined);
+            setTop10Customers([]);
         } finally {
             setLoading(false);
         }
@@ -136,6 +157,7 @@ export function useCustomerReport() {
         loading,
         rows,
         summary,
+        top10Customers,
         page, setPage,
         limit, setLimit,
         meta,

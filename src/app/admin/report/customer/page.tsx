@@ -14,6 +14,7 @@ export default function CustomerReportPage() {
     setCustomerQ,
     rows,
     summary,
+    top10Customers,
     meta,
     setPage,
     page,
@@ -33,6 +34,7 @@ export default function CustomerReportPage() {
       <CustomerTable
         rows={rows}
         summary={summary}
+        top10Customers={top10Customers}
         meta={meta as any}
         page={page}
         setPage={setPage}

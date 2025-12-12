@@ -22,6 +22,7 @@ interface Meta {
 export default function CustomerTable({
   rows,
   summary,
+  top10Customers,
   meta,
   page,
   setPage,
@@ -30,6 +31,7 @@ export default function CustomerTable({
 }: {
   rows: any[];
   summary?: any;
+  top10Customers?: any[];
   meta?: Meta;
   page: number;
   setPage: (p: number) => void;
@@ -88,7 +90,13 @@ export default function CustomerTable({
 
       {/* Chart */}
       <CustomerItemsChart
-        rows={Array.isArray(rows) ? rows : []}
+        rows={
+          Array.isArray(top10Customers)
+            ? top10Customers
+            : Array.isArray(rows)
+            ? rows
+            : []
+        }
         mode="invoices"
       />
 

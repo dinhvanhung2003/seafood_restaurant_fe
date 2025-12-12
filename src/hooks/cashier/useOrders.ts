@@ -57,19 +57,19 @@ export function useOrders() {
         nextOrderIds[tid] = o.id;
 
         // items hiện tại
-      const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
-  id: it.menuItem?.id ?? it.menuItemId,
-  qty: it.quantity,
-  rowId: it.id,
-  name: it.menuItem?.name,
-  // Ưu tiên it.price (đơn giá “chốt” theo hóa đơn), fallback menuItem.price
-  price:
-    it.price != null
-      ? Number(it.price)
-      : Number(it.menuItem?.price ?? 0),
-  image: it.menuItem?.image,
-  note: it.note ?? null,   // 👈 THÊM DÒNG NÀY
-}));
+        const items: UIOrderItem[] = (o.items ?? []).map((it: any) => ({
+          id: it.menuItem?.id ?? it.menuItemId,
+          qty: it.quantity,
+          rowId: it.id,
+          name: it.menuItem?.name,
+          // Ưu tiên it.price (đơn giá “chốt” theo hóa đơn), fallback menuItem.price
+          price:
+            it.price != null
+              ? Number(it.price)
+              : Number(it.menuItem?.price ?? 0),
+          image: it.menuItem?.image,
+          note: it.note ?? null,   // 👈 THÊM DÒNG NÀY
+        }));
 
 
         // dùng order.id làm tab id (ổn định)
@@ -79,7 +79,7 @@ export function useOrders() {
         const prevActive = prev[tid]?.activeId;
         const prevHasTab = prev[tid]?.orders?.some(t => t.id === prevActive);
         const activeId = prevHasTab ? prevActive : tabId;
-         const guestCount: number | null =
+        const guestCount: number | null =
           typeof o.guestCount === "number"
             ? o.guestCount
             : o.guest_count ?? null;
@@ -87,24 +87,24 @@ export function useOrders() {
         const rawCus = o.customer ?? o.customer_id ?? o.invoice?.customer;
         const customer = rawCus
           ? {
-              id: rawCus.id,
-              name: rawCus.name,
-              phone: rawCus.phone ?? null,
-            }
+            id: rawCus.id,
+            name: rawCus.name,
+            phone: rawCus.phone ?? null,
+          }
           : null;
 
-       next[tid] = {
-  activeId,
-  orders: [
-    {
-      id: tabId,
-      label: "1",
-      items,
-      guestCount,
-      customer,
-    },
-  ],
-};
+        next[tid] = {
+          activeId,
+          orders: [
+            {
+              id: tabId,
+              label: "1",
+              items,
+              guestCount,
+              customer,
+            },
+          ],
+        };
 
       }
 
@@ -138,8 +138,15 @@ export function useOrders() {
       items: { menuItemId: string; quantity: number }[];
       orderType?: "DINE_IN" | "TAKE_AWAY";
     }) => {
-      const res = await api.post("/orders", { orderType: payload.orderType ?? "DINE_IN", ...payload });
-      return res.data;
+      try {
+        const body = { orderType: payload.orderType ?? "DINE_IN", ...payload };
+        console.log("Creating order with payload:", body);
+        const res = await api.post("/orders", body);
+        return res.data;
+      } catch (error: any) {
+        console.error("Create order error:", error.response?.data || error.message);
+        throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
   });
@@ -418,7 +425,7 @@ export function useOrders() {
     confirm,
     pay: payByCash,
     cancel,
-      setGuestCount,
+    setGuestCount,
     setOrderCustomer,
   };
 }
