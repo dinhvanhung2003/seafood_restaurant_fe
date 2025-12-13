@@ -139,25 +139,6 @@ export default function ClosingTable({
     const goNext = () =>
       setPage?.((p) => Math.min(pages, (p ?? currentPage) + 1));
 
-    // payment method distribution by revenue
-    const pmAgg = list.reduce<Record<string, number>>((acc, r) => {
-      const key = payMethodLabel(r.payMethod || "-");
-      acc[key] = (acc[key] || 0) + Number(r.revenue || 0);
-      return acc;
-    }, {});
-    const pmData = Object.entries(pmAgg).map(([name, value]) => ({
-      name,
-      value,
-    }));
-    const pmColors = [
-      "#22c55e",
-      "#06b6d4",
-      "#f59e0b",
-      "#ef4444",
-      "#8b5cf6",
-      "#64748b",
-    ];
-
     return (
       <div className="rounded-xl border overflow-auto">
         {sum && (
@@ -186,7 +167,7 @@ export default function ClosingTable({
                 {meta?.total ?? list.length}
               </div>
             </div>
-            <div className="col-span-1 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="col-span-1 md:col-span-4">
               <div className="rounded-lg border bg-white p-3 shadow-sm">
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -214,37 +195,6 @@ export default function ClosingTable({
                         <Cell fill="#06b6d4" />
                       </Bar>
                     </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="rounded-lg border bg-white p-3 shadow-sm">
-                <div className="h-52 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        dataKey="value"
-                        data={pmData}
-                        nameKey="name"
-                        innerRadius={45}
-                        outerRadius={70}
-                        paddingAngle={2}
-                        labelLine
-                        label={(p: any) => `${currency(Number(p.value))}`}
-                      >
-                        {pmData.map((_, i) => (
-                          <Cell
-                            key={`pm-${i}`}
-                            fill={pmColors[i % pmColors.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Legend
-                        layout="vertical"
-                        verticalAlign="middle"
-                        align="right"
-                      />
-                      <RTooltip formatter={(v: any) => currency(Number(v))} />
-                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
