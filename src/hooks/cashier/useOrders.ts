@@ -8,6 +8,19 @@ import type { OrdersByTable, UIOrderItem } from "@/lib/cashier/pos-helpers";
 import type { ItemStatus } from "@/types/types";
 
 const _uid = () => Math.random().toString(36).slice(2, 9);
+function getApiMessage(e: any) {
+  return (
+    e?.response?.data?.message ||
+    e?.response?.data?.error ||
+    e?.message ||
+    "Có lỗi xảy ra"
+  );
+}
+
+function isOutOfStock(e: any) {
+  const msg = String(e?.response?.data?.message ?? "");
+  return msg.includes("INSUFFICIENT_STOCK");
+}
 
 // Tạo batchId an toàn phía client
 const makeBatchId = () => {
@@ -163,6 +176,10 @@ export function useOrders() {
       return res.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["active-orders"] }),
+    onError: (e: any) => {
+    //toast hết hàng (và mọi lỗi khác)
+    toast.error("Không thể thêm món", { description: getApiMessage(e) });
+  },
   });
 
   const removeItemMu = useMutation({
@@ -174,23 +191,33 @@ export function useOrders() {
   });
 
   const setItemQtyMu = useMutation({
-    mutationFn: async (arg: { orderId: string; orderItemId: string; quantity: number; menuItemId: string }) => {
-      try {
-        const res = await api.patch(`/orders/${arg.orderId}/items/${arg.orderItemId}/qty`, {
-          quantity: arg.quantity,
-        });
-        return { ok: true, data: res.data as any };
-      } catch (e: any) {
-        const status = e?.response?.status;
-        if (status === 404) return { ok: false, reason: "NOT_FOUND" as const };
-        if (status === 400) return { ok: false, reason: "LOCKED" as const };
-        throw e;
+  mutationFn: async (arg: { orderId: string; orderItemId: string; quantity: number; menuItemId: string }) => {
+    try {
+      const res = await api.patch(`/orders/${arg.orderId}/items/${arg.orderItemId}/qty`, {
+        quantity: arg.quantity,
+      });
+      return { ok: true, data: res.data as any };
+    } catch (e: any) {
+      const status = e?.response?.status;
+
+      if (status === 404) return { ok: false, reason: "NOT_FOUND" as const };
+
+      if (status === 400) {
+        //  hết hàng
+        if (isOutOfStock(e)) return { ok: false, reason: "OUT_OF_STOCK" as const };
+
+        //  các 400 còn lại mới coi là LOCKED
+        return { ok: false, reason: "LOCKED" as const };
       }
-    },
-    onSuccess: (data) => {
-      if (data?.ok) qc.invalidateQueries({ queryKey: ["active-orders"] });
-    },
-  });
+
+      throw e;
+    }
+  },
+  onSuccess: (data) => {
+    if (data?.ok) qc.invalidateQueries({ queryKey: ["active-orders"] });
+  },
+});
+
 
 
   const muMoveOne = useMutation({
@@ -276,11 +303,17 @@ export function useOrders() {
     });
 
     if (!r?.ok) {
-      // row bị khóa (PREPARING/READY) hoặc 404 -> tạo dòng mới
-      if (r.reason === "LOCKED" || r.reason === "NOT_FOUND") {
-        await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
-      }
-    }
+  if (r.reason === "OUT_OF_STOCK") {
+    toast.error("Hết hàng", {
+      description: "Món này không đủ tồn kho để tăng số lượng.",
+    });
+    return;
+  }
+
+  if (r.reason === "LOCKED" || r.reason === "NOT_FOUND") {
+    await addItemsMu.mutateAsync({ orderId: oid, items: [{ menuItemId, quantity: 1 }] });
+  }
+}
   }
 
   async function setGuestCount(tableId: string, value: number) {
