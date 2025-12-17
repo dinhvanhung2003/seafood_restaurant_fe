@@ -3,6 +3,7 @@
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
 import { useMemo, useState, useEffect } from "react";
+import { useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -252,6 +253,11 @@ if (invItems.length) {
     invoiceId: string;
     paidAmount: number;
   } | null>(null);
+const waitingInvoiceRef = useRef<string | null>(null);
+
+useEffect(() => {
+  waitingInvoiceRef.current = waiting ? (invoice?.id ?? null) : null;
+}, [waiting, invoice?.id]);
 
   // // ====== LẤY TỔNG PHẢI TRẢ TỪ BE (điểm sửa #1)
   // const beTotal = invoice
@@ -539,15 +545,11 @@ if (method === "vietqr") {
     .then((r) => r.data);
 
   const isImg =
-    typeof link.qrCode === "string" &&
-    /^(https?:|data:)/i.test(link.qrCode);
+    typeof link.qrCode === "string" && /^(https?:|data:)/i.test(link.qrCode);
 
   const providerAmount =
-    link &&
-    (link.amount || link.total || link.payAmount || link.amountPaid)
-      ? Number(
-          link.amount ?? link.total ?? link.payAmount ?? link.amountPaid
-        )
+    link && (link.amount || link.total || link.payAmount || link.amountPaid)
+      ? Number(link.amount ?? link.total ?? link.payAmount ?? link.amountPaid)
       : null;
 
   const displayAmount = Number(providerAmount ?? requestedLinkAmount);
@@ -562,9 +564,19 @@ if (method === "vietqr") {
     addInfo: `INV:${inv.id.slice(0, 12)}`,
   });
 
-  // Chỉ bật trạng thái chờ, để socket quyết định khi nào xong
+  // ✅ DÁN ĐOẠN BẠN HỎI Ở ĐÂY
   setWaiting(true);
   setReadyToFinish(null);
+
+  try {
+    const { paidAmount } = await waitUntilPaid(inv.id);
+    setWaiting(false);
+    setReadyToFinish({ invoiceId: inv.id, paidAmount });
+    toast.success("Đã thanh toán VietQR thành công");
+  } catch (e: any) {
+    setWaiting(false);
+    toast.error("Chờ thanh toán quá hạn / thất bại");
+  }
 
   return;
 }
@@ -652,30 +664,24 @@ useInvoiceSocket(invoiceId, {
     { key: ["kitchen-progress-by-order"] },
   ],
   onPaid: (p) => {
-    const { invoiceId: paidInvoiceId, amount, method: payMethod } = p;
+    // chỉ xử lý khi modal đang chờ thanh toán đúng invoice này
+    const waitingId = waitingInvoiceRef.current;
+    if (!waitingId) return;
+    if (p.invoiceId !== waitingId) return;
 
-    // Không phải invoice hiện tại -> bỏ
-    if (!invoiceId || paidInvoiceId !== invoiceId) return;
-
-    // Nếu event từ thanh toán tiền mặt -> bỏ
-    if (payMethod === "CASH" || payMethod === "cash") return;
-
-    // Nếu trong modal đang ở chế độ TIỀN MẶT thì cũng bỏ
-    // (tránh trường hợp event paid từ chỗ khác)
-    if (method !== "vietqr") return;
+    // bỏ event tiền mặt
+    if (p.method === "CASH" || p.method === "cash") return;
 
     setWaiting(false);
     setReadyToFinish({
-      invoiceId,
-      paidAmount: Number(amount ?? 0),
+      invoiceId: waitingId,
+      paidAmount: Number(p.amount ?? 0),
     });
 
     toast.success("Đã thanh toán VietQR thành công");
   },
-  onPartial: () => {
-    // có thể bỏ toast ở đây luôn cho đỡ ồn
-  },
 });
+
 
 
 

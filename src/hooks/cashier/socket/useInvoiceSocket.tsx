@@ -1,9 +1,8 @@
-// src/hooks/common/useInvoiceSocket.ts
 "use client";
 
 import { useEffect, useRef } from "react";
 import { getPaymentSocket } from "@/lib/paymentSocket";
-
+import { retainInvoiceRoom } from "@/lib/paymentRooms";
 import { useQueryClient } from "@tanstack/react-query";
 
 type PaidPayload = {
@@ -31,15 +30,12 @@ type Options = {
   extraInvalidate?: ExtraInvalidate[];
 };
 
-/**
- * Hook dùng chung Web / Mobile để lắng nghe socket thanh toán của 1 invoice
- */
 export function useInvoiceSocket(
   invoiceId: string | null | undefined,
   opts: Options = {}
 ) {
   const qc = useQueryClient();
-  const joined = useRef(false);
+  const releaseRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -47,24 +43,16 @@ export function useInvoiceSocket(
     const s = getPaymentSocket();
     if (!s) return;
 
-    const join = () => {
-      if (!joined.current) {
-        s.emit("join_invoice", { invoiceId });
-        joined.current = true;
-      }
-    };
+    // ✅ retain room (ref-count)
+    releaseRef.current = retainInvoiceRoom(invoiceId);
 
-    if (s.connected) join();
-    else s.once("connect", join);
-
+    // ✅ HÀM BỊ THIẾU → đây chính là invalidateAll
     const invalidateAll = () => {
-      // invalidate chung cho mọi app (web/mobile)
       qc.invalidateQueries({ queryKey: ["invoice.detail", invoiceId] });
       qc.invalidateQueries({ queryKey: ["invoices.list"] });
       qc.invalidateQueries({ queryKey: ["active-orders"] });
       qc.invalidateQueries({ queryKey: ["pos-tables"] });
 
-      // cho từng màn tự bơm thêm key
       opts.extraInvalidate?.forEach(({ key }) => {
         qc.invalidateQueries({ queryKey: key });
       });
@@ -86,14 +74,11 @@ export function useInvoiceSocket(
     s.on("invoice.partial", onPartial);
 
     return () => {
-      try {
-        s.emit("leave_invoice", { invoiceId });
-      } catch {}
-
       s.off("invoice.paid", onPaid);
       s.off("invoice.partial", onPartial);
-      joined.current = false;
+
+      releaseRef.current?.();
+      releaseRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 }
