@@ -39,34 +39,46 @@ export default function AreaFormModal({
   onSubmit,
 }: Props) {
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Thêm khu vực</DialogTitle>
-        </DialogHeader>
+   <Dialog open={open} onOpenChange={setOpen}>
+  <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+    <DialogHeader>
+      <DialogTitle>Thêm khu vực</DialogTitle>
+    </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <Label className="mb-1 block">Tên khu vực <span className="text-red-500">*</span></Label>
-            <Input value={areaName} onChange={(e) => setAreaName(e.target.value)} />
-          </div>
+    <div className="space-y-4">
+      <div>
+        <Label className="mb-1 block">
+          Tên khu vực <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          className="text-foreground"
+          autoFocus
+          value={areaName}
+          onChange={(e) => setAreaName(e.target.value)}
+        />
+      </div>
 
-          <div>
-            <Label className="mb-1 block">Ghi chú</Label>
-            <Input value={areaNote} onChange={(e) => setAreaNote(e.target.value)} />
-          </div>
-        </div>
+      <div>
+        <Label className="mb-1 block">Ghi chú</Label>
+        <Input
+          className="text-foreground"
+          value={areaNote}
+          onChange={(e) => setAreaNote(e.target.value)}
+        />
+      </div>
+    </div>
 
-        <DialogFooter className="mt-4">
-          <Button onClick={onSubmit} className="bg-emerald-600 hover:bg-emerald-700">
-            Lưu
-          </Button>
-          <Button variant="secondary" onClick={() => setOpen(false)}>
-            Bỏ qua
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DialogFooter className="mt-4">
+      <Button onClick={onSubmit} className="bg-emerald-600 hover:bg-emerald-700">
+        Lưu
+      </Button>
+      <Button variant="secondary" onClick={() => setOpen(false)}>
+        Bỏ qua
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
   );
 }
 
