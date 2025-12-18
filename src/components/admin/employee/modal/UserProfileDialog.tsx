@@ -2,124 +2,174 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useUserProfileQuery, useUpdateUserProfileMutation, type UpdateProfilePayload } from "@/hooks/admin/useProfile";
+import { toast } from "sonner";
+import {
+  useUserProfileQuery,
+  useUpdateUserProfileMutation,
+  type UpdateProfilePayload,
+} from "@/hooks/admin/useProfile";
+import { useUpdateUserMutation } from "@/hooks/admin/useUser";
+
+function normalizePhone(input: string) {
+  return (input || "").replace(/\D/g, "");
+}
+function isValidPhone(phone: string) {
+  return /^0\d{9}$/.test(phone); // 10 số bắt đầu 0
+}
 
 export default function UserProfileDialog({
-  userId, open, onOpenChange,
-}: { userId?: string; open: boolean; onOpenChange: (v: boolean) => void }) {
+  userId,
+  open,
+  onOpenChange,
+}: {
+  userId?: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const profileQ = useUserProfileQuery(userId);
-  const update = useUpdateUserProfileMutation();
 
+  const updateProfile = useUpdateUserProfileMutation();
+  const updateUser = useUpdateUserMutation();
+
+  // user fields
+  const [username, setUsername] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const phoneRef = useRef<HTMLInputElement>(null);
+
+  // profile fields (tối giản)
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [addressList, setAddressList] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profileQ.data) return;
     const p = profileQ.data;
+
+    setUsername(p.user?.username ?? "");
+    setPhoneNumber(p.user?.phoneNumber ?? "");
+
     setFullName(p.fullName ?? "");
     setDob(p.dob ?? "");
     setDescription(p.description ?? "");
     setAddress(p.address ?? "");
-    setCity(p.city ?? "");
-    setCountry(p.country ?? "");
-    setAddressList((p.addressList ?? []).join(", "));
   }, [profileQ.data, open]);
 
-  const onSave = () => {
+  const isSaving =
+    updateProfile.isPending || updateUser.isPending || profileQ.isLoading;
+
+  const onSave = async () => {
     if (!userId) return;
-    const file = fileRef.current?.files?.[0];
-    const list = addressList.split(",").map(s => s.trim()).filter(Boolean);
-    const payload: UpdateProfilePayload = {
-      fullName, dob: dob || undefined, description, address, city, country,
-      addressList: list.length ? list : undefined, avatar: file,
+
+    const phone = normalizePhone(phoneNumber);
+
+    // FE rule
+    if (phone && !isValidPhone(phone)) {
+      toast.error("SĐT phải gồm 10 chữ số và bắt đầu bằng 0");
+      phoneRef.current?.focus();
+      return;
+    }
+
+    const payloadUser = {
+      username: username?.trim() || undefined,
+      phoneNumber: phone || undefined,
     };
-    update.mutate({ userId, data: payload }, { onSuccess: () => onOpenChange(false) });
+
+    const payloadProfile: UpdateProfilePayload = {
+      fullName,
+      dob: dob || undefined,
+      description,
+      address, // ✅ chỉ còn 1 dòng địa chỉ
+      // ❌ bỏ city/country/addressList
+    };
+
+    try {
+      // ✅ chạy tuần tự để tránh “thành công nửa vời”
+      await updateUser.mutateAsync({ userId, data: payloadUser });
+      await updateProfile.mutateAsync({ userId, data: payloadProfile });
+
+      onOpenChange(false);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ?? err?.message ?? "Cập nhật thất bại";
+      toast.error(msg);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle>Hồ sơ người dùng</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Hồ sơ người dùng</DialogTitle>
+        </DialogHeader>
 
         {!userId ? null : profileQ.isLoading ? (
-          <div className="py-6 text-center">Đang tải…</div>
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Đang tải…
+          </div>
         ) : profileQ.error ? (
-          <div className="py-6 text-center text-red-500">{(profileQ.error as Error).message}</div>
+          <div className="py-8 text-center text-sm text-red-500">
+            {(profileQ.error as Error).message}
+          </div>
         ) : profileQ.data ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-1 space-y-3">
-              <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-100 border">
-                {profileQ.data.avatar ? (
-                  <img src={profileQ.data.avatar} alt="avatar" className="w-24 h-24 object-cover" />
-                ) : (
-                  <div className="w-full h-full grid place-items-center text-xs text-slate-500">No avatar</div>
-                )}
-              </div>
-              <div>
-                <Label>Đổi ảnh đại diện</Label>
-                <Input type="file" ref={fileRef} accept="image/*" />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Username</Label>
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} />
             </div>
 
-            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="md:col-span-2">
-                <Label>Họ tên</Label>
-                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-              </div>
+            <div className="space-y-1">
+              <Label>Số điện thoại</Label>
+              <Input
+                ref={phoneRef}
+                value={phoneNumber}
+                placeholder="VD: 0901234567"
+                onChange={(e) => setPhoneNumber(normalizePhone(e.target.value))}
+              />
+            </div>
 
-              <div>
-                <Label>Email</Label>
-                <Input readOnly value={profileQ.data.user.email} />
-              </div>
+            <div className="md:col-span-2 space-y-1">
+              <Label>Email</Label>
+              <Input readOnly value={profileQ.data.user.email} />
+            </div>
 
-              <div>
-                <Label>Ngày sinh</Label>
-                <Input type="date" value={dob || ""} onChange={(e) => setDob(e.target.value)} />
-              </div>
+            <div className="md:col-span-2 space-y-1">
+              <Label>Họ tên</Label>
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
 
-              <div className="md:col-span-2">
-                <Label>Mô tả</Label>
-                <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-              </div>
+            <div className="space-y-1">
+              <Label>Ngày sinh</Label>
+              <Input type="date" value={dob || ""} onChange={(e) => setDob(e.target.value)} />
+            </div>
 
-              <div className="md:col-span-2">
-                <Label>Địa chỉ</Label>
-                <Input value={address} onChange={(e) => setAddress(e.target.value)} />
-              </div>
+            <div className="md:col-span-2 space-y-1">
+              <Label>Địa chỉ</Label>
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
 
-              <div>
-                <Label>Thành phố</Label>
-                <Input value={city} onChange={(e) => setCity(e.target.value)} />
-              </div>
-
-              <div>
-                <Label>Quốc gia</Label>
-                <Input value={country} onChange={(e) => setCountry(e.target.value)} />
-              </div>
-
-              <div className="md:col-span-2">
-                <Label>Danh sách địa chỉ (phân tách dấu phẩy)</Label>
-                <Input value={addressList} onChange={(e) => setAddressList(e.target.value)} placeholder="Hà Nội, Đà Nẵng" />
-              </div>
+            <div className="md:col-span-2 space-y-1">
+              <Label>Mô tả</Label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
           </div>
         ) : null}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Đóng</Button>
-          <Button onClick={onSave} disabled={update.isPending || profileQ.isLoading}>
-            {update.isPending ? "Đang lưu..." : "Lưu thay đổi"}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Đóng
+          </Button>
+          <Button onClick={onSave} disabled={isSaving}>
+            {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
           </Button>
         </DialogFooter>
       </DialogContent>

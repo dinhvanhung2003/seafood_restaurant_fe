@@ -3,7 +3,8 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
-
+import {toast} from "sonner";
+import { EMPLOYEES_ROOT_KEY } from "@/hooks/admin/useEmployee";
 /** ===== Types dùng lại từ bạn ===== */
 export type Role = "MANAGER" | "CASHIER" | "WAITER" | "KITCHEN" | string;
 
@@ -85,13 +86,15 @@ async function patchUserProfile(userId: string, payload: UpdateProfilePayload) {
   if (payload.addressList) fd.set("addressList", JSON.stringify(payload.addressList));
   if (payload.avatar) fd.set("avatar", payload.avatar);
 
-  const { data } = await api.patch<ApiResponse<MeProfile>>(
-    `/profile/update-profile/${userId}`,
-    fd,
-    { headers: { "Content-Type": "multipart/form-data" } }
-  );
-  return data.data;
+  const res = await api.patch(`/profile/update-profile/${userId}`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  // ✅ BE của bạn đang trả entity thô -> lấy thẳng res.data
+  // (nếu sau này bạn bọc ResponseCommon thì res.data.data vẫn chạy)
+  return (res.data?.data ?? res.data) as any;
 }
+
 /** ===== Hooks: /me ===== */
 export function useMeQuery() {
   return useQuery<MeProfile, Error>({
@@ -113,14 +116,29 @@ export function useUserProfileQuery(userId?: string) {
 
 export function useUpdateUserProfileMutation() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: (vars: { userId: string; data: UpdateProfilePayload }) =>
       patchUserProfile(vars.userId, vars.data),
-    onSuccess: (updated) => {
-      // refresh cache cho profile của user đó
-      qc.invalidateQueries({ queryKey: userProfileKey(updated.user.id) });
-      // nếu chính mình cập nhật thì refresh luôn /me
+
+    onSuccess: (_updated, vars) => {
+      // toast.success("Cập nhật hồ sơ thành công");
+
+      // ✅ refresh profile dialog
+      qc.invalidateQueries({ queryKey: userProfileKey(vars.userId) });
+
+      // ✅ refresh /me
       qc.invalidateQueries({ queryKey: meKey });
+
+      // ✅ refresh toàn bộ list nhân viên (mọi page/limit/q)
+      qc.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === EMPLOYEES_ROOT_KEY[0],
+      });
+    },
+
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Cập nhật thất bại";
+      toast.error(msg);
     },
   });
 }

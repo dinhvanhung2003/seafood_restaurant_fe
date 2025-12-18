@@ -1,4 +1,3 @@
-// hooks/admin/useEmployee.ts
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,18 +22,14 @@ type ListUsersResp = {
 };
 
 /* ===== Query Key ===== */
+export const EMPLOYEES_ROOT_KEY = ["employees-users"] as const;
+
 export const employeesKey = (page: number, limit: number, q: string) =>
-  ["employees-users", { page, limit, q }] as const;
+  [...EMPLOYEES_ROOT_KEY, { page, limit, q }] as const;
 
 /* ===== API ===== */
-async function fetchUsers(
-  page: number,
-  limit: number,
-  q: string
-): Promise<ListUsersResp> {
-  const { data } = await api.get("/user/get-list-user", {
-    params: { page, limit, q },
-  });
+async function fetchUsers(page: number, limit: number, q: string): Promise<ListUsersResp> {
+  const { data } = await api.get("/user/get-list-user", { params: { page, limit, q } });
   return data as ListUsersResp;
 }
 
@@ -47,11 +42,12 @@ async function createUser(payload: CreateUserPayload) {
 export function toRow(u: UserItem): EmployeeRow {
   return {
     id: u.id,
-    fullName: u.profile?.fullName || "",
-    email: u.email,
-    username: u.username || "",
-    phoneNumber: u.phoneNumber || "",
+    fullName: u.profile?.fullName ?? "",
+    email: u.email ?? "",                // ✅ tránh undefined/null
+    username: u.username ?? "",
+    phoneNumber: u.phoneNumber ?? "",
     role: u.role,
+    address: u.profile?.address ?? "",   // ✅ ép null -> ""
   };
 }
 
@@ -59,31 +55,32 @@ export function toRow(u: UserItem): EmployeeRow {
 export function useEmployee(page: number, limit: number, q: string) {
   const qc = useQueryClient();
 
-  // LIST
   const listQuery = useQuery<ListUsersResp>({
     queryKey: employeesKey(page, limit, q),
     queryFn: () => fetchUsers(page, limit, q),
-    // v5: thay cho keepPreviousData
     placeholderData: (prev) => prev,
     staleTime: 60_000,
   });
 
   const items = listQuery.data?.data ?? [];
   const meta = listQuery.data?.meta ?? { total: 0, page, limit, pages: 0 };
+
   const createMutation = useMutation({
-  mutationFn: (payload: CreateUserPayload) => createUser(payload),
+    mutationFn: (payload: CreateUserPayload) => createUser(payload),
 
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["employees-users"] });
-    toast.success("Đã thêm nhân viên");
-  },
+    onSuccess: () => {
+      // ✅ invalidate tất cả biến thể page/limit/q
+      qc.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === EMPLOYEES_ROOT_KEY[0],
+      });
+      toast.success("Đã thêm nhân viên");
+    },
 
-  onError: (e: any) => {
-    const msg = e?.response?.data?.message || "Thêm nhân viên thất bại";
-    toast.error(msg);
-  }
-});
-
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Thêm nhân viên thất bại";
+      toast.error(msg);
+    },
+  });
 
   return {
     rows: items.map(toRow),

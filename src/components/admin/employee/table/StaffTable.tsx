@@ -13,6 +13,7 @@ type Row = {
   username: string;
   phoneNumber: string;
   role: string;
+   address?: string;
 };
 
 export default function StaffTable({
@@ -33,6 +34,7 @@ export default function StaffTable({
           <TableHead>Username</TableHead>
           <TableHead>SĐT</TableHead>
           <TableHead>Vai trò</TableHead>
+          <TableHead>Địa chỉ</TableHead>
           <TableHead>Hồ sơ </TableHead>
          
         </TableRow>
@@ -50,6 +52,9 @@ export default function StaffTable({
               <TableCell>{r.username}</TableCell>
               <TableCell>{r.phoneNumber}</TableCell>
               <TableCell>{r.role}</TableCell>
+              <TableCell className="max-w-[240px] truncate">
+  {r.address || "—"}
+</TableCell>
               <TableCell>
                 <Button variant="outline" size="sm" onClick={() => onOpenProfile(r.id)}>
                   <UserIcon className="h-4 w-4 mr-1" /> Xem/Sửa
