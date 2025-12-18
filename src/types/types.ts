@@ -152,10 +152,15 @@ export type UserItem = {
   email: string;
   phoneNumber: string | null;
   username: string | null;
-  password?: string;           // có nhưng không hiển thị
+  password?: string; // có nhưng không dùng
   role: Role;
-  profile?: { fullName?: string | null } | null;
+
+  profile?: {
+    fullName?: string | null;
+    address?: string | null;
+  } | null;
 };
+
 
 /** Payload tạo user vẫn như trước */
 export type CreateUserPayload = {
@@ -175,10 +180,9 @@ export type EmployeeRow = {
   username: string;
   phoneNumber: string;
   role: Role;
-    profile?: {
-    fullName: string | null;
-  } | null;
+  address: string; 
 };
+
 
 
 

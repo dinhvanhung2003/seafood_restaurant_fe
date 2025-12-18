@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, Sparkles, X } from "lucide-react";
 import api from "@/lib/axios";
 import ReactMarkdown from "react-markdown";
@@ -19,8 +18,14 @@ type SalesPoint = {
   net_amount?: number | string;
   discount_amount?: number | string;
 };
-type SalesPayload = { by: "hour" | "day"; series: SalesPoint[]; kpi?: Record<string, any> };
-type RagPayload = { sources?: Array<{ index: number; score?: number; source?: string }> };
+type SalesPayload = {
+  by: "hour" | "day";
+  series: SalesPoint[];
+  kpi?: Record<string, any>;
+};
+type RagPayload = {
+  sources?: Array<{ index: number; score?: number; source?: string }>;
+};
 type ExtraData = SmartSqlData | SalesPayload | RagPayload | undefined;
 
 function isSmartSql(d: ExtraData): d is SmartSqlData {
@@ -75,13 +80,13 @@ export default function AdminChatWidget() {
         typeof res.data?.content === "string"
           ? res.data.content
           : JSON.stringify(res.data);
+
       setMessages((m) => [...m, { role, content }]);
 
       const data: ExtraData = res.data?.data;
       setExtra(data);
     } catch (e: any) {
-      const msg =
-        e?.response?.data?.message ?? e?.message ?? "Lỗi không xác định";
+      const msg = e?.response?.data?.message ?? e?.message ?? "Lỗi không xác định";
       setMessages((m) => [
         ...m,
         { role: "assistant", content: `Đã có lỗi khi gọi API: ${msg}` },
@@ -92,9 +97,9 @@ export default function AdminChatWidget() {
     }
   }
 
-  // Nút bong bóng (khi đóng)
   return (
     <>
+      {/* Nút bong bóng (khi đóng) */}
       {!open && (
         <button
           type="button"
@@ -105,15 +110,29 @@ export default function AdminChatWidget() {
         </button>
       )}
 
+      {/* Widget (khi mở) */}
       {open && (
-        <div className="fixed bottom-4 right-4 z-50 w-[380px] max-w-[calc(100vw-2rem)]">
-          <Card className="shadow-2xl border border-border">
-            <CardHeader className="py-2 px-3 flex flex-row items-center justify-between">
+        <div
+          className="
+            fixed z-50
+            bottom-4 right-4
+            w-[380px] max-w-[calc(100vw-2rem)]
+            max-h-[calc(100dvh-2rem)]
+            max-sm:inset-2 max-sm:w-auto max-sm:max-w-none max-sm:bottom-auto max-sm:right-auto
+          "
+        >
+          <Card
+            className="
+              shadow-2xl border border-border
+              flex flex-col
+              h-[min(560px,calc(100dvh-2rem))]
+              max-sm:h-[calc(100dvh-1rem)]
+            "
+          >
+            <CardHeader className="py-2 px-3 flex flex-row items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <CardTitle className="text-sm font-semibold">
-                  Trợ lý nhà hàng
-                </CardTitle>
+                <CardTitle className="text-sm font-semibold">Trợ lý nhà hàng</CardTitle>
               </div>
 
               <Button
@@ -126,9 +145,10 @@ export default function AdminChatWidget() {
               </Button>
             </CardHeader>
 
-            <CardContent className="space-y-2 px-3 pb-3">
-              {/* Chat area */}
-              <div className="h-72 overflow-y-auto rounded-md border p-2 bg-background">
+            {/* QUAN TRỌNG: flex-1 + min-h-0 để phần chat co giãn theo chiều dọc */}
+            <CardContent className="px-3 pb-3 flex flex-col gap-2 flex-1 min-h-0">
+              {/* Chat area: flex-1 min-h-0 để không tràn chiều dọc */}
+              <div className="flex-1 min-h-0 overflow-y-auto rounded-md border p-2 bg-background">
                 <div className="space-y-2">
                   {messages.map((m, i) => (
                     <div
@@ -139,11 +159,11 @@ export default function AdminChatWidget() {
                     >
                       <div
                         className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs shadow-sm prose prose-sm dark:prose-invert max-w-none
-                        ${
-                          m.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-accent"
-                        }`}
+                          ${
+                            m.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-accent"
+                          }`}
                       >
                         <ReactMarkdown>{m.content}</ReactMarkdown>
                       </div>
@@ -154,10 +174,9 @@ export default function AdminChatWidget() {
               </div>
 
               {/* Quick mode buttons */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 shrink-0">
                 <Button
                   variant="outline"
-                //   size="xs"
                   className="h-7 px-2 text-[11px]"
                   onClick={() => setInput((prev) => `/rag ${prev}`)}
                 >
@@ -166,7 +185,6 @@ export default function AdminChatWidget() {
 
                 <Button
                   variant="outline"
-                //   size="xs"
                   className="h-7 px-2 text-[11px]"
                   onClick={() => setInput((prev) => `/sql ${prev}`)}
                 >
@@ -175,7 +193,6 @@ export default function AdminChatWidget() {
 
                 <Button
                   variant="outline"
-                //   size="xs"
                   className="h-7 px-2 text-[11px]"
                   onClick={() => setInput((prev) => `/gemini ${prev}`)}
                 >
@@ -184,7 +201,7 @@ export default function AdminChatWidget() {
               </div>
 
               {/* Input row */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Input
                   ref={inputRef}
                   value={input}
@@ -213,7 +230,9 @@ export default function AdminChatWidget() {
               </div>
 
               {/* Panel kết quả phụ (SQL / sales / RAG) */}
-              <ResultPanel data={extra} />
+              <div className="shrink-0">
+                <ResultPanel data={extra} />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -251,15 +270,12 @@ function ResultPanel({ data }: { data: ExtraData }) {
     const series = d.series || [];
     return (
       <div className="rounded-xl border mt-2">
-        <div className="p-2 border-b">
-          <div className="text-xs font-medium">
-            Tổng quan doanh thu ({d.by})
-          </div>
+        <div className="p-2 border hookup border-b">
+          <div className="text-xs font-medium">Tổng quan doanh thu ({d.by})</div>
           {d?.kpi ? (
             <div className="mt-1 text-[11px] text-muted-foreground">
-              HĐ: {num(d.kpi?.invoices)} • Gộp: {vnd(d.kpi?.gross_amount)} •
-              Giảm: {vnd(d.kpi?.discount_amount)} • Thuần:{" "}
-              {vnd(d.kpi?.net_amount)}
+              HĐ: {num(d.kpi?.invoices)} • Gộp: {vnd(d.kpi?.gross_amount)} • Giảm:{" "}
+              {vnd(d.kpi?.discount_amount)} • Thuần: {vnd(d.kpi?.net_amount)}
             </div>
           ) : null}
         </div>
@@ -277,21 +293,11 @@ function ResultPanel({ data }: { data: ExtraData }) {
             <tbody>
               {series.map((r, i) => (
                 <tr key={i} className="border-t">
-                  <td className="py-1 pr-2">
-                    {fmtTime(r.bucket, d.by)}
-                  </td>
-                  <td className="py-1 pr-2 text-right">
-                    {num(r.invoices)}
-                  </td>
-                  <td className="py-1 pr-2 text-right">
-                    {vnd(r.gross_amount)}
-                  </td>
-                  <td className="py-1 pr-2 text-right">
-                    {vnd(r.discount_amount)}
-                  </td>
-                  <td className="py-1 pr-0 text-right">
-                    {vnd(r.net_amount)}
-                  </td>
+                  <td className="py-1 pr-2">{fmtTime(r.bucket, d.by)}</td>
+                  <td className="py-1 pr-2 text-right">{num(r.invoices)}</td>
+                  <td className="py-1 pr-2 text-right">{vnd(r.gross_amount)}</td>
+                  <td className="py-1 pr-2 text-right">{vnd(r.discount_amount)}</td>
+                  <td className="py-1 pr-0 text-right">{vnd(r.net_amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -301,38 +307,44 @@ function ResultPanel({ data }: { data: ExtraData }) {
     );
   }
 
-  if (isRag(data)) {
-    const sources = data.sources || [];
-    if (!sources.length) return null;
-    return (
-      <div className="rounded-xl border p-2 mt-2">
-        <div className="text-xs font-medium mb-1">Nguồn tham chiếu</div>
-        <ul className="list-disc pl-4 text-[11px]">
-          {sources.map((s, i) => (
-            <li key={i}>
-              {s.source || `#${s.index}`}{" "}
-              {typeof s.score === "number" ? (
-                <span className="text-muted-foreground">
-                  ({s.score.toFixed(3)})
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
+if (isRag(data)) {
+  const sources = data.sources || [];
+  if (!sources.length) return null;
+
+  const top1 = sources.slice(0, 1); // ✅ chỉ lấy 1 nguồn
+
+  return (
+    <div className="rounded-xl border p-2 mt-2">
+      <div className="text-xs font-medium mb-1">Nguồn tham chiếu</div>
+      <ul className="list-disc pl-4 text-[11px]">
+        {top1.map((s, i) => (
+          <li key={i}>
+            {s.source || `#${s.index}`}{" "}
+            {typeof s.score === "number" ? (
+              <span className="text-muted-foreground">
+                ({s.score.toFixed(3)})
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {sources.length > 1 ? (
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          +{sources.length - 1} nguồn khác
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
   return null;
 }
 
 function SimpleTable({ rows }: { rows: any[] }) {
   if (!rows?.length)
-    return (
-      <div className="text-xs text-muted-foreground">
-        Không có dữ liệu.
-      </div>
-    );
+    return <div className="text-xs text-muted-foreground">Không có dữ liệu.</div>;
   const cols = Object.keys(rows[0] ?? {});
   return (
     <div className="w-full overflow-x-auto">
@@ -373,10 +385,12 @@ function formatCell(v: any) {
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }
+
 function num(v: any) {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
   return Number.isFinite(n) ? n.toLocaleString("vi-VN") : String(v ?? "");
 }
+
 function vnd(v: any) {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
   if (!Number.isFinite(n)) return String(v ?? "");
@@ -386,13 +400,11 @@ function vnd(v: any) {
     maximumFractionDigits: 0,
   });
 }
+
 function fmtTime(iso?: string, by: "hour" | "day" = "hour") {
   if (!iso) return "";
   const d = new Date(iso);
   return by === "hour"
     ? d.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-      });
+    : d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
 }

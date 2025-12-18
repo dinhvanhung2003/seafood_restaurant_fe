@@ -324,10 +324,12 @@ export default function CreatePurchaseReturnModal({
         </DialogHeader>
 
         {/* BODY */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full grid grid-cols-1 lg:grid-cols-12">
+      <div className="flex-1 min-h-0 overflow-hidden">
+  <div className="h-full lg:h-full grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-0">
             {/* LEFT COL */}
-            <ScrollArea className="lg:col-span-8 border-r h-full bg-slate-50/50">
+         <div className="lg:col-span-8 border-r bg-slate-50/50 lg:min-h-0">
+  <div className="h-auto lg:h-full lg:overflow-auto">
+
               <div className="p-6 space-y-6 max-w-5xl mx-auto">
                 {/* Supplier Card */}
                 <div className="bg-white rounded-xl border shadow-sm p-1">
@@ -473,11 +475,25 @@ export default function CreatePurchaseReturnModal({
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
+</div>
 
             {/* RIGHT COL - FINANCIALS */}
-            <div className="lg:col-span-4 bg-white h-full flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-10 relative">
-              <ScrollArea className="flex-1 p-6">
+         <div
+  className="
+    lg:col-span-4
+    bg-white
+    flex flex-col
+    shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)]
+    z-10 relative
+    lg:h-full
+    lg:sticky lg:top-0
+    max-lg:rounded-xl max-lg:border
+  "
+>
+
+        <div className="flex-1 min-h-0 overflow-auto p-6">
+
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 pb-2 border-b">
                     <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
@@ -603,7 +619,8 @@ export default function CreatePurchaseReturnModal({
                     </div>
                   </div>
                 </div>
-              </ScrollArea>
+            </div>
+
 
               <div className="p-4 border-t bg-white flex flex-col gap-3 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.05)]">
                 <Button
