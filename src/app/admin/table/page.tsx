@@ -37,7 +37,7 @@ export default function TablesPage() {
   const [areaName, setAreaName] = useState<string>("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ALL");
-
+const [areaForm, setAreaForm] = useState({ name: "", note: "" });
   // areas
   const { data: areasData = [] } = useAreas();
   const areaOptions: TableArea[] = useMemo(
@@ -80,7 +80,11 @@ export default function TablesPage() {
     setPage(1);
   }, [areaName, search, limit]);
 
-  const onOpenCreateArea = () => setOpenAreaModal(true);
+  const onOpenCreateArea = () => {
+  setAreaForm({ name: "", note: "" });
+  setOpenAreaModal(true);
+};
+
 
   const onOpenCreateTable = () => {
     setTableEditing(false);
@@ -104,18 +108,20 @@ export default function TablesPage() {
   };
 
   // submit area
-  const handleSubmitArea = () => {
-    createArea.mutate(
-      { name: form.name, note: "", status: "AVAILABLE" },
-      {
-        onSuccess: (a) => {
-          toast.success("Đã tạo khu vực", a.name);
-          setOpenAreaModal(false);
-        },
-        onError: () => toast.error("Không tạo được khu vực"),
-      }
-    );
-  };
+ const handleSubmitArea = () => {
+  if (!areaForm.name.trim()) return;
+
+  createArea.mutate(
+    { name: areaForm.name.trim(), note: areaForm.note?.trim() || "", status: "AVAILABLE" },
+    {
+      onSuccess: (a) => {
+        toast.success("Đã tạo khu vực", a.name);
+        setOpenAreaModal(false);
+      },
+      onError: () => toast.error("Không tạo được khu vực"),
+    }
+  );
+};
 
   // submit table
   const handleSubmitTable = () => {
@@ -330,14 +336,14 @@ export default function TablesPage() {
 
       {/* Modals */}
       <AreaFormModal
-        open={openAreaModal}
-        setOpen={setOpenAreaModal}
-        areaName={""}
-        setAreaName={() => {}}
-        areaNote={""}
-        setAreaNote={() => {}}
-        onSubmit={handleSubmitArea}
-      />
+  open={openAreaModal}
+  setOpen={setOpenAreaModal}
+  areaName={areaForm.name}
+  setAreaName={(v) => setAreaForm((p) => ({ ...p, name: v }))}
+  areaNote={areaForm.note}
+  setAreaNote={(v) => setAreaForm((p) => ({ ...p, note: v }))}
+  onSubmit={handleSubmitArea}
+/>
 
       <TableFormModal
         open={openTableModal}

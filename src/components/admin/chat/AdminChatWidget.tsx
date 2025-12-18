@@ -4,9 +4,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Send, Sparkles, X } from "lucide-react";
+
 import api from "@/lib/axios";
 import ReactMarkdown from "react-markdown";
+import { Loader2, Send, Sparkles, X, Maximize2, Minimize2 } from "lucide-react";
 
 type UiMessage = { role: "user" | "assistant"; content: string };
 
@@ -51,7 +52,7 @@ export default function AdminChatWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [extra, setExtra] = useState<ExtraData>(undefined);
-
+const [expanded, setExpanded] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -111,38 +112,63 @@ export default function AdminChatWidget() {
       )}
 
       {/* Widget (khi mở) */}
-      {open && (
-        <div
-          className="
-            fixed z-50
-            bottom-4 right-4
-            w-[380px] max-w-[calc(100vw-2rem)]
-            max-h-[calc(100dvh-2rem)]
-            max-sm:inset-2 max-sm:w-auto max-sm:max-w-none max-sm:bottom-auto max-sm:right-auto
-          "
-        >
-          <Card
-            className="
-              shadow-2xl border border-border
-              flex flex-col
-              h-[min(560px,calc(100dvh-2rem))]
-              max-sm:h-[calc(100dvh-1rem)]
-            "
-          >
+  {open && (
+ <div
+  className={[
+    "fixed z-50",
+    expanded
+      ? "inset-0" // FULL màn hình
+      : "bottom-4 right-4 w-[380px] max-w-[calc(100vw-2rem)]",
+    // mobile chỉ áp khi NOT expanded
+    !expanded ? "max-sm:inset-2 max-sm:bottom-auto max-sm:right-auto max-sm:w-auto max-sm:max-w-none" : "",
+  ].join(" ")}
+>
+<Card
+  className={[
+    "shadow-2xl border border-border flex flex-col",
+    expanded
+      ? "h-[100dvh] w-[100dvw] rounded-none" // FULL màn hình + bỏ bo góc
+      : "h-[min(560px,calc(100dvh-2rem))]",
+    !expanded ? "max-sm:h-[calc(100dvh-1rem)]" : "",
+  ].join(" ")}
+>
+
+
             <CardHeader className="py-2 px-3 flex flex-row items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold">Trợ lý nhà hàng</CardTitle>
               </div>
 
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={() => setOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+            <div className="flex items-center gap-1">
+  <Button
+    size="icon"
+    variant="ghost"
+    className="h-7 w-7"
+    onClick={() => setExpanded((v) => !v)}
+    title={expanded ? "Thu nhỏ" : "Phóng to"}
+  >
+    {expanded ? (
+      <Minimize2 className="h-4 w-4" />
+    ) : (
+      <Maximize2 className="h-4 w-4" />
+    )}
+  </Button>
+
+  <Button
+    size="icon"
+    variant="ghost"
+    className="h-7 w-7"
+    onClick={() => {
+      setExpanded(false);
+      setOpen(false);
+    }}
+    title="Đóng"
+  >
+    <X className="h-4 w-4" />
+  </Button>
+</div>
+
             </CardHeader>
 
             {/* QUAN TRỌNG: flex-1 + min-h-0 để phần chat co giãn theo chiều dọc */}
