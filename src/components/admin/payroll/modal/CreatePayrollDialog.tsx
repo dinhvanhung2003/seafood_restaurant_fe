@@ -212,7 +212,7 @@ export default function CreatePayrollDialog({ open, onOpenChange }: Props) {
                     {staffRows.map((s) => {
                       const id = s.id;
                       const checked = selectedStaffIds.includes(id);
-                      const name = s.profile?.fullName || s.email || "Nhân viên";
+                      const name = s.fullName || s.email || "Nhân viên";
                       return (
                         <label
                           key={id}
