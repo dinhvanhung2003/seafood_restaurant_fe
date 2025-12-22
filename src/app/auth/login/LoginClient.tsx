@@ -229,14 +229,14 @@ export default function LoginClient({ back }: { back?: string }) {
                   >
                     {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                   </Button>
-                  <Button
+                  {/* <Button
                     type="button"
                     variant="outline"
                     className="h-12 rounded-xl text-base font-semibold"
                     onClick={() => (window.location.href = "/auth/register")}
                   >
                     Đăng ký
-                  </Button>
+                  </Button> */}
                 </div>
               </form>
 
