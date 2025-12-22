@@ -221,23 +221,15 @@ export default function LoginClient({ back }: { back?: string }) {
                   </a>
                 </div>
 
-                <div className="mt-2 grid grid-cols-2 gap-3">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="h-12 rounded-xl text-base font-semibold"
-                  >
-                    {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-                  </Button>
-                  {/* <Button
-                    type="button"
-                    variant="outline"
-                    className="h-12 rounded-xl text-base font-semibold"
-                    onClick={() => (window.location.href = "/auth/register")}
-                  >
-                    Đăng ký
-                  </Button> */}
-                </div>
+              <div className="mt-2 flex justify-center"> 
+  <Button
+    type="submit"
+    disabled={loading}
+    className="h-12 w-full max-w-[200px] rounded-xl text-base font-semibold"
+  >
+    {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+  </Button>
+</div>
               </form>
 
               <Separator className="my-6" />
